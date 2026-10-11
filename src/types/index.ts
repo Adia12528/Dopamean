@@ -1,0 +1,175 @@
+export interface StoreSettings {
+  storeName: string;
+  storeTagline: string;
+  heroBadge?: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  heroPrimaryBtnText?: string;
+  heroSecondaryBtnText?: string;
+  heroImage: string;
+  
+  showAnnouncement?: boolean;
+  announcementText: string;
+  
+  themeColor?: string;
+  
+  // Maker Story / About the Artisan
+  showAboutSection?: boolean;
+  aboutBadge?: string;
+  aboutTitle?: string;
+  aboutStory1?: string;
+  aboutStory2?: string;
+  aboutQuote?: string;
+  aboutImage?: string;
+  
+  // 4 Studio Value Highlights / Trust Badges
+  trustBadge1Icon?: string;
+  trustBadge1Title?: string;
+  trustBadge1Desc?: string;
+
+  trustBadge2Icon?: string;
+  trustBadge2Title?: string;
+  trustBadge2Desc?: string;
+
+  trustBadge3Icon?: string;
+  trustBadge3Title?: string;
+  trustBadge3Desc?: string;
+
+  trustBadge4Icon?: string;
+  trustBadge4Title?: string;
+  trustBadge4Desc?: string;
+
+  // Logistics & Currency
+  currency: string;
+  freeShippingThreshold: number;
+  shippingNotice?: string;
+  
+  // Contact & Socials
+  contactEmail: string;
+  contactPhone: string;
+  instagramHandle: string;
+  studioLocation: string;
+  
+  // Footer
+  footerAboutText?: string;
+  footerCopyright?: string;
+  
+  // Security
+  adminPasscode?: string;
+
+  // Payment Gateways & UPI
+  paymentRazorpayEnabled?: boolean;
+  razorpayKeyId?: string;
+  razorpayKeySecret?: string;
+  razorpayKeySecretConfigured?: boolean;
+  paymentUpiEnabled?: boolean;
+  upiId?: string;
+  upiPayeeName?: string;
+  paymentCodEnabled?: boolean;
+  paymentPayuEnabled?: boolean;
+  payuMerchantKey?: string;
+  payuMerchantSalt?: string;
+}
+
+export interface Product {
+  id: string;
+  title: string;
+  tagline?: string;
+  category: string;
+  price: number;
+  originalPrice?: number;
+  rating: number;
+  reviewsCount: number;
+  stock: number;
+  image: string;
+  secondaryImages?: string[];
+  yarnType: string;
+  craftTimeHours: number;
+  careInstructions: string;
+  description: string;
+  tags: string[];
+  isFeatured?: boolean;
+  isBestSeller?: boolean;
+  createdAt: string;
+}
+
+export interface Review {
+  id: string;
+  productId: string;
+  customerName: string;
+  customerEmail?: string;
+  rating: number;
+  comment: string;
+  verifiedPurchase: boolean;
+  createdAt: string;
+}
+
+export interface Offer {
+  id: string;
+  title: string;
+  description: string;
+  badge: string;
+  code: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  minOrderValue?: number;
+  image: string;
+  startDate?: string;
+  endDate: string;
+  isActive: boolean;
+  accentColor?: string;
+  highlightCategory?: string;
+}
+
+export interface CartItem {
+  product: Product;
+  quantity: number;
+  selectedColor?: string;
+}
+
+export interface OrderItem {
+  productId: string;
+  productTitle: string;
+  price: number;
+  quantity: number;
+  image: string;
+  color?: string;
+}
+
+export interface OrderTimelineEvent {
+  status: string;
+  timestamp: string;
+  note?: string;
+}
+
+export interface Order {
+  id: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone?: string;
+  customerAddress?: string;
+  customer?: {
+    name: string;
+    email: string;
+    phone?: string;
+    address?: string;
+  };
+  items: OrderItem[];
+  subtotal: number;
+  discountAmount: number;
+  discount?: number;
+  promoCodeApplied?: string;
+  total: number;
+  status: 'Pending' | 'In Crafting' | 'Shipped' | 'Delivered' | 'pending' | 'processing' | 'shipped' | 'delivered';
+  paymentMethod?: 'cod' | 'upi' | 'razorpay' | 'whatsapp';
+  paymentStatus?: 'pending' | 'paid' | 'failed';
+  trackingNumber?: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  upiRefNumber?: string;
+  timeline?: OrderTimelineEvent[];
+  createdAt: string;
+}
+
+export type ViewMode = 'store' | 'dashboard';
+export type DashboardTab = 'overview' | 'products' | 'offers' | 'orders' | 'settings';

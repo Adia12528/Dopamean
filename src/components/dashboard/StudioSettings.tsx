@@ -1,0 +1,1601 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { useStore } from '../../context/StoreContext';
+import { api } from '../../services/api';
+import { 
+  Sliders, 
+  Save, 
+  Upload, 
+  Check, 
+  Palette, 
+  Sparkles, 
+  Image as ImageIcon, 
+  Heart, 
+  ShieldCheck, 
+  Truck, 
+  MessageCircle, 
+  Lock, 
+  Database,
+  Eye,
+  Info,
+  CreditCard,
+  QrCode
+} from 'lucide-react';
+
+// Recommended harmonious palettes for artisanal crochet
+const COLOR_PRESETS = [
+  { name: 'Warm Terracotta (Default)', hex: '#C85A32', preview: '#C85A32' },
+  { name: 'Sunflower Gold', hex: '#D97706', preview: '#D97706' },
+  { name: 'Rose Petal Red', hex: '#D95D71', preview: '#D95D71' },
+  { name: 'Forest Sage Green', hex: '#52796F', preview: '#52796F' },
+  { name: 'Velvet Lavender', hex: '#7E57C2', preview: '#7E57C2' },
+  { name: 'Dusty Berry Pink', hex: '#BE185D', preview: '#BE185D' },
+  { name: 'Royal Indigo', hex: '#2563EB', preview: '#2563EB' }
+];
+
+export const StudioSettings: React.FC = () => {
+  const { settings, updateSettings, resetDatabase, loadSampleTemplate, setViewMode } = useStore();
+  
+  const heroFileInputRef = useRef<HTMLInputElement>(null);
+  const aboutFileInputRef = useRef<HTMLInputElement>(null);
+
+  const [form, setForm] = useState(settings);
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'perks' | 'shipping' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [isHeroUploading, setIsHeroUploading] = useState(false);
+  const [isAboutUploading, setIsAboutUploading] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
+  const [newPasscode, setNewPasscode] = useState('');
+  const [confirmPasscode, setConfirmPasscode] = useState('');
+
+  useEffect(() => {
+    setForm(settings);
+  }, [settings]);
+
+  const handleChange = (field: keyof typeof form, val: any) => {
+    setForm(prev => ({ ...prev, [field]: val }));
+  };
+
+  const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsHeroUploading(true);
+      const url = await api.uploadImage(file);
+      handleChange('heroImage', url);
+    } catch (err) {
+      alert('Failed to upload hero image');
+    } finally {
+      setIsHeroUploading(false);
+    }
+  };
+
+  const handleAboutUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsAboutUploading(true);
+      const url = await api.uploadImage(file);
+      handleChange('aboutImage', url);
+    } catch (err) {
+      alert('Failed to upload artisan story photo');
+    } finally {
+      setIsAboutUploading(false);
+    }
+  };
+
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    
+    // Check if passcode is being updated
+    let payload = { ...form };
+    if (newPasscode.trim()) {
+      if (newPasscode !== confirmPasscode) {
+        alert('Passcodes do not match! Please verify your new passcode.');
+        return;
+      }
+      payload.adminPasscode = newPasscode.trim();
+    }
+
+    await updateSettings(payload);
+    setSavedSuccess(true);
+    setNewPasscode('');
+    setConfirmPasscode('');
+    setTimeout(() => setSavedSuccess(false), 2500);
+  };
+
+  const navItems = [
+    { id: 'theme' as const, label: 'Theme & Colors', icon: <Palette size={16} /> },
+    { id: 'header' as const, label: 'Brand & Announcement', icon: <Sparkles size={16} /> },
+    { id: 'hero' as const, label: 'Hero Banner', icon: <ImageIcon size={16} /> },
+    { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
+    { id: 'perks' as const, label: 'Trust Badges & Perks', icon: <ShieldCheck size={16} /> },
+    { id: 'shipping' as const, label: 'Currency & Shipping', icon: <Truck size={16} /> },
+    { id: 'payments' as const, label: 'Payment Gateways & UPI', icon: <CreditCard size={16} /> },
+    { id: 'contact' as const, label: 'Contact & Socials', icon: <MessageCircle size={16} /> },
+    { id: 'footer' as const, label: 'Footer & Copyright', icon: <Sliders size={16} /> },
+    { id: 'security' as const, label: 'Admin Passcode', icon: <Lock size={16} /> },
+    { id: 'db' as const, label: 'Database & Backup', icon: <Database size={16} /> }
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* Top Banner / Save Action Header */}
+      <div style={{
+        backgroundColor: '#FFFFFF',
+        padding: '20px 26px',
+        borderRadius: '20px',
+        border: '1px solid var(--border-medium)',
+        boxShadow: 'var(--shadow-sm)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '16px',
+        position: 'sticky',
+        top: '80px',
+        zIndex: 20
+      }}>
+        <div>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontSize: '0.78rem',
+            fontWeight: 700,
+            color: 'var(--accent-terracotta)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em'
+          }}>
+            <Sliders size={14} />
+            <span>Super Admin Full Control</span>
+          </div>
+          <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
+            Landing Page & Studio Customization
+          </h2>
+          <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+            Complete "head-to-toe" control over branding, hero banner, artisan story, trust perks, colors, and logistics.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <button
+            type="button"
+            onClick={() => setViewMode('store')}
+            className="btn-secondary"
+            style={{ padding: '9px 16px', fontSize: '0.84rem' }}
+          >
+            <Eye size={15} />
+            <span>Live Store Preview</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleSave()}
+            className="btn-primary"
+            style={{ padding: '10px 22px', fontSize: '0.88rem' }}
+          >
+            {savedSuccess ? <Check size={16} /> : <Save size={16} />}
+            <span>{savedSuccess ? 'Changes Saved!' : 'Save All Changes'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Two-Column Layout: Sidebar Nav + Form Section */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(240px, 280px) 1fr',
+        gap: '24px',
+        alignItems: 'start'
+      }}>
+        {/* Navigation Sidebar */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: '20px',
+          padding: '16px',
+          border: '1px solid var(--border-medium)',
+          boxShadow: 'var(--shadow-sm)',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '6px',
+          position: 'sticky',
+          top: '190px'
+        }}>
+          <div style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-subtle)', padding: '6px 12px', textTransform: 'uppercase' }}>
+            Sections to Customize
+          </div>
+          {navItems.map(item => {
+            const isActive = activeSection === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveSection(item.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '10px 14px',
+                  borderRadius: '12px',
+                  fontSize: '0.86rem',
+                  fontWeight: isActive ? 700 : 500,
+                  backgroundColor: isActive ? 'var(--accent-terracotta-light)' : 'transparent',
+                  color: isActive ? 'var(--accent-terracotta)' : 'var(--text-main)',
+                  border: isActive ? '1px solid var(--border-dashed)' : '1px solid transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  transition: 'var(--transition-smooth)'
+                }}
+              >
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Dynamic Section Editor */}
+        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* 1. THEME & COLORS */}
+          {activeSection === 'theme' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Palette size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Theme Color Palette
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Pick an artisan brand color preset or choose any custom hex code. All buttons, badges, discount highlights, and borders will update immediately across the entire site.
+              </p>
+
+              <div style={{ marginBottom: '24px' }}>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '10px' }}>
+                  Curated Crochet Color Presets
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                  {COLOR_PRESETS.map(preset => {
+                    const isSelected = form.themeColor?.toLowerCase() === preset.hex.toLowerCase();
+                    return (
+                      <button
+                        key={preset.hex}
+                        type="button"
+                        onClick={() => handleChange('themeColor', preset.hex)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '12px 14px',
+                          borderRadius: '12px',
+                          border: isSelected ? '2px solid var(--text-main)' : '1px solid var(--border-medium)',
+                          backgroundColor: isSelected ? 'var(--bg-surface-soft)' : '#FFFFFF',
+                          cursor: 'pointer',
+                          boxShadow: isSelected ? 'var(--shadow-sm)' : 'none',
+                          textAlign: 'left'
+                        }}
+                      >
+                        <span style={{
+                          width: '24px',
+                          height: '24px',
+                          borderRadius: '50%',
+                          backgroundColor: preset.preview,
+                          boxShadow: '0 2px 5px rgba(0,0,0,0.2)',
+                          display: 'inline-block',
+                          flexShrink: 0
+                        }} />
+                        <div>
+                          <div style={{ fontSize: '0.84rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                            {preset.name}
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                            {preset.hex}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '8px' }}>
+                  Or Select Custom Hex Color
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <input
+                    type="color"
+                    value={form.themeColor || '#C85A32'}
+                    onChange={(e) => handleChange('themeColor', e.target.value)}
+                    style={{
+                      width: '46px',
+                      height: '42px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      cursor: 'pointer',
+                      padding: '2px'
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={form.themeColor || '#C85A32'}
+                    onChange={(e) => handleChange('themeColor', e.target.value)}
+                    placeholder="#C85A32"
+                    style={{
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem',
+                      fontFamily: 'monospace',
+                      width: '160px'
+                    }}
+                  />
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                    Active accent color applied across website
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 2. BRAND & ANNOUNCEMENT */}
+          {activeSection === 'header' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Sparkles size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Brand Identity & Announcement Bar
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Configure store title, craft tagline, and top ribbon banner notices.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Store / Studio Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.storeName}
+                    onChange={(e) => handleChange('storeName', e.target.value)}
+                    placeholder="e.g. Cozy Loops by Deepa"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Store Tagline
+                  </label>
+                  <input
+                    type="text"
+                    value={form.storeTagline}
+                    onChange={(e) => handleChange('storeTagline', e.target.value)}
+                    placeholder="e.g. Cozy, Handmade Happiness • Premium Crochet Hair Accessories"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1', padding: '16px', borderRadius: '14px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div>
+                      <h4 style={{ fontSize: '0.92rem', fontWeight: 700 }}>
+                        Top Ribbon Announcement Bar
+                      </h4>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        Displays at the very top of every page for shipping notices and special offers.
+                      </p>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+                      <input
+                        type="checkbox"
+                        checked={form.showAnnouncement !== false}
+                        onChange={(e) => handleChange('showAnnouncement', e.target.checked)}
+                      />
+                      <span>Show Announcement Bar</span>
+                    </label>
+                  </div>
+
+                  {form.showAnnouncement !== false && (
+                    <div>
+                      <input
+                        type="text"
+                        value={form.announcementText}
+                        onChange={(e) => handleChange('announcementText', e.target.value)}
+                        placeholder="e.g. 100% Handmade with Love 🌸 Free Shipping on orders above ₹299"
+                        style={{
+                          width: '100%',
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-medium)',
+                          fontSize: '0.88rem',
+                          backgroundColor: '#FFFFFF'
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. HERO BANNER */}
+          {activeSection === 'hero' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <ImageIcon size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Hero Showcase Banner (First Impression)
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Customize the headline, descriptive blurb, badge pill, CTA buttons, and high-resolution hero photo.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Hero Badge Pill
+                    </label>
+                    <input
+                      type="text"
+                      value={form.heroBadge || ''}
+                      onChange={(e) => handleChange('heroBadge', e.target.value)}
+                      placeholder="e.g. 🌸 100% Handcrafted with Love"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Hero Main Headline *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={form.heroTitle}
+                      onChange={(e) => handleChange('heroTitle', e.target.value)}
+                      placeholder="e.g. Cozy Loops by Deepa"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Hero Craft Description & Subtitle
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.heroSubtitle}
+                    onChange={(e) => handleChange('heroSubtitle', e.target.value)}
+                    placeholder="e.g. 100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.88rem'
+                    }}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Primary Button Label
+                    </label>
+                    <input
+                      type="text"
+                      value={form.heroPrimaryBtnText || ''}
+                      onChange={(e) => handleChange('heroPrimaryBtnText', e.target.value)}
+                      placeholder="e.g. Shop Handcrafted Collection"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.88rem'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Secondary Button Label
+                    </label>
+                    <input
+                      type="text"
+                      value={form.heroSecondaryBtnText || ''}
+                      onChange={(e) => handleChange('heroSecondaryBtnText', e.target.value)}
+                      placeholder="e.g. View Special Combos"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.88rem'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Hero Photo Upload & Preview */}
+                <div style={{
+                  padding: '18px',
+                  borderRadius: '16px',
+                  backgroundColor: 'var(--bg-surface-soft)',
+                  border: '1px solid var(--border-light)'
+                }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '8px' }}>
+                    Hero Showcase Image (Upload file or paste URL)
+                  </label>
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="file"
+                      ref={heroFileInputRef}
+                      accept="image/*"
+                      onChange={handleHeroUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => heroFileInputRef.current?.click()}
+                      disabled={isHeroUploading}
+                      className="btn-primary"
+                      style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                    >
+                      <Upload size={14} />
+                      <span>{isHeroUploading ? 'Uploading...' : 'Upload Image from Device'}</span>
+                    </button>
+
+                    <input
+                      type="text"
+                      value={form.heroImage || ''}
+                      onChange={(e) => handleChange('heroImage', e.target.value)}
+                      placeholder="Or enter image URL e.g. /uploads/image.jpg..."
+                      style={{
+                        flex: 1,
+                        minWidth: '220px',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.84rem',
+                        backgroundColor: '#FFFFFF'
+                      }}
+                    />
+
+                    {form.heroImage && (
+                      <div style={{
+                        width: '54px',
+                        height: '54px',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--border-medium)',
+                        flexShrink: 0
+                      }}>
+                        <img
+                          src={form.heroImage}
+                          alt="Hero Thumbnail Preview"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 4. ARTISAN STORY / ABOUT SECTION */}
+          {activeSection === 'story' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Heart size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Artisan Story & Maker Ethos Section
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Share your personal journey as a crochet artist. Tells visitors why handmade slow fashion is special.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: '12px', backgroundColor: 'var(--bg-surface-soft)' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Show Story Section on Landing Page</h4>
+                    <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)' }}>Displays full biography, quotes, and studio photography.</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={form.showAboutSection !== false}
+                    onChange={(e) => handleChange('showAboutSection', e.target.checked)}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Story Badge Pill
+                    </label>
+                    <input
+                      type="text"
+                      value={form.aboutBadge || ''}
+                      onChange={(e) => handleChange('aboutBadge', e.target.value)}
+                      placeholder="e.g. Our Story & Maker Ethos"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Story Title
+                    </label>
+                    <input
+                      type="text"
+                      value={form.aboutTitle || ''}
+                      onChange={(e) => handleChange('aboutTitle', e.target.value)}
+                      placeholder="e.g. Meet Deepa • The Hands Behind Every Petal & Loop"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.9rem'
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Story Narrative Paragraph 1
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={form.aboutStory1 || ''}
+                    onChange={(e) => handleChange('aboutStory1', e.target.value)}
+                    placeholder="e.g. Unlike industrial knitwear which can be copied by commercial machinery, true crochet cannot be replicated by any machine in existence..."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.88rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Story Narrative Paragraph 2
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.aboutStory2 || ''}
+                    onChange={(e) => handleChange('aboutStory2', e.target.value)}
+                    placeholder="e.g. We use ultra-soft milk cotton and durable elastic bands to craft accessories that don't pull hair, hold securely, and bring a bloom of happiness..."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.88rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Artisan Philosophy Quote
+                  </label>
+                  <input
+                    type="text"
+                    value={form.aboutQuote || ''}
+                    onChange={(e) => handleChange('aboutQuote', e.target.value)}
+                    placeholder="e.g. Every stitch is a gentle pause of mindfulness, turning simple yarn into wearable floral art."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                {/* About Image Upload */}
+                <div style={{
+                  padding: '18px',
+                  borderRadius: '16px',
+                  backgroundColor: 'var(--bg-surface-soft)',
+                  border: '1px solid var(--border-light)'
+                }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '8px' }}>
+                    Artisan Studio Photo (Upload photo or paste URL)
+                  </label>
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="file"
+                      ref={aboutFileInputRef}
+                      accept="image/*"
+                      onChange={handleAboutUpload}
+                      style={{ display: 'none' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => aboutFileInputRef.current?.click()}
+                      disabled={isAboutUploading}
+                      className="btn-primary"
+                      style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                    >
+                      <Upload size={14} />
+                      <span>{isAboutUploading ? 'Uploading...' : 'Upload Photo'}</span>
+                    </button>
+
+                    <input
+                      type="text"
+                      value={form.aboutImage || ''}
+                      onChange={(e) => handleChange('aboutImage', e.target.value)}
+                      placeholder="e.g. /uploads/artisan_deepa.jpg"
+                      style={{
+                        flex: 1,
+                        minWidth: '220px',
+                        padding: '9px 12px',
+                        borderRadius: '8px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.84rem',
+                        backgroundColor: '#FFFFFF'
+                      }}
+                    />
+
+                    {form.aboutImage && (
+                      <div style={{
+                        width: '54px',
+                        height: '54px',
+                        borderRadius: '10px',
+                        overflow: 'hidden',
+                        border: '1px solid var(--border-medium)',
+                        flexShrink: 0
+                      }}>
+                        <img
+                          src={form.aboutImage}
+                          alt="About Preview"
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 5. 4 VALUE BADGES & TRUST PERKS */}
+          {activeSection === 'perks' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <ShieldCheck size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  4 Trust Badges & Value Perks
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Customize the 4 highlight pillars displayed beneath the hero and story sections.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
+                {/* Perk 1 */}
+                <div style={{ padding: '16px', borderRadius: '14px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--accent-terracotta)', marginBottom: '8px' }}>
+                    PILLAR 1
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Emoji"
+                      value={form.trustBadge1Icon || '🌸'}
+                      onChange={(e) => handleChange('trustBadge1Icon', e.target.value)}
+                      style={{ width: '50px', padding: '8px', textAlign: 'center', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Title"
+                      value={form.trustBadge1Title || ''}
+                      onChange={(e) => handleChange('trustBadge1Title', e.target.value)}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontWeight: 600, fontSize: '0.84rem' }}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Short description"
+                    value={form.trustBadge1Desc || ''}
+                    onChange={(e) => handleChange('trustBadge1Desc', e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.8rem' }}
+                  />
+                </div>
+
+                {/* Perk 2 */}
+                <div style={{ padding: '16px', borderRadius: '14px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--accent-terracotta)', marginBottom: '8px' }}>
+                    PILLAR 2
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Emoji"
+                      value={form.trustBadge2Icon || '🧶'}
+                      onChange={(e) => handleChange('trustBadge2Icon', e.target.value)}
+                      style={{ width: '50px', padding: '8px', textAlign: 'center', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Title"
+                      value={form.trustBadge2Title || ''}
+                      onChange={(e) => handleChange('trustBadge2Title', e.target.value)}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontWeight: 600, fontSize: '0.84rem' }}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Short description"
+                    value={form.trustBadge2Desc || ''}
+                    onChange={(e) => handleChange('trustBadge2Desc', e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.8rem' }}
+                  />
+                </div>
+
+                {/* Perk 3 */}
+                <div style={{ padding: '16px', borderRadius: '14px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--accent-terracotta)', marginBottom: '8px' }}>
+                    PILLAR 3
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Emoji"
+                      value={form.trustBadge3Icon || '✨'}
+                      onChange={(e) => handleChange('trustBadge3Icon', e.target.value)}
+                      style={{ width: '50px', padding: '8px', textAlign: 'center', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Title"
+                      value={form.trustBadge3Title || ''}
+                      onChange={(e) => handleChange('trustBadge3Title', e.target.value)}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontWeight: 600, fontSize: '0.84rem' }}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Short description"
+                    value={form.trustBadge3Desc || ''}
+                    onChange={(e) => handleChange('trustBadge3Desc', e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.8rem' }}
+                  />
+                </div>
+
+                {/* Perk 4 */}
+                <div style={{ padding: '16px', borderRadius: '14px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: 'var(--accent-terracotta)', marginBottom: '8px' }}>
+                    PILLAR 4
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <input
+                      type="text"
+                      placeholder="Emoji"
+                      value={form.trustBadge4Icon || '📦'}
+                      onChange={(e) => handleChange('trustBadge4Icon', e.target.value)}
+                      style={{ width: '50px', padding: '8px', textAlign: 'center', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF' }}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Title"
+                      value={form.trustBadge4Title || ''}
+                      onChange={(e) => handleChange('trustBadge4Title', e.target.value)}
+                      style={{ flex: 1, padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontWeight: 600, fontSize: '0.84rem' }}
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Short description"
+                    value={form.trustBadge4Desc || ''}
+                    onChange={(e) => handleChange('trustBadge4Desc', e.target.value)}
+                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.8rem' }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 6. CURRENCY & SHIPPING */}
+          {activeSection === 'shipping' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Truck size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Currency & Shipping Logistics
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Configure store currency symbol, threshold for free shipping, and dispatch delivery SLA.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Currency Symbol *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={form.currency}
+                    onChange={(e) => handleChange('currency', e.target.value)}
+                    placeholder="e.g. ₹ or $ or €"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Free Shipping Minimum Order ({form.currency})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.freeShippingThreshold}
+                    onChange={(e) => handleChange('freeShippingThreshold', parseFloat(e.target.value) || 0)}
+                    placeholder="e.g. 299"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Shipping & Delivery Notice
+                  </label>
+                  <input
+                    type="text"
+                    value={form.shippingNotice || ''}
+                    onChange={(e) => handleChange('shippingNotice', e.target.value)}
+                    placeholder="e.g. Dispatched within 24-48 hours across India • Free Shipping above ₹299"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.88rem'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 7. PAYMENT GATEWAYS & UPI */}
+          {activeSection === 'payments' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <CreditCard size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Payment Gateways & UPI QR Settings
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+                Configure your payment methods for the customer checkout. You can accept payments via your personal UPI (Google Pay, PhonePe, Paytm), Razorpay online gateway, or Cash on Delivery.
+              </p>
+
+              {/* CARD 1: INSTANT UPI QR CODE */}
+              <div style={{
+                backgroundColor: 'var(--bg-surface-soft)',
+                border: '1.5px solid var(--border-medium)',
+                borderRadius: '16px',
+                padding: '20px',
+                marginBottom: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <QrCode size={20} color="var(--accent-terracotta)" />
+                    <div>
+                      <h4 style={{ fontSize: '0.98rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                        Instant UPI Payment & QR Code (Recommended)
+                      </h4>
+                      <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        Zero transaction fees. Generates automatic QR code for PhonePe, Google Pay, Paytm, and BHIM.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.paymentUpiEnabled !== false}
+                      onChange={(e) => handleChange('paymentUpiEnabled', e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
+                    />
+                    <span>{form.paymentUpiEnabled !== false ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Your UPI ID (VPA) *
+                    </label>
+                    <input
+                      type="text"
+                      value={form.upiId || ''}
+                      onChange={(e) => handleChange('upiId', e.target.value)}
+                      placeholder="e.g. dsoni7018@okhdfcbank or cozyloops@upi"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '0.88rem'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Payee Name (Shown in UPI app) *
+                    </label>
+                    <input
+                      type="text"
+                      value={form.upiPayeeName || ''}
+                      onChange={(e) => handleChange('upiPayeeName', e.target.value)}
+                      placeholder="e.g. Deepa Soni (Cozy Loops)"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '0.88rem'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 2: RAZORPAY GATEWAY */}
+              <div style={{
+                backgroundColor: 'var(--bg-surface-soft)',
+                border: '1.5px solid var(--border-medium)',
+                borderRadius: '16px',
+                padding: '20px',
+                marginBottom: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <CreditCard size={20} color="#2563EB" />
+                    <div>
+                      <h4 style={{ fontSize: '0.98rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                        Razorpay Gateway (Cards, NetBanking, UPI, Wallets)
+                      </h4>
+                      <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        Accept Debit Cards, Credit Cards, and NetBanking with automated payment verification.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.paymentRazorpayEnabled)}
+                      onChange={(e) => handleChange('paymentRazorpayEnabled', e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
+                    />
+                    <span>{form.paymentRazorpayEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Razorpay Key ID
+                    </label>
+                    <input
+                      type="text"
+                      value={form.razorpayKeyId || ''}
+                      onChange={(e) => handleChange('razorpayKeyId', e.target.value)}
+                      placeholder="e.g. rzp_live_xxxxxxxx or rzp_test_xxxxxxxx"
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '0.88rem'
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Razorpay Key Secret
+                    </label>
+                    <input
+                      type="password"
+                      value={form.razorpayKeySecret || ''}
+                      onChange={(e) => handleChange('razorpayKeySecret', e.target.value)}
+                      placeholder={form.razorpayKeySecretConfigured ? '•••••••••••• (Configured)' : 'Enter Razorpay Key Secret'}
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        backgroundColor: '#FFFFFF',
+                        fontSize: '0.88rem'
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 3: CASH ON DELIVERY (COD) */}
+              <div style={{
+                backgroundColor: 'var(--bg-surface-soft)',
+                border: '1.5px solid var(--border-medium)',
+                borderRadius: '16px',
+                padding: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <Truck size={20} color="#16A34A" />
+                    <div>
+                      <h4 style={{ fontSize: '0.98rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                        Cash on Delivery (COD)
+                      </h4>
+                      <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        Allow patrons to pay cash upon receipt of their hand-stitched parcel.
+                      </p>
+                    </div>
+                  </div>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.paymentCodEnabled !== false}
+                      onChange={(e) => handleChange('paymentCodEnabled', e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
+                    />
+                    <span>{form.paymentCodEnabled !== false ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 8. CONTACT & SOCIALS */}
+          {activeSection === 'contact' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <MessageCircle size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Studio Contact & Socials
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Contact details displayed in the footer and order receipts for customer inquiries and custom orders.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    WhatsApp / Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    value={form.contactPhone}
+                    onChange={(e) => handleChange('contactPhone', e.target.value)}
+                    placeholder="e.g. +91 98765 43210"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Customer Support Email
+                  </label>
+                  <input
+                    type="email"
+                    value={form.contactEmail}
+                    onChange={(e) => handleChange('contactEmail', e.target.value)}
+                    placeholder="e.g. cozyloops.deepa@gmail.com"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Instagram Handle
+                  </label>
+                  <input
+                    type="text"
+                    value={form.instagramHandle}
+                    onChange={(e) => handleChange('instagramHandle', e.target.value)}
+                    placeholder="e.g. @cozyloopsbydeepa"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Studio Location / City
+                  </label>
+                  <input
+                    type="text"
+                    value={form.studioLocation}
+                    onChange={(e) => handleChange('studioLocation', e.target.value)}
+                    placeholder="e.g. Handcrafted Studio, India"
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 8. FOOTER CONTENT */}
+          {activeSection === 'footer' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Sliders size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Footer & Legal Customization
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Personalize the blurb and copyright notice at the bottom of the customer page.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Footer About Studio Blurb
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={form.footerAboutText || ''}
+                    onChange={(e) => handleChange('footerAboutText', e.target.value)}
+                    placeholder="e.g. Cozy Loops by Deepa crafts slow-fashioned, joyful crochet hair accessories and gifts with organic soft cotton and gentle care."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.88rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Copyright Line
+                  </label>
+                  <input
+                    type="text"
+                    value={form.footerCopyright || ''}
+                    onChange={(e) => handleChange('footerCopyright', e.target.value)}
+                    placeholder="e.g. © 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion. All Rights Reserved."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 9. SECURITY & PASSCODE */}
+          {activeSection === 'security' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Lock size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Super Admin Security Passcode
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Change your studio master passcode. Normal users cannot access this studio unless they enter this passcode.
+              </p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    New Super Admin Passcode
+                  </label>
+                  <input
+                    type="password"
+                    value={newPasscode}
+                    onChange={(e) => setNewPasscode(e.target.value)}
+                    placeholder="Enter new master passcode..."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Confirm New Passcode
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPasscode}
+                    onChange={(e) => setConfirmPasscode(e.target.value)}
+                    placeholder="Confirm new passcode..."
+                    style={{
+                      width: '100%',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ marginTop: '16px', padding: '12px 16px', borderRadius: '12px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Info size={16} color="var(--text-muted)" />
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                  Current passcode: <strong>{settings.adminPasscode || 'admin123'}</strong>
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* 10. DATABASE & BACKUP */}
+          {activeSection === 'db' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Database size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Database Operations & Backup
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Export your store database as JSON, reset catalog items, or load sample starter templates.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ padding: '18px', borderRadius: '14px', border: '1px solid var(--border-medium)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Export Store Backup</h4>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Download your entire database (products, offers, orders, settings) as a JSON file.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const data = await fetch('/api/settings').then(r => r.json());
+                      const products = await fetch('/api/products').then(r => r.json());
+                      const offers = await fetch('/api/offers').then(r => r.json());
+                      const orders = await fetch('/api/orders').then(r => r.json());
+                      const backup = { settings: data, products, offers, orders };
+                      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+                      const a = document.createElement('a');
+                      a.href = URL.createObjectURL(blob);
+                      a.download = `store_backup_${Date.now()}.json`;
+                      a.click();
+                    }}
+                    className="btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                  >
+                    <span>Download JSON Backup</span>
+                  </button>
+                </div>
+
+                <div style={{ padding: '18px', borderRadius: '14px', border: '1px solid var(--border-medium)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700 }}>Reload Starter Sample Template</h4>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Populate recommended slow-fashion products and starter offers.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (confirm('Load sample starter catalog? This will add sample items to your store.')) {
+                        await loadSampleTemplate();
+                      }
+                    }}
+                    className="btn-secondary"
+                    style={{ padding: '8px 16px', fontSize: '0.82rem' }}
+                  >
+                    <span>Load Starter Sample Items</span>
+                  </button>
+                </div>
+
+                <div style={{ padding: '18px', borderRadius: '14px', border: '1px solid #FCA5A5', backgroundColor: '#FEF2F2', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 700, color: '#991B1B' }}>Reset Catalog to Clean Empty State</h4>
+                    <p style={{ fontSize: '0.78rem', color: '#B91C1C' }}>Clears all products and customer orders while keeping your brand settings.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (confirm('Are you sure you want to clear all products and orders?')) {
+                        await resetDatabase();
+                      }
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      backgroundColor: '#DC2626',
+                      color: '#FFFFFF',
+                      fontSize: '0.82rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      border: 'none'
+                    }}
+                  >
+                    <span>Clear Products & Orders</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bottom Save Button Bar */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            paddingTop: '8px'
+          }}>
+            <button
+              type="button"
+              onClick={() => handleSave()}
+              className="btn-primary"
+              style={{ padding: '12px 32px', fontSize: '0.92rem' }}
+            >
+              {savedSuccess ? <Check size={18} /> : <Save size={18} />}
+              <span>{savedSuccess ? 'All Changes Saved!' : 'Save All Changes'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

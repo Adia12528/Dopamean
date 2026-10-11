@@ -1,0 +1,591 @@
+import { DatabaseSync } from 'node:sqlite';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DATA_DIR = path.join(__dirname, 'data');
+const DB_FILE = path.join(DATA_DIR, 'store.db');
+const JSON_BACKUP_FILE = path.join(DATA_DIR, 'store.json');
+
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Initialize SQLite database instance
+const sqlite = new DatabaseSync(DB_FILE);
+
+// Enable WAL (Write-Ahead Logging) for lightning fast concurrency & durability
+sqlite.exec('PRAGMA journal_mode = WAL;');
+sqlite.exec('PRAGMA synchronous = NORMAL;');
+sqlite.exec('PRAGMA foreign_keys = ON;');
+
+// Initialize Tables
+sqlite.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS products (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    price REAL NOT NULL,
+    original_price REAL,
+    stock INTEGER NOT NULL DEFAULT 0,
+    is_featured INTEGER DEFAULT 0,
+    is_bestseller INTEGER DEFAULT 0,
+    rating REAL DEFAULT 5.0,
+    reviews_count INTEGER DEFAULT 0,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS offers (
+    id TEXT PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    data TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS orders (
+    id TEXT PRIMARY KEY,
+    customer_name TEXT NOT NULL,
+    customer_email TEXT NOT NULL,
+    customer_phone TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    total REAL NOT NULL,
+    payment_method TEXT NOT NULL DEFAULT 'cod',
+    payment_status TEXT NOT NULL DEFAULT 'pending',
+    tracking_number TEXT,
+    data TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS reviews (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL,
+    customer_name TEXT NOT NULL,
+    customer_email TEXT,
+    rating INTEGER NOT NULL,
+    comment TEXT NOT NULL,
+    verified_purchase INTEGER DEFAULT 1,
+    created_at TEXT NOT NULL
+  );
+`);
+
+// Backfill any empty customer_phone/customer_name in orders from data JSON
+try {
+  const existingOrders = sqlite.prepare("SELECT id, data, customer_name, customer_phone FROM orders").all();
+  for (const o of existingOrders) {
+    if (!o.customer_phone || !o.customer_name || o.customer_name === 'Customer') {
+      try {
+        const parsed = JSON.parse(o.data);
+        const phone = parsed.customer?.phone || parsed.customerPhone || '';
+        const name = parsed.customer?.name || parsed.customerName || '';
+        if (phone || (name && name !== 'Customer')) {
+          sqlite.prepare("UPDATE orders SET customer_name = COALESCE(NULLIF(?, ''), customer_name), customer_phone = COALESCE(NULLIF(?, ''), customer_phone) WHERE id = ?").run(name || 'Customer', phone || '', o.id);
+        }
+      } catch {}
+    }
+  }
+} catch (e) {
+  console.warn("Backfill orders check:", e.message);
+}
+
+// Default store settings
+const DEFAULT_SETTINGS = {
+  storeName: 'Cozy Loops by Deepa',
+  storeTagline: 'Cozy, Handmade Happiness • Premium Crochet Hair Accessories',
+  heroBadge: '🌸 100% Handcrafted with Love',
+  heroTitle: 'Cozy Loops by Deepa',
+  heroSubtitle: '100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories.',
+  heroPrimaryBtnText: 'Shop Handcrafted Collection',
+  heroSecondaryBtnText: 'View Special Combos',
+  showAnnouncement: true,
+  announcementText: '100% Handmade with Love 🌸 Free Shipping on orders above ₹299',
+  themeColor: '#C85A32',
+  showAboutSection: true,
+  aboutBadge: 'Our Story & Maker Ethos',
+  aboutTitle: 'Meet Deepa • The Hands Behind Every Petal & Loop',
+  aboutStory1: "Unlike industrial knitwear which can be copied by commercial machinery, true crochet cannot be replicated by any machine in existence. Every single loop, rose petal, and sunflower hair clip is personally crocheted by Deepa's hands.",
+  aboutStory2: "We use ultra-soft milk cotton and durable elastic bands to craft accessories that don't pull hair, hold securely, and bring a bloom of happiness to everyday styling.",
+  aboutQuote: 'Every stitch is a gentle pause of mindfulness, turning simple yarn into wearable floral art.',
+  aboutImage: '/uploads/media_1791711047623.jpg',
+  trustBadge1Icon: '🌸',
+  trustBadge1Title: '100% Handcrafted',
+  trustBadge1Desc: 'Stitch-by-stitch slowly made by artisan Deepa with utmost love & care.',
+  trustBadge2Icon: '🧶',
+  trustBadge2Title: 'Skin & Hair Friendly',
+  trustBadge2Desc: 'Soft milk-cotton yarn that holds firmly without pulling or snagging hair.',
+  trustBadge3Icon: '✨',
+  trustBadge3Title: 'Custom Orders & Combos',
+  trustBadge3Desc: 'Pair your favorite colors or order custom gifts for birthdays & returns.',
+  trustBadge4Icon: '📦',
+  trustBadge4Title: 'Fast Pan-India Dispatch',
+  trustBadge4Desc: 'Safely boxed in aesthetic packaging with care instructions and gift cards.',
+  currency: '₹',
+  freeShippingThreshold: 299,
+  shippingNotice: 'Dispatched within 24-48 hours across India • Free Shipping above ₹299',
+  contactEmail: 'dsoni7018@gmail.com',
+  contactPhone: '+91 98765 43210',
+  instagramHandle: '@cozyloopsbydeepa',
+  studioLocation: 'Handcrafted Studio, India',
+  heroImage: '/uploads/media_1791711047623.jpg',
+  footerAboutText: 'Cozy Loops by Deepa crafts slow-fashioned, joyful crochet hair accessories and gifts with organic soft cotton and gentle care.',
+  footerCopyright: '© 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion. All Rights Reserved.',
+  adminPasscode: 'admin123',
+  // Payment Options
+  paymentRazorpayEnabled: false,
+  razorpayKeyId: '',
+  razorpayKeySecret: '',
+  paymentUpiEnabled: true,
+  upiId: 'cozyloops@upi',
+  upiPayeeName: 'Deepa Soni (Cozy Loops)',
+  paymentCodEnabled: true,
+  paymentPayuEnabled: false,
+  payuMerchantKey: '',
+  payuMerchantSalt: ''
+};
+
+// Seed / Migrate from existing store.json if database is freshly created
+function seedOrMigrate() {
+  const row = sqlite.prepare('SELECT COUNT(*) as count FROM settings').get();
+  if (row.count === 0) {
+    let initialSettings = DEFAULT_SETTINGS;
+    let initialProducts = [];
+    let initialOffers = [];
+    let initialOrders = [];
+
+    if (fs.existsSync(JSON_BACKUP_FILE)) {
+      try {
+        const jsonRaw = fs.readFileSync(JSON_BACKUP_FILE, 'utf8');
+        const parsed = JSON.parse(jsonRaw);
+        if (parsed.settings) initialSettings = { ...DEFAULT_SETTINGS, ...parsed.settings };
+        if (Array.isArray(parsed.products)) initialProducts = parsed.products;
+        if (Array.isArray(parsed.offers)) initialOffers = parsed.offers;
+        if (Array.isArray(parsed.orders)) initialOrders = parsed.orders;
+        console.log(`[SQLite] Migrated ${initialProducts.length} products and settings from store.json`);
+      } catch (err) {
+        console.warn('[SQLite] Error reading legacy store.json for migration', err);
+      }
+    }
+
+    // Insert settings
+    sqlite.prepare('INSERT INTO settings (id, data, updated_at) VALUES (1, ?, ?)').run(
+      JSON.stringify(initialSettings),
+      new Date().toISOString()
+    );
+
+    // Insert products
+    const insertProd = sqlite.prepare(`
+      INSERT INTO products (id, title, category, price, original_price, stock, is_featured, is_bestseller, rating, reviews_count, data, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const p of initialProducts) {
+      insertProd.run(
+        p.id,
+        p.title || 'Untitled',
+        p.category || 'Accessories',
+        p.price || 0,
+        p.originalPrice || null,
+        p.stock || 0,
+        p.isFeatured ? 1 : 0,
+        p.isBestSeller ? 1 : 0,
+        p.rating || 5.0,
+        p.reviewsCount || 0,
+        JSON.stringify(p),
+        p.createdAt || new Date().toISOString()
+      );
+    }
+
+    // Insert offers
+    const insertOffer = sqlite.prepare(`
+      INSERT INTO offers (id, code, is_active, data)
+      VALUES (?, ?, ?, ?)
+    `);
+    for (const o of initialOffers) {
+      insertOffer.run(o.id, o.code, o.isActive ? 1 : 0, JSON.stringify(o));
+    }
+
+    // Insert orders
+    const insertOrder = sqlite.prepare(`
+      INSERT INTO orders (id, customer_name, customer_email, customer_phone, status, total, payment_method, payment_status, tracking_number, data, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const ord of initialOrders) {
+      insertOrder.run(
+        ord.id,
+        ord.customer?.name || 'Customer',
+        ord.customer?.email || '',
+        ord.customer?.phone || '',
+        ord.status || 'pending',
+        ord.total || 0,
+        ord.paymentMethod || 'cod',
+        ord.paymentStatus || 'pending',
+        ord.trackingNumber || null,
+        JSON.stringify(ord),
+        ord.createdAt || new Date().toISOString()
+      );
+    }
+  }
+}
+
+seedOrMigrate();
+
+// Backup to JSON file periodically / on mutations for safety
+function syncBackup() {
+  try {
+    const settings = db.getSettings();
+    const products = db.getProducts();
+    const offers = db.getOffers();
+    const orders = db.getOrders();
+    fs.writeFileSync(JSON_BACKUP_FILE, JSON.stringify({ settings, products, offers, orders }, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('[SQLite] Backup write warning:', e);
+  }
+}
+
+export const db = {
+  // SETTINGS
+  getSettings: () => {
+    const row = sqlite.prepare('SELECT data FROM settings WHERE id = 1').get();
+    if (!row) return DEFAULT_SETTINGS;
+    try {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(row.data) };
+    } catch {
+      return DEFAULT_SETTINGS;
+    }
+  },
+  updateSettings: (newSettings) => {
+    const current = db.getSettings();
+    const updated = { ...current, ...newSettings };
+    sqlite.prepare('UPDATE settings SET data = ?, updated_at = ? WHERE id = 1').run(
+      JSON.stringify(updated),
+      new Date().toISOString()
+    );
+    syncBackup();
+    return updated;
+  },
+
+  // PRODUCTS
+  getProducts: () => {
+    const rows = sqlite.prepare('SELECT data FROM products ORDER BY rowid DESC').all();
+    return rows.map(r => JSON.parse(r.data));
+  },
+  getProductById: (id) => {
+    const row = sqlite.prepare('SELECT data FROM products WHERE id = ?').get(id);
+    return row ? JSON.parse(row.data) : null;
+  },
+  addProduct: (productData) => {
+    const newProduct = {
+      ...productData,
+      id: productData.id || `prod_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      rating: productData.rating || 5.0,
+      reviewsCount: productData.reviewsCount || 0,
+      createdAt: productData.createdAt || new Date().toISOString()
+    };
+    sqlite.prepare(`
+      INSERT INTO products (id, title, category, price, original_price, stock, is_featured, is_bestseller, rating, reviews_count, data, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      newProduct.id,
+      newProduct.title,
+      newProduct.category,
+      newProduct.price,
+      newProduct.originalPrice || null,
+      newProduct.stock || 0,
+      newProduct.isFeatured ? 1 : 0,
+      newProduct.isBestSeller ? 1 : 0,
+      newProduct.rating,
+      newProduct.reviewsCount,
+      JSON.stringify(newProduct),
+      newProduct.createdAt
+    );
+    syncBackup();
+    return newProduct;
+  },
+  updateProduct: (id, updates) => {
+    const current = db.getProductById(id);
+    if (!current) return null;
+    const updated = { ...current, ...updates };
+    sqlite.prepare(`
+      UPDATE products
+      SET title = ?, category = ?, price = ?, original_price = ?, stock = ?, is_featured = ?, is_bestseller = ?, rating = ?, reviews_count = ?, data = ?
+      WHERE id = ?
+    `).run(
+      updated.title,
+      updated.category,
+      updated.price,
+      updated.originalPrice || null,
+      updated.stock || 0,
+      updated.isFeatured ? 1 : 0,
+      updated.isBestSeller ? 1 : 0,
+      updated.rating,
+      updated.reviewsCount,
+      JSON.stringify(updated),
+      id
+    );
+    syncBackup();
+    return updated;
+  },
+  deleteProduct: (id) => {
+    sqlite.prepare('DELETE FROM products WHERE id = ?').run(id);
+    syncBackup();
+    return true;
+  },
+
+  // OFFERS
+  getOffers: () => {
+    const rows = sqlite.prepare('SELECT data FROM offers ORDER BY rowid DESC').all();
+    return rows.map(r => JSON.parse(r.data));
+  },
+  addOffer: (offerData) => {
+    const newOffer = {
+      ...offerData,
+      id: `offer_${Date.now()}`,
+      usedCount: 0,
+      isActive: offerData.isActive !== false
+    };
+    sqlite.prepare(`
+      INSERT INTO offers (id, code, is_active, data)
+      VALUES (?, ?, ?, ?)
+    `).run(newOffer.id, newOffer.code.toUpperCase(), newOffer.isActive ? 1 : 0, JSON.stringify(newOffer));
+    syncBackup();
+    return newOffer;
+  },
+  updateOffer: (id, updates) => {
+    const row = sqlite.prepare('SELECT data FROM offers WHERE id = ?').get(id);
+    if (!row) return null;
+    const current = JSON.parse(row.data);
+    const updated = { ...current, ...updates };
+    sqlite.prepare(`
+      UPDATE offers
+      SET code = ?, is_active = ?, data = ?
+      WHERE id = ?
+    `).run(updated.code.toUpperCase(), updated.isActive ? 1 : 0, JSON.stringify(updated), id);
+    syncBackup();
+    return updated;
+  },
+  deleteOffer: (id) => {
+    sqlite.prepare('DELETE FROM offers WHERE id = ?').run(id);
+    syncBackup();
+    return true;
+  },
+  toggleOfferStatus: (id) => {
+    const row = sqlite.prepare('SELECT is_active, data FROM offers WHERE id = ?').get(id);
+    if (!row) return null;
+    const current = JSON.parse(row.data);
+    const newStatus = row.is_active ? 0 : 1;
+    current.isActive = newStatus === 1;
+    sqlite.prepare('UPDATE offers SET is_active = ?, data = ? WHERE id = ?').run(newStatus, JSON.stringify(current), id);
+    syncBackup();
+    return current;
+  },
+
+  // ORDERS
+  getOrders: () => {
+    const rows = sqlite.prepare('SELECT data FROM orders ORDER BY rowid DESC').all();
+    return rows.map(r => JSON.parse(r.data));
+  },
+  getOrderById: (id) => {
+    const row = sqlite.prepare('SELECT data FROM orders WHERE id = ?').get(id);
+    return row ? JSON.parse(row.data) : null;
+  },
+  getOrdersByQuery: (q) => {
+    const sanitized = `%${q.trim().toLowerCase()}%`;
+    const rows = sqlite.prepare(`
+      SELECT data FROM orders
+      WHERE LOWER(id) LIKE ? 
+         OR LOWER(customer_phone) LIKE ? 
+         OR LOWER(customer_email) LIKE ?
+         OR LOWER(customer_name) LIKE ?
+         OR LOWER(IFNULL(tracking_number, '')) LIKE ?
+      ORDER BY rowid DESC
+    `).all(sanitized, sanitized, sanitized, sanitized, sanitized);
+    return rows.map(r => JSON.parse(r.data));
+  },
+  createOrder: (orderData) => {
+    const id = orderData.id || `ORD-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
+    const customerName = orderData.customer?.name || orderData.customerName || 'Customer';
+    const customerEmail = orderData.customer?.email || orderData.customerEmail || '';
+    const customerPhone = orderData.customer?.phone || orderData.customerPhone || '';
+    const customerAddress = orderData.customer?.address || orderData.shippingAddress || orderData.address || '';
+    const customerCity = orderData.customer?.city || orderData.city || '';
+    const customerPincode = orderData.customer?.pincode || orderData.pincode || '';
+
+    const newOrder = {
+      ...orderData,
+      id,
+      customer: {
+        name: customerName,
+        email: customerEmail,
+        phone: customerPhone,
+        address: customerAddress,
+        city: customerCity,
+        pincode: customerPincode
+      },
+      customerName,
+      customerEmail,
+      customerPhone,
+      status: orderData.status || 'pending',
+      paymentMethod: orderData.paymentMethod || 'cod',
+      paymentStatus: orderData.paymentStatus || (orderData.paymentMethod === 'cod' ? 'pending' : 'pending'),
+      trackingNumber: orderData.trackingNumber || '',
+      timeline: [
+        {
+          status: 'Order Placed',
+          timestamp: new Date().toISOString(),
+          note: `Order received via ${orderData.paymentMethod ? orderData.paymentMethod.toUpperCase() : 'COD'}.`
+        }
+      ],
+      createdAt: new Date().toISOString()
+    };
+
+    sqlite.prepare(`
+      INSERT INTO orders (id, customer_name, customer_email, customer_phone, status, total, payment_method, payment_status, tracking_number, data, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      newOrder.id,
+      customerName,
+      customerEmail,
+      customerPhone,
+      newOrder.status,
+      newOrder.total,
+      newOrder.paymentMethod,
+      newOrder.paymentStatus,
+      newOrder.trackingNumber || null,
+      JSON.stringify(newOrder),
+      newOrder.createdAt
+    );
+
+    // Decrement stock for purchased products
+    if (Array.isArray(newOrder.items)) {
+      for (const item of newOrder.items) {
+        if (item.productId && item.quantity) {
+          const prod = db.getProductById(item.productId);
+          if (prod) {
+            const nextStock = Math.max(0, (prod.stock || 0) - item.quantity);
+            db.updateProduct(item.productId, { stock: nextStock });
+          }
+        }
+      }
+    }
+
+    syncBackup();
+    return newOrder;
+  },
+  updateOrderStatus: (id, status, extraFields = {}) => {
+    const current = db.getOrderById(id);
+    if (!current) return null;
+    const timeline = current.timeline || [];
+    timeline.push({
+      status: `Status changed to ${status.toUpperCase()}`,
+      timestamp: new Date().toISOString(),
+      note: extraFields.trackingNumber ? `Tracking number assigned: ${extraFields.trackingNumber}` : `Status update`
+    });
+
+    const updated = {
+      ...current,
+      ...extraFields,
+      status,
+      timeline
+    };
+
+    sqlite.prepare(`
+      UPDATE orders
+      SET status = ?, payment_status = ?, tracking_number = ?, data = ?
+      WHERE id = ?
+    `).run(
+      status,
+      updated.paymentStatus || current.paymentStatus,
+      updated.trackingNumber || null,
+      JSON.stringify(updated),
+      id
+    );
+    syncBackup();
+    return updated;
+  },
+  deleteOrder: (id) => {
+    sqlite.prepare('DELETE FROM orders WHERE id = ?').run(id);
+    syncBackup();
+    return true;
+  },
+
+  // REVIEWS
+  getReviews: (productId) => {
+    let rows;
+    if (productId) {
+      rows = sqlite.prepare('SELECT * FROM reviews WHERE product_id = ? ORDER BY rowid DESC').all(productId);
+    } else {
+      rows = sqlite.prepare('SELECT * FROM reviews ORDER BY rowid DESC').all();
+    }
+    return rows.map(r => ({
+      id: r.id,
+      productId: r.product_id,
+      customerName: r.customer_name,
+      customerEmail: r.customer_email,
+      rating: r.rating,
+      comment: r.comment,
+      verifiedPurchase: Boolean(r.verified_purchase),
+      createdAt: r.created_at
+    }));
+  },
+  addReview: (reviewData) => {
+    const id = `rev_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const review = {
+      id,
+      productId: reviewData.productId,
+      customerName: reviewData.customerName || 'Handcraft Lover',
+      customerEmail: reviewData.customerEmail || '',
+      rating: Math.min(5, Math.max(1, Number(reviewData.rating) || 5)),
+      comment: reviewData.comment || '',
+      verifiedPurchase: reviewData.verifiedPurchase !== false,
+      createdAt: new Date().toISOString()
+    };
+
+    sqlite.prepare(`
+      INSERT INTO reviews (id, product_id, customer_name, customer_email, rating, comment, verified_purchase, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      review.id,
+      review.productId,
+      review.customerName,
+      review.customerEmail,
+      review.rating,
+      review.comment,
+      review.verifiedPurchase ? 1 : 0,
+      review.createdAt
+    );
+
+    // Recalculate product rating & reviewsCount
+    const allReviews = db.getReviews(review.productId);
+    const avgRating = (allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length).toFixed(1);
+    db.updateProduct(review.productId, {
+      rating: parseFloat(avgRating),
+      reviewsCount: allReviews.length
+    });
+
+    return review;
+  },
+  deleteReview: (id) => {
+    const row = sqlite.prepare('SELECT product_id FROM reviews WHERE id = ?').get(id);
+    if (row) {
+      sqlite.prepare('DELETE FROM reviews WHERE id = ?').run(id);
+      const allReviews = db.getReviews(row.product_id);
+      const avgRating = allReviews.length > 0
+        ? (allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length).toFixed(1)
+        : 5.0;
+      db.updateProduct(row.product_id, {
+        rating: parseFloat(avgRating),
+        reviewsCount: allReviews.length
+      });
+    }
+    return true;
+  }
+};
