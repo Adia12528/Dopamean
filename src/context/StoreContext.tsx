@@ -48,8 +48,9 @@ interface StoreContextType {
   setIsAdminLoginModalOpen: (open: boolean) => void;
   setIsTrackingModalOpen: (open: boolean) => void;
   setActiveInvoiceOrder: (order: Order | null) => void;
-  adminLogin: (passcode: string) => boolean;
+  adminLogin: (passcode: string, superAdmin?: { superAdminId: string; superAdminPassword: string }) => Promise<boolean>;
   adminLogout: () => void;
+
   setViewMode: (mode: ViewMode) => void;
   setDashboardTab: (tab: DashboardTab) => void;
   setSearchQuery: (q: string) => void;
@@ -185,20 +186,47 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [cart]);
 
   // Super Admin login / logout
-  const adminLogin = (passcode: string): boolean => {
-    const correct = settings.adminPasscode || 'admin123';
-    if (passcode.trim() === correct.trim()) {
-      setIsAdmin(true);
-      try {
-        localStorage.setItem('dopamean_admin_auth', 'true');
-      } catch {
-        console.warn('Failed to persist admin auth state');
+  const adminLogin = async (passcode: string, superAdmin?: { superAdminId: string; superAdminPassword: string }): Promise<boolean> => {
+    try {
+      let result;
+      if (superAdmin) {
+        // Two-tier: use backend super-admin check
+        result = await api.superAdminLogin(superAdmin.superAdminId, superAdmin.superAdminPassword);
+      } else {
+        // Regular admin: passcode check
+        result = await api.adminLogin(passcode);
       }
-      setViewMode('dashboard');
-      showToast('Welcome to Super Admin Studio!');
-      return true;
+      if (result?.success) {
+        setIsAdmin(true);
+        try {
+          localStorage.setItem('dopamean_admin_auth', 'true');
+          if (result.role === 'superadmin') {
+            localStorage.setItem('dopamean_admin_role', 'superadmin');
+          } else {
+            localStorage.setItem('dopamean_admin_role', 'admin');
+          }
+        } catch {
+          console.warn('Failed to persist admin auth state');
+        }
+        setIsAdminLoginModalOpen(false);
+        setViewMode('dashboard');
+        showToast(result.role === 'superadmin' ? '🔐 Super Admin mode activated!' : 'Welcome to Studio Dashboard!');
+        return true;
+      }
+      return false;
+    } catch {
+      // Fallback: try local passcode check if backend is unreachable
+      const correct = settings.adminPasscode || 'admin123';
+      if (!superAdmin && passcode.trim() === correct.trim()) {
+        setIsAdmin(true);
+        try { localStorage.setItem('dopamean_admin_auth', 'true'); } catch { /* ignore */ }
+        setIsAdminLoginModalOpen(false);
+        setViewMode('dashboard');
+        showToast('Welcome to Studio Dashboard!');
+        return true;
+      }
+      return false;
     }
-    return false;
   };
 
   const adminLogout = () => {

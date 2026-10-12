@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -76,6 +77,19 @@ sqlite.exec(`
     comment TEXT NOT NULL,
     verified_purchase INTEGER DEFAULT 1,
     created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    phone TEXT,
+    address TEXT,
+    city TEXT,
+    pincode TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
   );
 `);
 
@@ -587,5 +601,95 @@ export const db = {
       });
     }
     return true;
+  },
+
+  // USERS (Customer Accounts)
+  hashPassword: (password) => {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = crypto.scryptSync(password, salt, 64).toString('hex');
+    return `${salt}:${hash}`;
+  },
+
+  verifyPassword: (password, stored) => {
+    try {
+      const [salt, hash] = stored.split(':');
+      const testHash = crypto.scryptSync(password, salt, 64).toString('hex');
+      return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(testHash, 'hex'));
+    } catch {
+      return false;
+    }
+  },
+
+  getUserByEmail: (email) => {
+    const row = sqlite.prepare('SELECT * FROM users WHERE LOWER(email) = LOWER(?)').get(email);
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      passwordHash: row.password_hash,
+      phone: row.phone || '',
+      address: row.address || '',
+      city: row.city || '',
+      pincode: row.pincode || '',
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  },
+
+  getUserById: (id) => {
+    const row = sqlite.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    if (!row) return null;
+    return {
+      id: row.id,
+      name: row.name,
+      email: row.email,
+      phone: row.phone || '',
+      address: row.address || '',
+      city: row.city || '',
+      pincode: row.pincode || '',
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  },
+
+  createUser: ({ name, email, password, phone = '', address = '', city = '', pincode = '' }) => {
+    const existing = sqlite.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(email);
+    if (existing) throw new Error('EMAIL_EXISTS');
+    const id = `usr_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    const passwordHash = db.hashPassword(password);
+    const now = new Date().toISOString();
+    sqlite.prepare(
+      'INSERT INTO users (id, name, email, password_hash, phone, address, city, pincode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(id, name.trim(), email.trim().toLowerCase(), passwordHash, phone, address, city, pincode, now, now);
+    return db.getUserById(id);
+  },
+
+  updateUser: (id, updates) => {
+    const fields = [];
+    const vals = [];
+    if (updates.name !== undefined) { fields.push('name = ?'); vals.push(updates.name.trim()); }
+    if (updates.phone !== undefined) { fields.push('phone = ?'); vals.push(updates.phone); }
+    if (updates.address !== undefined) { fields.push('address = ?'); vals.push(updates.address); }
+    if (updates.city !== undefined) { fields.push('city = ?'); vals.push(updates.city); }
+    if (updates.pincode !== undefined) { fields.push('pincode = ?'); vals.push(updates.pincode); }
+    if (updates.password) {
+      fields.push('password_hash = ?');
+      vals.push(db.hashPassword(updates.password));
+    }
+    if (fields.length === 0) return db.getUserById(id);
+    fields.push('updated_at = ?');
+    vals.push(new Date().toISOString());
+    vals.push(id);
+    sqlite.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
+    return db.getUserById(id);
+  },
+
+  getUserOrders: (userId) => {
+    const user = db.getUserById(userId);
+    if (!user) return [];
+    // Match orders by email
+    const rows = sqlite.prepare('SELECT data FROM orders WHERE LOWER(customer_email) = LOWER(?) ORDER BY rowid DESC').all(user.email);
+    return rows.map(r => JSON.parse(r.data));
   }
 };

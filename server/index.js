@@ -15,6 +15,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 5000;
 const ADMIN_JWT_SECRET = process.env.JWT_SECRET || 'cozyloops_production_secret_key_2026';
+const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_ID || 'superadmin';
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'CozyLoops@SuperAdmin2026!';
+const USER_JWT_SECRET = process.env.USER_JWT_SECRET || (ADMIN_JWT_SECRET + '_user');
+
 
 // Ensure uploads directory exists
 const UPLOADS_DIR = path.join(__dirname, 'uploads');
@@ -90,6 +94,41 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+// ── User JWT helpers ─────────────────────────────────────────────────────────
+function generateUserToken(userId) {
+  const payload = JSON.stringify({ userId, ts: Date.now() });
+  const hmac = crypto.createHmac('sha256', USER_JWT_SECRET).update(payload).digest('hex');
+  return Buffer.from(`${payload}::${hmac}`).toString('base64');
+}
+
+function verifyUserToken(token) {
+  if (!token) return null;
+  try {
+    const raw = Buffer.from(token, 'base64').toString('utf8');
+    const [payload, hmac] = raw.split('::');
+    const expectedHmac = crypto.createHmac('sha256', USER_JWT_SECRET).update(payload).digest('hex');
+    if (hmac !== expectedHmac) return null;
+    const data = JSON.parse(payload);
+    // Token valid for 30 days
+    if (Date.now() - data.ts > 30 * 24 * 60 * 60 * 1000) return null;
+    return data.userId;
+  } catch {
+    return null;
+  }
+}
+
+function requireUser(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const userId = verifyUserToken(token);
+  if (!userId) return res.status(401).json({ error: 'Please log in to continue.' });
+  const user = db.getUserById(userId);
+  if (!user) return res.status(401).json({ error: 'Account not found.' });
+  req.user = user;
+  next();
+}
+
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
@@ -105,19 +144,37 @@ app.get('/api/health', (req, res) => {
 // ==========================================
 app.post('/api/admin/login', (req, res) => {
   try {
-    const { passcode } = req.body;
+    const { passcode, superAdminId, superAdminPassword } = req.body;
+
+    // ── Tier 1: Super Admin (env-hardcoded, unchangeable) ────────────────────
+    if (superAdminId !== undefined || superAdminPassword !== undefined) {
+      if (
+        superAdminId?.trim() === SUPER_ADMIN_ID &&
+        superAdminPassword?.trim() === SUPER_ADMIN_PASSWORD
+      ) {
+        const token = generateAdminToken('__SUPER_ADMIN__');
+        return res.json({
+          success: true,
+          token,
+          role: 'superadmin',
+          message: 'Super Admin authenticated successfully'
+        });
+      }
+      return res.status(401).json({ success: false, message: 'Invalid Super Admin credentials' });
+    }
+
+    // ── Tier 2: Regular Admin (store passcode, changeable in settings) ───────
     const settings = db.getSettings();
     const correctPasscode = settings.adminPasscode || 'admin123';
-
     if (!passcode || passcode.trim() !== correctPasscode.trim()) {
       return res.status(401).json({ success: false, message: 'Invalid Admin Passcode' });
     }
-
     const token = generateAdminToken(correctPasscode);
     res.json({
       success: true,
       token,
-      message: 'Super Admin authenticated successfully'
+      role: 'admin',
+      message: 'Admin authenticated successfully'
     });
   } catch (err) {
     res.status(500).json({ error: 'Authentication failed' });
@@ -127,9 +184,90 @@ app.post('/api/admin/login', (req, res) => {
 app.post('/api/admin/verify', (req, res) => {
   const { token } = req.body;
   const settings = db.getSettings();
-  const isValid = verifyAdminToken(token, settings.adminPasscode || 'admin123');
-  res.json({ valid: isValid });
+  // A super-admin token is signed against the '__SUPER_ADMIN__' sentinel
+  const isSuperAdmin = verifyAdminToken(token, '__SUPER_ADMIN__');
+  const isAdmin = isSuperAdmin || verifyAdminToken(token, settings.adminPasscode || 'admin123');
+  res.json({ valid: isAdmin, role: isSuperAdmin ? 'superadmin' : (isAdmin ? 'admin' : null) });
 });
+
+// ==========================================
+// USER (CUSTOMER) AUTHENTICATION API
+// ==========================================
+app.post('/api/users/register', (req, res) => {
+  try {
+    const { name, email, password, phone, address, city, pincode } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required.' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+    const user = db.createUser({ name, email, password, phone, address, city, pincode });
+    const token = generateUserToken(user.id);
+    res.status(201).json({ success: true, token, user });
+  } catch (err) {
+    if (err.message === 'EMAIL_EXISTS') {
+      return res.status(409).json({ error: 'An account with this email already exists. Please sign in instead.' });
+    }
+    console.error('Register error:', err);
+    res.status(500).json({ error: 'Failed to create account. Please try again.' });
+  }
+});
+
+app.post('/api/users/login', (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+    const user = db.getUserByEmail(email);
+    if (!user || !db.verifyPassword(password, user.passwordHash)) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+    const token = generateUserToken(user.id);
+    // Return user without passwordHash
+    const { passwordHash: _, ...safeUser } = user;
+    res.json({ success: true, token, user: safeUser });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed. Please try again.' });
+  }
+});
+
+app.get('/api/users/me', requireUser, (req, res) => {
+  res.json(req.user);
+});
+
+app.put('/api/users/me', requireUser, (req, res) => {
+  try {
+    const { name, phone, address, city, pincode, password, currentPassword } = req.body;
+    // If changing password, verify current first
+    if (password) {
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Current password required to set a new one.' });
+      }
+      const userWithHash = db.getUserByEmail(req.user.email);
+      if (!db.verifyPassword(currentPassword, userWithHash.passwordHash)) {
+        return res.status(401).json({ error: 'Current password is incorrect.' });
+      }
+    }
+    const updated = db.updateUser(req.user.id, { name, phone, address, city, pincode, password });
+    res.json(updated);
+  } catch (err) {
+    console.error('Update user error:', err);
+    res.status(500).json({ error: 'Failed to update profile.' });
+  }
+});
+
+app.get('/api/users/my-orders', requireUser, (req, res) => {
+  try {
+    const orders = db.getUserOrders(req.user.id);
+    res.json(orders);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to retrieve orders.' });
+  }
+});
+
 
 // ==========================================
 // IMAGE UPLOAD API

@@ -1,4 +1,4 @@
-import type { Product, Offer, Order, StoreSettings, Review } from '../types';
+import type { Product, Offer, Order, StoreSettings, Review, UserProfile } from '../types';
 
 const BASE_URL = '';
 
@@ -219,7 +219,7 @@ export const api = {
   },
 
   // ADMIN AUTH
-  adminLogin: async (passcode: string): Promise<{ success: boolean; token: string }> => {
+  adminLogin: async (passcode: string): Promise<{ success: boolean; token: string; role: string }> => {
     const res = await fetch(`${BASE_URL}/api/admin/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -229,6 +229,75 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || 'Authentication failed');
     }
+    return res.json();
+  },
+
+  superAdminLogin: async (superAdminId: string, superAdminPassword: string): Promise<{ success: boolean; token: string; role: string }> => {
+    const res = await fetch(`${BASE_URL}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ superAdminId, superAdminPassword })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Authentication failed');
+    }
+    return res.json();
+  },
+
+  // USER AUTH
+  userRegister: async (data: { name: string; email: string; password: string; phone?: string; address?: string; city?: string; pincode?: string }): Promise<{ success: boolean; token: string; user: UserProfile }> => {
+    const res = await fetch(`${BASE_URL}/api/users/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Registration failed');
+    }
+    return res.json();
+  },
+
+  userLogin: async (email: string, password: string): Promise<{ success: boolean; token: string; user: UserProfile }> => {
+    const res = await fetch(`${BASE_URL}/api/users/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Login failed');
+    }
+    return res.json();
+  },
+
+  getMe: async (token: string): Promise<UserProfile> => {
+    const res = await fetch(`${BASE_URL}/api/users/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Not authenticated');
+    return res.json();
+  },
+
+  updateMe: async (token: string, updates: Partial<UserProfile> & { password?: string; currentPassword?: string }): Promise<UserProfile> => {
+    const res = await fetch(`${BASE_URL}/api/users/me`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(updates)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Update failed');
+    }
+    return res.json();
+  },
+
+  getMyOrders: async (token: string): Promise<Order[]> => {
+    const res = await fetch(`${BASE_URL}/api/users/my-orders`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!res.ok) throw new Error('Failed to fetch orders');
     return res.json();
   },
 

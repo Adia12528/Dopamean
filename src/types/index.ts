@@ -173,3 +173,16 @@ export interface Order {
 
 export type ViewMode = 'store' | 'dashboard';
 export type DashboardTab = 'overview' | 'products' | 'offers' | 'orders' | 'settings';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+  pincode?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+

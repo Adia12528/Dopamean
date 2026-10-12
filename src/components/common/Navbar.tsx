@@ -1,5 +1,6 @@
 import React from 'react';
 import { useStore } from '../../context/StoreContext';
+import { UserProfileMenu } from '../auth/UserProfileMenu';
 import { 
   ShoppingBag, 
   LayoutDashboard, 
@@ -11,6 +12,7 @@ import {
   LogOut,
   Truck
 } from 'lucide-react';
+
 
 export const Navbar: React.FC = () => {
   const { 
@@ -323,35 +325,41 @@ export const Navbar: React.FC = () => {
 
           {/* Normal User & Storefront Customer: Track Order Button */}
           {viewMode === 'store' && (
-            <button
-              onClick={() => setIsTrackingModalOpen(true)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 14px',
-                borderRadius: 'var(--radius-full)',
-                backgroundColor: 'transparent',
-                border: '1px solid var(--border-medium)',
-                color: 'var(--text-main)',
-                fontWeight: 600,
-                fontSize: '0.84rem',
-                cursor: 'pointer',
-                transition: 'var(--transition-smooth)'
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent-terracotta)';
-                e.currentTarget.style.color = 'var(--accent-terracotta)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-medium)';
-                e.currentTarget.style.color = 'var(--text-main)';
-              }}
-            >
-              <Truck size={16} />
-              <span>Track Order</span>
-            </button>
+            <>
+              <button
+                onClick={() => setIsTrackingModalOpen(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '8px 14px',
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: 'transparent',
+                  border: '1px solid var(--border-medium)',
+                  color: 'var(--text-main)',
+                  fontWeight: 600,
+                  fontSize: '0.84rem',
+                  cursor: 'pointer',
+                  transition: 'var(--transition-smooth)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent-terracotta)';
+                  e.currentTarget.style.color = 'var(--accent-terracotta)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border-medium)';
+                  e.currentTarget.style.color = 'var(--text-main)';
+                }}
+              >
+                <Truck size={16} />
+                <span>Track Order</span>
+              </button>
+
+              {/* User Account (Sign In or Avatar Menu) */}
+              <UserProfileMenu />
+            </>
           )}
+
 
           {/* If Super Admin is currently on Dashboard, show Add Product Shortcut */}
           {isAdmin && viewMode === 'dashboard' ? (

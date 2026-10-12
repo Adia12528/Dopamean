@@ -1,5 +1,6 @@
 import React from 'react';
 import { StoreProvider, useStore } from './context/StoreContext';
+import { UserProvider } from './context/UserContext';
 import { Navbar } from './components/common/Navbar';
 import { Toast } from './components/common/Toast';
 import { StorefrontView } from './components/storefront/StorefrontView';
@@ -10,6 +11,7 @@ import { OrderTrackingModal } from './components/storefront/OrderTrackingModal';
 import { InvoiceModal } from './components/storefront/InvoiceModal';
 import { Footer } from './components/common/Footer';
 import { AdminLoginModal } from './components/auth/AdminLoginModal';
+import { UserAuthModal } from './components/auth/UserAuthModal';
 
 const MainApp: React.FC = () => {
   const { 
@@ -37,6 +39,7 @@ const MainApp: React.FC = () => {
       <CartDrawer />
       <ProductDetailModal />
       <AdminLoginModal />
+      <UserAuthModal />
       <OrderTrackingModal 
         isOpen={isTrackingModalOpen} 
         onClose={() => setIsTrackingModalOpen(false)} 
@@ -53,7 +56,9 @@ const MainApp: React.FC = () => {
 export default function App() {
   return (
     <StoreProvider>
-      <MainApp />
+      <UserProvider>
+        <MainApp />
+      </UserProvider>
     </StoreProvider>
   );
 }
