@@ -52,7 +52,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
       try {
         const uploadedUrl = await api.uploadImage(file);
         setImage(uploadedUrl);
-      } catch (err) {
+      } catch {
         const reader = new FileReader();
         reader.onloadend = () => {
           if (typeof reader.result === 'string') {

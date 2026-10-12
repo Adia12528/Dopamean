@@ -1,0 +1,103 @@
+Found 7 matches for "Cart":
+
+- generic [ref=f12e3]:
+  - banner [ref=f12e4]:
+    - generic [ref=f12e11]:
+      - textbox "Search bags, bucket hats, charms, cozies..." [ref=f12e23]
+      - generic [ref=f12e24]:
+        - button "Track Order" [ref=f12e25] [cursor=pointer]
+        - button "Cart 4" [ref=f12e513] [cursor=pointer]:
+          - generic [ref=f12e36]: Cart
+          - generic [ref=f12e37]: "4"
+        - button "Admin" [ref=f12e38] [cursor=pointer]
+  - main [ref=f12e43]:
+
+----
+
+- generic [ref=f12e3]:
+  - main [ref=f12e43]:
+    - generic [ref=f12e44]:
+      - generic [ref=f12e169]:
+        - generic [ref=f12e188]:
+          - generic [ref=f12e189]:
+            - generic [ref=f12e204]:
+              - generic [ref=f12e218]:
+                - generic [ref=f12e219]:
+                  - generic [ref=f12e220]: ₹180
+                  - generic [ref=f12e221]: ₹200
+                - button "Add to Cart" [ref=f12e222] [cursor=pointer]
+          - generic [ref=f12e227]:
+            - generic [ref=f12e228] [cursor=pointer]:
+              - img "Handmade Sunflower Hair Clip" [ref=f12e229]
+
+----
+
+- generic [ref=f12e3]:
+  - main [ref=f12e43]:
+    - generic [ref=f12e44]:
+      - generic [ref=f12e169]:
+        - generic [ref=f12e188]:
+          - generic [ref=f12e227]:
+            - generic [ref=f12e241]:
+              - generic [ref=f12e255]:
+                - generic [ref=f12e256]:
+                  - generic [ref=f12e257]: ₹50
+                  - generic [ref=f12e258]: ₹70
+                - button "Add to Cart" [ref=f12e259] [cursor=pointer]
+          - generic [ref=f12e264]:
+            - generic [ref=f12e265] [cursor=pointer]:
+              - img "Handmade Sunflower Tic-Tac Clips (Pair of 2)" [ref=f12e266]
+
+----
+
+- generic [ref=f12e3]:
+  - main [ref=f12e43]:
+    - generic [ref=f12e44]:
+      - generic [ref=f12e169]:
+        - generic [ref=f12e188]:
+          - generic [ref=f12e264]:
+            - generic [ref=f12e279]:
+              - generic [ref=f12e293]:
+                - generic [ref=f12e294]:
+                  - generic [ref=f12e295]: ₹90
+                  - generic [ref=f12e296]: ₹120
+                - button "Add to Cart" [ref=f12e297] [cursor=pointer]
+          - generic [ref=f12e302]:
+            - generic [ref=f12e303] [cursor=pointer]:
+              - img "Handmade Blue Rose Rubber Band" [ref=f12e304]
+
+----
+
+- generic [ref=f12e3]:
+  - main [ref=f12e43]:
+    - generic [ref=f12e44]:
+      - generic [ref=f12e169]:
+        - generic [ref=f12e188]:
+          - generic [ref=f12e302]:
+            - generic [ref=f12e317]:
+              - generic [ref=f12e331]:
+                - generic [ref=f12e332]:
+                  - generic [ref=f12e333]: ₹100
+                  - generic [ref=f12e334]: ₹130
+                - button "Add to Cart" [ref=f12e335] [cursor=pointer]
+          - generic [ref=f12e340]:
+            - generic [ref=f12e341] [cursor=pointer]:
+              - img "Handmade Red Rose Rubber Band" [ref=f12e342]
+
+----
+
+- generic [ref=f12e3]:
+  - main [ref=f12e43]:
+    - generic [ref=f12e44]:
+      - generic [ref=f12e169]:
+        - generic [ref=f12e188]:
+          - generic [ref=f12e340]:
+            - generic [ref=f12e355]:
+              - generic [ref=f12e369]:
+                - generic [ref=f12e370]:
+                  - generic [ref=f12e371]: ₹100
+                  - generic [ref=f12e372]: ₹130
+                - button "Add to Cart" [ref=f12e373] [cursor=pointer]
+      - generic [ref=f12e380]:
+        - generic [ref=f12e381]:
+          - generic [ref=f12e382]: Our Story & Maker Ethos

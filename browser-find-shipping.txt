@@ -1,0 +1,13 @@
+Found 1 match for "Shipping & Payment Details":
+
+- generic [ref=f12e3]:
+  - generic [ref=f12e515]:
+    - generic [ref=f12e516]:
+      ...
+      - button [ref=f12e525] [cursor=pointer]
+    - generic [ref=f12e595]:
+      - generic [ref=f12e596]:
+        - heading "Shipping & Payment Details" [level=4] [ref=f12e597]
+        - button "← Back to Bag" [ref=f12e598] [cursor=pointer]
+      - generic [ref=f12e599]:
+        - generic [ref=f12e600]: Full Name *

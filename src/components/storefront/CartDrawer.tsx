@@ -18,21 +18,45 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
+interface RazorpayOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  order_id: string;
+  prefill?: {
+    name: string;
+    email: string;
+    contact?: string;
+  };
+  theme?: {
+    color: string;
+  };
+  handler?: (response: {
+    razorpay_order_id?: string;
+    razorpay_payment_id?: string;
+    razorpay_signature?: string;
+  }) => void | Promise<void>;
+}
+
 declare global {
   interface Window {
-    Razorpay?: any;
+    Razorpay?: {
+      new (options: RazorpayOptions): { open: () => void };
+    };
   }
 }
 
 export const CartDrawer: React.FC = () => {
-  const { 
-    isCartOpen, 
-    setIsCartOpen, 
-    cart, 
-    updateCartQuantity, 
-    removeFromCart, 
-    activePromo, 
-    applyPromoCode, 
+  const {
+    isCartOpen,
+    setIsCartOpen,
+    cart,
+    updateCartQuantity,
+    removeFromCart,
+    activePromo,
+    applyPromoCode,
     removePromoCode,
     createOrder,
     settings,
@@ -57,8 +81,6 @@ export const CartDrawer: React.FC = () => {
     phone: '',
     address: ''
   });
-
-  if (!isCartOpen) return null;
 
   const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
 
@@ -92,7 +114,7 @@ export const CartDrawer: React.FC = () => {
         }
       })
         .then((url: string) => setUpiQrDataUrl(url))
-        .catch((err: any) => console.warn('QR Code generation failed:', err));
+        .catch(() => console.warn('QR Code generation failed'));
     }
   }, [paymentMethod, isCheckingOut, total, settings.upiId, settings.upiPayeeName, settings.storeName]);
 
@@ -115,7 +137,7 @@ export const CartDrawer: React.FC = () => {
         spread: 70,
         origin: { y: 0.6 }
       });
-    } catch (e) {
+    } catch {
       // Confetti fallback
     }
   };
@@ -159,19 +181,27 @@ export const CartDrawer: React.FC = () => {
           theme: {
             color: settings.themeColor || '#C85A32'
           },
-          handler: async (response: any) => {
+          handler: async (response: {
+            razorpay_order_id?: string;
+            razorpay_payment_id?: string;
+            razorpay_signature?: string;
+          }) => {
+            const razorpayOrderId = response.razorpay_order_id ?? '';
+            const razorpayPaymentId = response.razorpay_payment_id ?? '';
+            const razorpaySignature = response.razorpay_signature ?? '';
+
             const placedOrder = await createOrder(formData, {
               method: 'razorpay',
               status: 'paid',
-              razorpayOrderId: response.razorpay_order_id,
-              razorpayPaymentId: response.razorpay_payment_id
+              razorpayOrderId,
+              razorpayPaymentId
             });
 
             if (placedOrder) {
               await api.verifyRazorpayPayment({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
+                razorpay_order_id: razorpayOrderId,
+                razorpay_payment_id: razorpayPaymentId,
+                razorpay_signature: razorpaySignature,
                 orderId: placedOrder.id
               });
               setOrderComplete(placedOrder);
@@ -199,12 +229,17 @@ export const CartDrawer: React.FC = () => {
         setIsCheckingOut(false);
         triggerCelebration();
       }
-    } catch (err: any) {
-      alert(err.message || 'Failed to place order. Please check your network connection.');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to place order. Please check your network connection.';
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  if (!isCartOpen) {
+    return null;
+  }
 
   return (
     <div style={{

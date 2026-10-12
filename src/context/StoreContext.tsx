@@ -92,6 +92,7 @@ interface StoreContextType {
   loadSampleTemplate: () => Promise<void>;
 }
 
+/* eslint-disable react-refresh/only-export-components */
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
 
 export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -151,15 +152,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setProducts(fetchedProducts);
       setOffers(fetchedOffers);
       setOrders(fetchedOrders);
-    } catch (err) {
-      console.warn('Backend loading warning:', err);
+    } catch {
+      console.warn('Backend loading warning: unable to hydrate storefront data');
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData();
+    // Initial data hydration is intentionally triggered here to seed store state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData();
   }, [loadData]);
 
   // Dynamically update theme color across the whole application
@@ -176,8 +179,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     try {
       localStorage.setItem('dopamean_cart', JSON.stringify(cart));
-    } catch (e) {
-      console.warn('Failed to persist cart:', e);
+    } catch {
+      console.warn('Failed to persist cart: localStorage unavailable');
     }
   }, [cart]);
 
@@ -188,8 +191,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsAdmin(true);
       try {
         localStorage.setItem('dopamean_admin_auth', 'true');
-      } catch (e) {
-        console.warn(e);
+      } catch {
+        console.warn('Failed to persist admin auth state');
       }
       setViewMode('dashboard');
       showToast('Welcome to Super Admin Studio!');
@@ -202,8 +205,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setIsAdmin(false);
     try {
       localStorage.removeItem('dopamean_admin_auth');
-    } catch (e) {
-      console.warn(e);
+    } catch {
+      console.warn('Failed to clear admin auth state');
     }
     setViewMode('store');
     showToast('Signed out of Admin mode', 'info');
@@ -215,7 +218,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updated = await api.updateSettings(newSettings);
       setSettings(updated);
       showToast('Store settings updated successfully! ✨');
-    } catch (err) {
+    } catch {
       showToast('Failed to update settings', 'error');
     }
   };
@@ -236,7 +239,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedProductForModal(updated);
       }
       showToast(`Updated "${updated.title}"`);
-    } catch (err) {
+    } catch {
       showToast('Failed to update product', 'error');
     }
   };
@@ -249,7 +252,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedProductForModal(null);
       }
       showToast('Product removed from catalog', 'info');
-    } catch (err) {
+    } catch {
       showToast('Failed to delete product', 'error');
     }
   };
@@ -267,7 +270,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updated = await api.updateOffer(id, updates);
       setOffers(prev => prev.map(o => (o.id === id ? updated : o)));
       showToast(`Promo "${updated.code}" updated`);
-    } catch (err) {
+    } catch {
       showToast('Failed to update offer', 'error');
     }
   };
@@ -280,7 +283,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setActivePromo(null);
       }
       showToast('Offer campaign removed', 'info');
-    } catch (err) {
+    } catch {
       showToast('Failed to delete offer', 'error');
     }
   };
@@ -290,7 +293,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updated = await api.toggleOfferStatus(id);
       setOffers(prev => prev.map(o => (o.id === id ? updated : o)));
       showToast(`Offer ${updated.isActive ? 'activated' : 'paused'}`);
-    } catch (err) {
+    } catch {
       showToast('Failed to toggle offer', 'error');
     }
   };
@@ -308,6 +311,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       return [...prev, { product, quantity }];
     });
+    setIsCartOpen(true);
     showToast(`Added ${quantity}x "${product.title}" to cart! 🧶`);
   };
 
@@ -423,10 +427,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       clearCart();
       setActivePromo(null);
-      setIsCartOpen(false);
       showToast(`Order #${placedOrder.id} placed successfully! 🌸`);
       return placedOrder;
-    } catch (err) {
+    } catch {
       showToast('Failed to record order', 'error');
       return null;
     }
@@ -441,7 +444,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updated = await api.updateOrderStatus(orderId, status, extras);
       setOrders(prev => prev.map(o => (o.id === orderId ? updated : o)));
       showToast(`Order #${orderId} updated to ${status}`);
-    } catch (err) {
+    } catch {
       showToast('Failed to update status', 'error');
     }
   };

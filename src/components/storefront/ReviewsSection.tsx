@@ -30,8 +30,8 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ productId, produ
       try {
         const fetched = await api.getReviews(productId);
         if (isMounted) setReviews(fetched);
-      } catch (err) {
-        console.warn('Failed to load reviews:', err);
+      } catch {
+        console.warn('Failed to load reviews');
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -58,7 +58,7 @@ export const ReviewsSection: React.FC<ReviewsSectionProps> = ({ productId, produ
       setCustomerName('');
       setCustomerEmail('');
       setShowForm(false);
-    } catch (err) {
+    } catch {
       alert('Failed to submit review');
     } finally {
       setIsSubmitting(false);

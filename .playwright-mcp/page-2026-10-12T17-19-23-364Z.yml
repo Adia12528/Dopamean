@@ -1,0 +1,339 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: SUPER ADMIN ACTIVE
+        - generic [ref=e8]: You have full studio privileges (product additions, offers, and settings). Normal visitors only see the customer storefront.
+      - generic [ref=e9]:
+        - button "Open Studio Dashboard →" [ref=e10] [cursor=pointer]
+        - button "Exit Admin" [ref=e11] [cursor=pointer]
+    - generic [ref=e16]:
+      - generic [ref=e20]: 100% Handmade with Love 🌸 Free Shipping on orders above ₹299
+      - generic [ref=e201]: 2 Active Offers
+    - generic [ref=e21]:
+      - generic [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: 🧶
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - generic [ref=e26]: Cozy Loops by Deepa
+            - generic [ref=e27]: Studio
+          - paragraph [ref=e28]: Cozy, Handmade Happiness • Premium Crochet Hair Accessories
+      - textbox "Search bags, bucket hats, charms, cozies..." [ref=e33]
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - button "Store" [ref=e36] [cursor=pointer]
+          - button "Studio" [ref=e42] [cursor=pointer]
+        - button "Track Order" [ref=e49] [cursor=pointer]
+        - button "Cart 6" [ref=e476] [cursor=pointer]:
+          - generic [ref=e60]: Cart
+          - generic [ref=e61]: "6"
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - generic [ref=e67]:
+            - generic [ref=e68]: 🌸 100% Handcrafted with Love
+            - heading "Cozy Loops by Deepa" [level=1] [ref=e73]
+            - paragraph [ref=e74]: 100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories.
+            - generic [ref=e202]:
+              - generic [ref=e203]:
+                - generic [ref=e204]: FLORAL SPECIAL
+                - heading "Sunflower Tic-Tac Pair Special" [level=4] [ref=e209]
+                - paragraph [ref=e210]: Get a pair of sunny handcrafted sunflower clips for just ₹90. Soft, cute, and stylish for kids & teens.
+              - button "SUNNY10" [ref=e211] [cursor=pointer]
+            - generic [ref=e75]:
+              - link "Shop Handcrafted Collection" [ref=e76] [cursor=pointer]:
+                - /url: "#catalog"
+              - button "View Special Combos" [ref=e80] [cursor=pointer]
+          - generic [ref=e82]:
+            - img "Cozy Loops by Deepa" [ref=e83]
+            - generic [ref=e88]:
+              - generic [ref=e89]: 100% Handcrafted
+              - generic [ref=e90]: No mass factories • Only pure yarn
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - generic [ref=e93]: 🌸
+            - generic [ref=e94]:
+              - heading "100% Handcrafted" [level=5] [ref=e95]
+              - paragraph [ref=e96]: Stitch-by-stitch slowly made by artisan Deepa with utmost love & care.
+          - generic [ref=e97]:
+            - generic [ref=e98]: 🧶
+            - generic [ref=e99]:
+              - heading "Skin & Hair Friendly" [level=5] [ref=e100]
+              - paragraph [ref=e101]: Soft milk-cotton yarn that holds firmly without pulling or snagging hair.
+          - generic [ref=e102]:
+            - generic [ref=e103]: ✨
+            - generic [ref=e104]:
+              - heading "Custom Orders & Combos" [level=5] [ref=e105]
+              - paragraph [ref=e106]: Pair your favorite colors or order custom gifts for birthdays & returns.
+          - generic [ref=e107]:
+            - generic [ref=e108]: 📦
+            - generic [ref=e109]:
+              - heading "Fast Pan-India Dispatch" [level=5] [ref=e110]
+              - paragraph [ref=e111]: Safely boxed in aesthetic packaging with care instructions and gift cards.
+      - generic [ref=e217]:
+        - generic [ref=e219]:
+          - generic [ref=e220]: Limited Studio Specials
+          - heading "Current Offers & Bundle Vouchers" [level=2] [ref=e225]
+        - generic [ref=e226]:
+          - generic [ref=e227]:
+            - generic [ref=e228]:
+              - img "Sunflower Tic-Tac Pair Special" [ref=e229]
+              - generic [ref=e231]: FLORAL SPECIAL
+              - generic [ref=e235]: $10 OFF
+            - generic [ref=e237]:
+              - generic [ref=e238]:
+                - heading "Sunflower Tic-Tac Pair Special" [level=3] [ref=e239]
+                - paragraph [ref=e240]: Get a pair of sunny handcrafted sunflower clips for just ₹90. Soft, cute, and stylish for kids & teens.
+              - generic [ref=e241]:
+                - generic [ref=e242]: Valid until 2026-12-31
+                - 'button "Code: SUNNY10" [ref=e247] [cursor=pointer]'
+          - generic [ref=e252]:
+            - generic [ref=e253]:
+              - img "Rose Ponytail Holders Duo Combo Offer" [ref=e254]
+              - generic [ref=e256]: COMBO OFFER
+              - generic [ref=e260]: $20 OFF
+            - generic [ref=e262]:
+              - generic [ref=e263]:
+                - heading "Rose Ponytail Holders Duo Combo Offer" [level=3] [ref=e264]
+                - paragraph [ref=e265]: Buy both Red & Blue Handmade Rose Ponytail Holders for only ₹180 and save ₹20! Perfect gift set.
+              - generic [ref=e266]:
+                - generic [ref=e267]: Valid until 2026-12-31
+                - 'button "Code: ROSEDUO20" [ref=e272] [cursor=pointer]'
+      - generic [ref=e113]:
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - generic [ref=e116]: The Cozy Loops by Deepa Collection
+            - heading "All Handcrafted Accessories" [level=2] [ref=e121]
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - text: Showing
+              - strong [ref=e124]: "5"
+              - text: creations
+            - button "+ Add item (Admin)" [ref=e125] [cursor=pointer]
+        - generic [ref=e126]:
+          - button "All 5" [ref=e277] [cursor=pointer]:
+            - generic [ref=e128]: All
+            - generic [ref=e129]: "5"
+          - button "Accessories 5" [ref=e278] [cursor=pointer]:
+            - generic [ref=e279]: Accessories
+            - generic [ref=e280]: "5"
+        - generic [ref=e130]:
+          - generic [ref=e281]:
+            - generic [ref=e282] [cursor=pointer]:
+              - img "Rose Ponytail Holders Duo Gift Combo (Red & Blue)" [ref=e283]
+              - generic [ref=e284]:
+                - generic [ref=e285]: ★ Bestseller
+                - generic [ref=e286]: "-10% OFF"
+              - generic [ref=e287]: 5h hand-stitched
+              - button "Quick preview" [ref=e292]
+            - generic [ref=e296]:
+              - generic [ref=e297]:
+                - generic [ref=e298]:
+                  - generic [ref=e299]: Accessories
+                  - generic [ref=e300]:
+                    - generic [ref=e303]: "5"
+                    - generic [ref=e304]: (42)
+                - heading "Rose Ponytail Holders Duo Gift Combo (Red & Blue)" [level=3] [ref=e305] [cursor=pointer]
+                - paragraph [ref=e306]:
+                  - generic [ref=e307]: 🧶
+                  - generic [ref=e308]: Premium Vibrant Red & Sky-Blue Cotton Yarns
+              - generic [ref=e310]:
+                - generic [ref=e311]:
+                  - generic [ref=e312]: ₹180
+                  - generic [ref=e313]: ₹200
+                - button "Add to Cart" [active] [ref=e314] [cursor=pointer]
+          - generic [ref=e319]:
+            - generic [ref=e320] [cursor=pointer]:
+              - img "Handmade Sunflower Hair Clip" [ref=e321]
+              - generic [ref=e322]: "-29% OFF"
+              - generic [ref=e324]: 1.5h hand-stitched
+              - button "Quick preview" [ref=e329]
+            - generic [ref=e333]:
+              - generic [ref=e334]:
+                - generic [ref=e335]:
+                  - generic [ref=e336]: Accessories
+                  - generic [ref=e337]:
+                    - generic [ref=e340]: "4.9"
+                    - generic [ref=e341]: (26)
+                - heading "Handmade Sunflower Hair Clip" [level=3] [ref=e342] [cursor=pointer]
+                - paragraph [ref=e343]:
+                  - generic [ref=e344]: 🧶
+                  - generic [ref=e345]: Soft & Cozy Cotton Yarn on Metal Hair Clip
+              - generic [ref=e347]:
+                - generic [ref=e348]:
+                  - generic [ref=e349]: ₹50
+                  - generic [ref=e350]: ₹70
+                - button "Add to Cart" [ref=e351] [cursor=pointer]
+          - generic [ref=e356]:
+            - generic [ref=e357] [cursor=pointer]:
+              - img "Handmade Sunflower Tic-Tac Clips (Pair of 2)" [ref=e358]
+              - generic [ref=e359]:
+                - generic [ref=e360]: ★ Bestseller
+                - generic [ref=e361]: "-25% OFF"
+              - generic [ref=e362]: 3h hand-stitched
+              - button "Quick preview" [ref=e367]
+            - generic [ref=e371]:
+              - generic [ref=e372]:
+                - generic [ref=e373]:
+                  - generic [ref=e374]: Accessories
+                  - generic [ref=e375]:
+                    - generic [ref=e378]: "5"
+                    - generic [ref=e379]: (31)
+                - heading "Handmade Sunflower Tic-Tac Clips (Pair of 2)" [level=3] [ref=e380] [cursor=pointer]
+                - paragraph [ref=e381]:
+                  - generic [ref=e382]: 🧶
+                  - generic [ref=e383]: Sunny Yellow & Deep Maroon Cotton Yarn
+              - generic [ref=e385]:
+                - generic [ref=e386]:
+                  - generic [ref=e387]: ₹90
+                  - generic [ref=e388]: ₹120
+                - button "Add to Cart" [ref=e389] [cursor=pointer]
+          - generic [ref=e394]:
+            - generic [ref=e395] [cursor=pointer]:
+              - img "Handmade Blue Rose Rubber Band" [ref=e396]
+              - generic [ref=e397]:
+                - generic [ref=e398]: ★ Bestseller
+                - generic [ref=e399]: "-23% OFF"
+              - generic [ref=e400]: 2.5h hand-stitched
+              - button "Quick preview" [ref=e405]
+            - generic [ref=e409]:
+              - generic [ref=e410]:
+                - generic [ref=e411]:
+                  - generic [ref=e412]: Accessories
+                  - generic [ref=e413]:
+                    - generic [ref=e416]: "4.9"
+                    - generic [ref=e417]: (19)
+                - heading "Handmade Blue Rose Rubber Band" [level=3] [ref=e418] [cursor=pointer]
+                - paragraph [ref=e419]:
+                  - generic [ref=e420]: 🧶
+                  - generic [ref=e421]: Delicate Sky-Blue Milk Cotton Yarn
+              - generic [ref=e423]:
+                - generic [ref=e424]:
+                  - generic [ref=e425]: ₹100
+                  - generic [ref=e426]: ₹130
+                - button "Add to Cart" [ref=e427] [cursor=pointer]
+          - generic [ref=e432]:
+            - generic [ref=e433] [cursor=pointer]:
+              - img "Handmade Red Rose Rubber Band" [ref=e434]
+              - generic [ref=e435]:
+                - generic [ref=e436]: ★ Bestseller
+                - generic [ref=e437]: "-23% OFF"
+              - generic [ref=e438]: 2.5h hand-stitched
+              - button "Quick preview" [ref=e443]
+            - generic [ref=e447]:
+              - generic [ref=e448]:
+                - generic [ref=e449]:
+                  - generic [ref=e450]: Accessories
+                  - generic [ref=e451]:
+                    - generic [ref=e454]: "5"
+                    - generic [ref=e455]: (1)
+                - heading "Handmade Red Rose Rubber Band" [level=3] [ref=e456] [cursor=pointer]
+                - paragraph [ref=e457]:
+                  - generic [ref=e458]: 🧶
+                  - generic [ref=e459]: 100% Soft Cotton-Acrylic Blend
+              - generic [ref=e461]:
+                - generic [ref=e462]:
+                  - generic [ref=e463]: ₹100
+                  - generic [ref=e464]: ₹130
+                - button "Add to Cart" [ref=e465] [cursor=pointer]
+      - generic [ref=e140]:
+        - generic [ref=e141]:
+          - generic [ref=e142]: Our Story & Maker Ethos
+          - heading "Meet Deepa • The Hands Behind Every Petal & Loop" [level=2] [ref=e470]
+          - paragraph [ref=e144]: Unlike industrial knitwear which can be copied by commercial machinery, true crochet cannot be replicated by any machine in existence. Every single loop, rose petal, and sunflower hair clip is personally crocheted by Deepa's hands.
+          - paragraph [ref=e145]: We use ultra-soft milk cotton and durable elastic bands to craft accessories that don't pull hair, hold securely, and bring a bloom of happiness to everyday styling.
+          - generic [ref=e471]: "\"Every stitch is a gentle pause of mindfulness, turning simple yarn into wearable floral art.\""
+        - generic [ref=e146]:
+          - generic [ref=e472]:
+            - img "Meet Deepa • The Hands Behind Every Petal & Loop" [ref=e473]
+            - generic [ref=e474]: ✨ Handcrafted with Slow Intention
+          - generic [ref=e147]:
+            - generic [ref=e148]:
+              - generic [ref=e149]: 🌸
+              - heading "100% Handcrafted" [level=5] [ref=e150]
+              - paragraph [ref=e151]: Stitch-by-stitch slowly made by artisan Deepa with utmost love & care.
+            - generic [ref=e152]:
+              - generic [ref=e153]: 🧶
+              - heading "Skin & Hair Friendly" [level=5] [ref=e475]
+              - paragraph [ref=e155]: Soft milk-cotton yarn that holds firmly without pulling or snagging hair.
+  - contentinfo [ref=e156]:
+    - generic [ref=e157]:
+      - generic [ref=e158]:
+        - generic [ref=e159]:
+          - generic [ref=e160]: 🧶
+          - generic [ref=e161]: Cozy Loops by Deepa
+        - paragraph [ref=e162]: Cozy Loops by Deepa crafts slow-fashioned, joyful crochet hair accessories and gifts with organic soft cotton and gentle care.
+        - generic [ref=e163]: 100% Hand-stitched with love
+      - generic [ref=e168]:
+        - heading "Artisan Collections" [level=4] [ref=e169]
+        - list [ref=e170]:
+          - listitem [ref=e171]:
+            - button "Accessories" [ref=e172] [cursor=pointer]
+          - listitem [ref=e173]:
+            - button "Hair Accessories" [ref=e174] [cursor=pointer]
+          - listitem [ref=e175]:
+            - button "Rubber Bands" [ref=e176] [cursor=pointer]
+          - listitem [ref=e177]:
+            - button "Hair Clips" [ref=e178] [cursor=pointer]
+          - listitem [ref=e179]:
+            - button "Bags & Totes" [ref=e180] [cursor=pointer]
+          - listitem [ref=e181]:
+            - button "Combos & Gift Sets" [ref=e182] [cursor=pointer]
+      - generic [ref=e183]:
+        - heading "Studio Contact & Care" [level=4] [ref=e184]
+        - paragraph [ref=e185]: Hand wash cold with mild detergent. Reshape gently while damp and flat dry.
+        - paragraph [ref=e186]: "WhatsApp / Call: +91 XXXXX XXXXX"
+        - paragraph [ref=e187]: "Instagram: @cozyloopsbydeepa"
+        - paragraph [ref=e188]: "Support Email: dsoni7018@gmail.com"
+        - paragraph [ref=e189]: 📍 Handcrafted Studio, India
+      - generic [ref=e190]:
+        - heading "Artisan Guarantee" [level=4] [ref=e191]
+        - paragraph [ref=e192]: Every piece is inspected for tensile strength, weave tension, and softness before dispatch.
+        - generic [ref=e193]: Dispatched within 24-48 hours across India • Free Shipping above ₹299
+    - generic [ref=e194]:
+      - generic [ref=e195]:
+        - generic [ref=e196]: © 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion. All Rights Reserved.
+        - generic [ref=e199]: Made with love
+      - generic [ref=e200]: ● Logged in as Super Admin
+  - generic [ref=e478]:
+    - generic [ref=e479]:
+      - generic [ref=e485]:
+        - heading "Your Craft Bag" [level=3] [ref=e486]
+        - paragraph [ref=e487]: 1 handcrafted item
+      - button [ref=e488] [cursor=pointer]
+    - generic [ref=e493]:
+      - generic [ref=e494]: 🎉 Free Pan-India Delivery Unlocked!
+      - generic [ref=e495]: 100%
+    - generic [ref=e500]:
+      - img "Rose Ponytail Holders Duo Gift Combo (Red & Blue)" [ref=e501]
+      - generic [ref=e502]:
+        - generic [ref=e503]:
+          - generic [ref=e504]:
+            - heading "Rose Ponytail Holders Duo Gift Combo (Red & Blue)" [level=4] [ref=e505]
+            - button [ref=e506] [cursor=pointer]
+          - paragraph [ref=e510]: Accessories
+        - generic [ref=e511]:
+          - generic [ref=e512]:
+            - button "-" [ref=e513] [cursor=pointer]
+            - generic [ref=e514]: "6"
+            - button "+" [ref=e515] [cursor=pointer]
+          - generic [ref=e516]: ₹1080.00
+    - generic [ref=e517]:
+      - generic [ref=e519]:
+        - textbox "Promo code (e.g. WELCOME20)" [ref=e520]
+        - button "Apply" [ref=e521] [cursor=pointer]
+      - generic [ref=e522]:
+        - generic [ref=e523]:
+          - generic [ref=e524]: Subtotal
+          - generic [ref=e525]: ₹1080.00
+        - generic [ref=e526]:
+          - generic [ref=e527]: Pan-India Shipping
+          - generic [ref=e528]: FREE
+        - generic [ref=e529]:
+          - generic [ref=e530]: Total
+          - generic [ref=e531]: ₹1080.00
+      - button "Proceed to Checkout" [ref=e532] [cursor=pointer]
+      - link "Order via WhatsApp" [ref=e536] [cursor=pointer]:
+        - /url: https://wa.me/91?text=Hi%20Deepa!%20%F0%9F%8C%B8%20I'd%20like%20to%20order%20handcrafted%20pieces%20from%20*Cozy%20Loops%20by%20Deepa*%3A%0A%0A%E2%80%A2%20Rose%20Ponytail%20Holders%20Duo%20Gift%20Combo%20(Red%20%26%20Blue)%20x6%20%E2%80%94%20%E2%82%B91080.00%0A%0A*Total%3A%20%E2%82%B91080.00*%0A%0APlease%20confirm%20availability%20and%20payment%20details.%20Thank%20you!%20%F0%9F%A7%B6
+  - generic [ref=e540]: Added 1x "Rose Ponytail Holders Duo Gift Combo (Red & Blue)" to cart! 🧶

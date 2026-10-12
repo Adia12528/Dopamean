@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { api } from '../../services/api';
 import { 
@@ -38,7 +38,7 @@ export const StudioSettings: React.FC = () => {
   const heroFileInputRef = useRef<HTMLInputElement>(null);
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [form, setForm] = useState(settings);
+  const [form, setForm] = useState(() => settings);
   const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'perks' | 'shipping' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
@@ -46,11 +46,7 @@ export const StudioSettings: React.FC = () => {
   const [newPasscode, setNewPasscode] = useState('');
   const [confirmPasscode, setConfirmPasscode] = useState('');
 
-  useEffect(() => {
-    setForm(settings);
-  }, [settings]);
-
-  const handleChange = (field: keyof typeof form, val: any) => {
+  const handleChange = <K extends keyof typeof form>(field: K, val: (typeof form)[K]) => {
     setForm(prev => ({ ...prev, [field]: val }));
   };
 
@@ -61,7 +57,7 @@ export const StudioSettings: React.FC = () => {
       setIsHeroUploading(true);
       const url = await api.uploadImage(file);
       handleChange('heroImage', url);
-    } catch (err) {
+    } catch {
       alert('Failed to upload hero image');
     } finally {
       setIsHeroUploading(false);
@@ -75,7 +71,7 @@ export const StudioSettings: React.FC = () => {
       setIsAboutUploading(true);
       const url = await api.uploadImage(file);
       handleChange('aboutImage', url);
-    } catch (err) {
+    } catch {
       alert('Failed to upload artisan story photo');
     } finally {
       setIsAboutUploading(false);
@@ -86,7 +82,7 @@ export const StudioSettings: React.FC = () => {
     if (e) e.preventDefault();
     
     // Check if passcode is being updated
-    let payload = { ...form };
+    const payload = { ...form };
     if (newPasscode.trim()) {
       if (newPasscode !== confirmPasscode) {
         alert('Passcodes do not match! Please verify your new passcode.');

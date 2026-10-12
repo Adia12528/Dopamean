@@ -1,0 +1,75 @@
+Found 6 matches for "Rose Ponytail":
+
+- generic [ref=f16e3]:
+  - main [ref=f16e42]:
+    - generic [ref=f16e43]:
+      - generic [ref=f16e45]:
+        - generic [ref=f16e46]:
+          - generic [ref=f16e47]:
+            - generic [ref=f16e48]: 🌸 100% Handcrafted with Love
+            - heading "Cozy Loops by Deepa" [level=1] [ref=f16e53]
+            - paragraph [ref=f16e54]: 100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories.
+            - generic [ref=f16e55]:
+              - generic [ref=f16e56]:
+                - generic [ref=f16e57]: FLORAL SPECIAL
+
+----
+
+- generic [ref=f16e3]:
+  - main [ref=f16e42]:
+    - generic [ref=f16e43]:
+      - generic [ref=f16e107]:
+        - generic [ref=f16e116]:
+          - generic [ref=f16e117]:
+            ...
+            - generic [ref=f16e127]:
+              ...
+              - generic [ref=f16e131]:
+                ...
+                - 'button "Code: SUNNY10" [ref=f16e137] [cursor=pointer]'
+          - generic [ref=f16e142]:
+            - generic [ref=f16e143]:
+              - img "Rose Ponytail Holders Duo Combo Offer" [ref=f16e144]
+              - generic [ref=f16e146]: COMBO OFFER
+              - generic [ref=f16e150]: $20 OFF
+            - generic [ref=f16e152]:
+              - generic [ref=f16e153]:
+                - heading "Rose Ponytail Holders Duo Combo Offer" [level=3] [ref=f16e154]
+                - paragraph [ref=f16e155]: Buy both Red & Blue Handmade Rose Ponytail Holders for only ₹180 and save ₹20! Perfect gift set.
+              - generic [ref=f16e156]:
+                - generic [ref=f16e157]: Valid until 2026-12-31
+                - 'button "Code: ROSEDUO20" [ref=f16e162] [cursor=pointer]'
+
+----
+
+- generic [ref=f16e3]:
+  - main [ref=f16e42]:
+    - generic [ref=f16e43]:
+      - generic [ref=f16e168]:
+        - generic [ref=f16e187]:
+          - generic [ref=f16e188]:
+            - generic [ref=f16e189] [cursor=pointer]:
+              - img "Rose Ponytail Holders Duo Gift Combo (Red & Blue)" [ref=f16e190]
+              - generic [ref=f16e191]:
+                - generic [ref=f16e192]: ★ Bestseller
+                - generic [ref=f16e193]: "-10% OFF"
+
+----
+
+- generic [ref=f16e3]:
+  - main [ref=f16e42]:
+    - generic [ref=f16e43]:
+      - generic [ref=f16e168]:
+        - generic [ref=f16e187]:
+          - generic [ref=f16e188]:
+            - generic [ref=f16e203]:
+              - generic [ref=f16e204]:
+                - generic [ref=f16e205]:
+                  ...
+                  - generic [ref=f16e207]:
+                    - generic [ref=f16e210]: "5"
+                    - generic [ref=f16e211]: (42)
+                - heading "Rose Ponytail Holders Duo Gift Combo (Red & Blue)" [level=3] [ref=f16e212] [cursor=pointer]
+                - paragraph [ref=f16e213]:
+                  - generic [ref=f16e214]: 🧶
+                  - generic [ref=f16e215]: Premium Vibrant Red & Sky-Blue Cotton Yarns

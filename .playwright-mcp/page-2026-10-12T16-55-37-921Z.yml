@@ -1,0 +1,140 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - generic [ref=e7]: SUPER ADMIN ACTIVE
+        - generic [ref=e8]: You have full studio privileges (product additions, offers, and settings). Normal visitors only see the customer storefront.
+      - generic [ref=e9]:
+        - button "Open Studio Dashboard →" [ref=e10] [cursor=pointer]
+        - button "Exit Admin" [ref=e11] [cursor=pointer]
+    - generic [ref=e16]: 100% Handmade with Love 🌸 Free Shipping on orders above ₹299
+    - generic [ref=e21]:
+      - generic [ref=e22] [cursor=pointer]:
+        - generic [ref=e23]: 🧶
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - generic [ref=e26]: Cozy Loops by Deepa
+            - generic [ref=e27]: Studio
+          - paragraph [ref=e28]: Cozy, Handmade Happiness • Premium Crochet Hair Accessories
+      - textbox "Search bags, bucket hats, charms, cozies..." [ref=e33]
+      - generic [ref=e34]:
+        - generic [ref=e35]:
+          - button "Store" [ref=e36] [cursor=pointer]
+          - button "Studio" [ref=e42] [cursor=pointer]
+        - button "Track Order" [ref=e49] [cursor=pointer]
+        - button "Cart 5" [ref=e56] [cursor=pointer]:
+          - generic [ref=e60]: Cart
+          - generic [ref=e61]: "5"
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - generic [ref=e67]:
+            - generic [ref=e68]: 🌸 100% Handcrafted with Love
+            - heading "Cozy Loops by Deepa" [level=1] [ref=e73]
+            - paragraph [ref=e74]: 100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories.
+            - generic [ref=e75]:
+              - link "Shop Handcrafted Collection" [ref=e76] [cursor=pointer]:
+                - /url: "#catalog"
+              - button "View Special Combos" [ref=e80] [cursor=pointer]
+          - generic [ref=e82]:
+            - img "Cozy Loops by Deepa" [ref=e83]
+            - generic [ref=e88]:
+              - generic [ref=e89]: 100% Handcrafted
+              - generic [ref=e90]: No mass factories • Only pure yarn
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - generic [ref=e93]: 🌸
+            - generic [ref=e94]:
+              - heading "100% Handcrafted" [level=5] [ref=e95]
+              - paragraph [ref=e96]: Stitch-by-stitch slowly made by artisan with utmost love & care.
+          - generic [ref=e97]:
+            - generic [ref=e98]: 🧶
+            - generic [ref=e99]:
+              - heading "Skin & Hair Friendly" [level=5] [ref=e100]
+              - paragraph [ref=e101]: Soft milk-cotton yarn that holds firmly without pulling hair.
+          - generic [ref=e102]:
+            - generic [ref=e103]: ✨
+            - generic [ref=e104]:
+              - heading "Custom Orders & Combos" [level=5] [ref=e105]
+              - paragraph [ref=e106]: Pair your favorite colors or order custom gifts for birthdays.
+          - generic [ref=e107]:
+            - generic [ref=e108]: 📦
+            - generic [ref=e109]:
+              - heading "Fast Pan-India Dispatch" [level=5] [ref=e110]
+              - paragraph [ref=e111]: Safely boxed in aesthetic packaging with care instructions.
+      - generic [ref=e113]:
+        - generic [ref=e114]:
+          - generic [ref=e115]:
+            - generic [ref=e116]: The Cozy Loops by Deepa Collection
+            - heading "All Handcrafted Accessories" [level=2] [ref=e121]
+          - generic [ref=e122]:
+            - generic [ref=e123]:
+              - text: Showing
+              - strong [ref=e124]: "0"
+              - text: creations
+            - button "+ Add item (Admin)" [ref=e125] [cursor=pointer]
+        - button "All 0" [ref=e127] [cursor=pointer]:
+          - generic [ref=e128]: All
+          - generic [ref=e129]: "0"
+        - generic [ref=e130]:
+          - text: 🧶
+          - heading "Your Catalog is Ready!" [level=3] [ref=e131]
+          - paragraph [ref=e132]: Add your latest handmade creations and photos in the Studio Dashboard.
+          - generic [ref=e133]:
+            - button "+ Add Product in Dashboard" [ref=e134] [cursor=pointer]
+            - button "Load Starter Sample Items" [ref=e136] [cursor=pointer]
+      - generic [ref=e140]:
+        - generic [ref=e141]:
+          - generic [ref=e142]: Our Story & Maker Ethos
+          - heading "Why choose handmade crochet over factory machines?" [level=2] [ref=e143]
+          - paragraph [ref=e144]: Unlike knitting, which can be duplicated by commercial industrial machinery, true crochet cannot be replicated by any machine in existence. Every single loop, granny square stitch, and delicate petal is personally crocheted by real artisan hands.
+          - paragraph [ref=e145]: When you wear Cozy Loops by Deepa, you are wearing hours of mindful intention, durable natural fibers, and timeless personal style.
+        - generic [ref=e147]:
+          - generic [ref=e148]:
+            - generic [ref=e149]: 🌸
+            - heading "100% Handcrafted" [level=5] [ref=e150]
+            - paragraph [ref=e151]: Stitch by stitch with love
+          - generic [ref=e152]:
+            - generic [ref=e153]: 🧶
+            - heading "Soft Natural Yarns" [level=5] [ref=e154]
+            - paragraph [ref=e155]: Ultra gentle on hair
+  - contentinfo [ref=e156]:
+    - generic [ref=e157]:
+      - generic [ref=e158]:
+        - generic [ref=e159]:
+          - generic [ref=e160]: 🧶
+          - generic [ref=e161]: Cozy Loops by Deepa
+        - paragraph [ref=e162]: Cozy, Handmade Happiness • Premium Crochet Hair Accessories
+        - generic [ref=e163]: 100% Hand-stitched with love
+      - generic [ref=e168]:
+        - heading "Artisan Collections" [level=4] [ref=e169]
+        - list [ref=e170]:
+          - listitem [ref=e171]:
+            - button "Accessories" [ref=e172] [cursor=pointer]
+          - listitem [ref=e173]:
+            - button "Hair Accessories" [ref=e174] [cursor=pointer]
+          - listitem [ref=e175]:
+            - button "Rubber Bands" [ref=e176] [cursor=pointer]
+          - listitem [ref=e177]:
+            - button "Hair Clips" [ref=e178] [cursor=pointer]
+          - listitem [ref=e179]:
+            - button "Bags & Totes" [ref=e180] [cursor=pointer]
+          - listitem [ref=e181]:
+            - button "Combos & Gift Sets" [ref=e182] [cursor=pointer]
+      - generic [ref=e183]:
+        - heading "Studio Contact & Care" [level=4] [ref=e184]
+        - paragraph [ref=e185]: Hand wash cold with mild detergent. Reshape gently while damp and flat dry.
+        - paragraph [ref=e186]: "WhatsApp / Call: +91 98765 43210"
+        - paragraph [ref=e187]: "Instagram: @cozyloopsbydeepa"
+        - paragraph [ref=e188]: "Support Email: dsoni7018@gmail.com"
+        - paragraph [ref=e189]: 📍 Handcrafted Studio, India
+      - generic [ref=e190]:
+        - heading "Artisan Guarantee" [level=4] [ref=e191]
+        - paragraph [ref=e192]: Every piece is inspected for tensile strength, weave tension, and softness before dispatch.
+        - generic [ref=e193]: Free shipping on orders over ₹299
+    - generic [ref=e194]:
+      - generic [ref=e195]:
+        - generic [ref=e196]: © 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion.
+        - generic [ref=e199]: Made with love
+      - generic [ref=e200]: ● Logged in as Super Admin

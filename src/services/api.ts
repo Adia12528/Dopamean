@@ -186,7 +186,7 @@ export const api = {
     amount: number;
     currency?: string;
     receipt?: string;
-    notes?: any;
+    notes?: Record<string, string | number | boolean | null | undefined>;
   }): Promise<{ success: boolean; orderId: string; amount: number; currency: string; keyId: string }> => {
     const res = await fetch(`${BASE_URL}/api/payments/razorpay/create-order`, {
       method: 'POST',

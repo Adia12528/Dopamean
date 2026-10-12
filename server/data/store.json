@@ -36,7 +36,7 @@
     "contactPhone": "+91 XXXXX XXXXX",
     "instagramHandle": "@cozyloopsbydeepa",
     "studioLocation": "Handcrafted Studio, India",
-    "heroImage": "/uploads/media_1791711047623.jpg",
+    "heroImage": "/uploads/hero_landing.png",
     "footerAboutText": "Cozy Loops by Deepa crafts slow-fashioned, joyful crochet hair accessories and gifts with organic soft cotton and gentle care.",
     "footerCopyright": "© 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion. All Rights Reserved.",
     "adminPasscode": "admin123",
@@ -61,7 +61,7 @@
       "originalPrice": 200,
       "rating": 5,
       "reviewsCount": 42,
-      "stock": 15,
+      "stock": 3,
       "image": "/uploads/media_1791711047623.jpg",
       "secondaryImages": [
         "/uploads/media_1791711047553.jpg",
@@ -232,6 +232,205 @@
     }
   ],
   "orders": [
+    {
+      "customerName": "Test Customer",
+      "customerEmail": "customer@example.com",
+      "customerPhone": "9876543210",
+      "customerAddress": "12 Market Road, Bengaluru, Karnataka 560001",
+      "customer": {
+        "name": "Test Customer",
+        "email": "customer@example.com",
+        "phone": "9876543210",
+        "address": "12 Market Road, Bengaluru, Karnataka 560001",
+        "city": "",
+        "pincode": ""
+      },
+      "items": [
+        {
+          "productId": "prod_combo_roses",
+          "productTitle": "Rose Ponytail Holders Duo Gift Combo (Red & Blue)",
+          "price": 180,
+          "quantity": 6,
+          "image": "/uploads/media_1791711047623.jpg"
+        }
+      ],
+      "subtotal": 1080,
+      "discountAmount": 0,
+      "discount": 0,
+      "total": 1080,
+      "paymentMethod": "upi",
+      "paymentStatus": "pending",
+      "status": "pending",
+      "id": "ORD-771149-305",
+      "trackingNumber": "",
+      "timeline": [
+        {
+          "status": "Order Placed",
+          "timestamp": "2026-10-12T17:56:11.149Z",
+          "note": "Order received via UPI."
+        }
+      ],
+      "createdAt": "2026-10-12T17:56:11.149Z"
+    },
+    {
+      "customerName": "Test Customer",
+      "customerEmail": "test@example.com",
+      "customerPhone": "9876543210",
+      "customerAddress": "12 Market Road, Bengaluru",
+      "customer": {
+        "name": "Test Customer",
+        "email": "test@example.com",
+        "phone": "9876543210",
+        "address": "12 Market Road, Bengaluru",
+        "city": "",
+        "pincode": ""
+      },
+      "items": [
+        {
+          "productId": "prod_combo_roses",
+          "productTitle": "Rose Ponytail Holders Duo Gift Combo (Red & Blue)",
+          "price": 180,
+          "quantity": 1,
+          "image": "/uploads/media_1791711047623.jpg"
+        }
+      ],
+      "subtotal": 180,
+      "discountAmount": 0,
+      "discount": 0,
+      "total": 180,
+      "paymentMethod": "upi",
+      "paymentStatus": "pending",
+      "status": "pending",
+      "id": "ORD-200685-126",
+      "trackingNumber": "",
+      "timeline": [
+        {
+          "status": "Order Placed",
+          "timestamp": "2026-10-12T16:23:20.685Z",
+          "note": "Order received via UPI."
+        }
+      ],
+      "createdAt": "2026-10-12T16:23:20.685Z"
+    },
+    {
+      "customerName": "Test Customer",
+      "customerEmail": "test@example.com",
+      "customerPhone": "9876543210",
+      "customerAddress": "12 Market Road, Bengaluru",
+      "customer": {
+        "name": "Test Customer",
+        "email": "test@example.com",
+        "phone": "9876543210",
+        "address": "12 Market Road, Bengaluru",
+        "city": "",
+        "pincode": ""
+      },
+      "items": [
+        {
+          "productId": "prod_combo_roses",
+          "productTitle": "Rose Ponytail Holders Duo Gift Combo (Red & Blue)",
+          "price": 180,
+          "quantity": 1,
+          "image": "/uploads/media_1791711047623.jpg"
+        }
+      ],
+      "subtotal": 180,
+      "discountAmount": 0,
+      "discount": 0,
+      "total": 180,
+      "paymentMethod": "upi",
+      "paymentStatus": "pending",
+      "status": "pending",
+      "id": "ORD-664586-750",
+      "trackingNumber": "",
+      "timeline": [
+        {
+          "status": "Order Placed",
+          "timestamp": "2026-10-11T20:14:24.586Z",
+          "note": "Order received via UPI."
+        }
+      ],
+      "createdAt": "2026-10-11T20:14:24.586Z"
+    },
+    {
+      "customerName": "Test Customer",
+      "customerEmail": "test@example.com",
+      "customerPhone": "9876543210",
+      "customerAddress": "12 Market Road, Bengaluru",
+      "customer": {
+        "name": "Test Customer",
+        "email": "test@example.com",
+        "phone": "9876543210",
+        "address": "12 Market Road, Bengaluru",
+        "city": "",
+        "pincode": ""
+      },
+      "items": [
+        {
+          "productId": "prod_combo_roses",
+          "productTitle": "Rose Ponytail Holders Duo Gift Combo (Red & Blue)",
+          "price": 180,
+          "quantity": 4,
+          "image": "/uploads/media_1791711047623.jpg"
+        }
+      ],
+      "subtotal": 720,
+      "discountAmount": 0,
+      "discount": 0,
+      "total": 720,
+      "paymentMethod": "upi",
+      "paymentStatus": "pending",
+      "status": "pending",
+      "id": "ORD-631935-837",
+      "trackingNumber": "",
+      "timeline": [
+        {
+          "status": "Order Placed",
+          "timestamp": "2026-10-11T20:13:51.935Z",
+          "note": "Order received via UPI."
+        }
+      ],
+      "createdAt": "2026-10-11T20:13:51.935Z"
+    },
+    {
+      "customer": {
+        "name": "Test Customer",
+        "email": "test@example.com",
+        "phone": "9876543210",
+        "address": "123 Test Street",
+        "city": "",
+        "pincode": ""
+      },
+      "items": [
+        {
+          "productId": "rose-duo-combo",
+          "productTitle": "Rose Ponytail Holders Duo Gift Combo (Red & Blue)",
+          "price": 180,
+          "quantity": 1
+        }
+      ],
+      "subtotal": 180,
+      "discountAmount": 0,
+      "discount": 0,
+      "promoCodeApplied": null,
+      "total": 180,
+      "paymentMethod": "upi",
+      "paymentStatus": "pending",
+      "status": "pending",
+      "id": "ORD-972732-329",
+      "customerName": "Test Customer",
+      "customerEmail": "test@example.com",
+      "customerPhone": "9876543210",
+      "trackingNumber": "",
+      "timeline": [
+        {
+          "status": "Order Placed",
+          "timestamp": "2026-10-11T19:46:12.732Z",
+          "note": "Order received via UPI."
+        }
+      ],
+      "createdAt": "2026-10-11T19:46:12.732Z"
+    },
     {
       "customerName": "Test User",
       "customerPhone": "9988776655",

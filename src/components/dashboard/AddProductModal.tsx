@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import type { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { api } from '../../services/api';
@@ -23,81 +23,79 @@ const CATEGORY_OPTIONS = [
   'Wearables'
 ];
 
+const buildInitialFormState = (editProduct?: Product | null) => {
+  if (!editProduct) {
+    return {
+      title: '',
+      tagline: '',
+      category: 'Accessories',
+      customCategory: '',
+      price: '100',
+      originalPrice: '',
+      stock: '15',
+      image: '/uploads/media_1791711047623.jpg',
+      secondaryImages: [] as string[],
+      newSecondaryUrl: '',
+      yarnType: '100% Soft Cotton-Acrylic Blend',
+      craftTimeHours: '2',
+      careInstructions: 'Gently hand wash in cold water with mild liquid soap. Air dry flat.',
+      description: '100% handmade with love, soft, and premium finish.',
+      tagsInput: 'Handmade, Floral, Crochet',
+      isBestSeller: false,
+      isFeatured: true,
+    };
+  }
+
+  const category = CATEGORY_OPTIONS.includes(editProduct.category) ? editProduct.category : 'Custom';
+
+  return {
+    title: editProduct.title || '',
+    tagline: editProduct.tagline || '',
+    category,
+    customCategory: category === 'Custom' ? editProduct.category : '',
+    price: editProduct.price !== undefined ? editProduct.price.toString() : '100',
+    originalPrice: editProduct.originalPrice ? editProduct.originalPrice.toString() : '',
+    stock: editProduct.stock !== undefined ? editProduct.stock.toString() : '15',
+    image: editProduct.image || '',
+    secondaryImages: editProduct.secondaryImages || [],
+    newSecondaryUrl: '',
+    yarnType: editProduct.yarnType || '100% Soft Cotton-Acrylic Blend',
+    craftTimeHours: editProduct.craftTimeHours !== undefined ? editProduct.craftTimeHours.toString() : '2',
+    careInstructions: editProduct.careInstructions || 'Gently hand wash in cold water with mild liquid soap. Air dry flat.',
+    description: editProduct.description || '',
+    tagsInput: editProduct.tags ? editProduct.tags.join(', ') : 'Handmade, Floral',
+    isBestSeller: !!editProduct.isBestSeller,
+    isFeatured: editProduct.isFeatured !== false,
+  };
+};
+
 export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, editProduct }) => {
-  const { addProduct, updateProduct, settings, showToast } = useStore();
-  
+  const { addProduct, updateProduct, showToast, settings } = useStore();
+  const initialForm = buildInitialFormState(editProduct);
+
   const mainFileInputRef = useRef<HTMLInputElement>(null);
   const secondaryFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [title, setTitle] = useState('');
-  const [tagline, setTagline] = useState('');
-  const [category, setCategory] = useState('Accessories');
-  const [customCategory, setCustomCategory] = useState('');
-  const [price, setPrice] = useState('100');
-  const [originalPrice, setOriginalPrice] = useState('');
-  const [stock, setStock] = useState('15');
-  const [image, setImage] = useState('');
-  const [secondaryImages, setSecondaryImages] = useState<string[]>([]);
-  const [newSecondaryUrl, setNewSecondaryUrl] = useState('');
-  const [yarnType, setYarnType] = useState('100% Soft Cotton-Acrylic Blend');
-  const [craftTimeHours, setCraftTimeHours] = useState('2');
-  const [careInstructions, setCareInstructions] = useState('Gently hand wash in cold water with mild liquid soap. Air dry flat.');
-  const [description, setDescription] = useState('100% handmade with love, soft, and premium finish. Securely holds thick or fine hair while creating a charming blooming aesthetic.');
-  const [tagsInput, setTagsInput] = useState('Handmade, Floral, Hair Accessory');
-  const [isBestSeller, setIsBestSeller] = useState(false);
-  const [isFeatured, setIsFeatured] = useState(true);
-  
+  const [title, setTitle] = useState(initialForm.title);
+  const [tagline, setTagline] = useState(initialForm.tagline);
+  const [category, setCategory] = useState(initialForm.category);
+  const [customCategory, setCustomCategory] = useState(initialForm.customCategory);
+  const [price, setPrice] = useState(initialForm.price);
+  const [originalPrice, setOriginalPrice] = useState(initialForm.originalPrice);
+  const [stock, setStock] = useState(initialForm.stock);
+  const [image, setImage] = useState(initialForm.image);
+  const [secondaryImages, setSecondaryImages] = useState<string[]>(initialForm.secondaryImages);
+  const [newSecondaryUrl, setNewSecondaryUrl] = useState(initialForm.newSecondaryUrl);
+  const [yarnType, setYarnType] = useState(initialForm.yarnType);
+  const [craftTimeHours, setCraftTimeHours] = useState(initialForm.craftTimeHours);
+  const [careInstructions, setCareInstructions] = useState(initialForm.careInstructions);
+  const [description, setDescription] = useState(initialForm.description);
+  const [tagsInput, setTagsInput] = useState(initialForm.tagsInput);
+  const [isBestSeller, setIsBestSeller] = useState(initialForm.isBestSeller);
+  const [isFeatured, setIsFeatured] = useState(initialForm.isFeatured);
+
   const [isMainUploading, setIsMainUploading] = useState(false);
   const [isSecondaryUploading, setIsSecondaryUploading] = useState(false);
-
-  // Sync form state whenever modal opens or editProduct changes
-  useEffect(() => {
-    if (isOpen) {
-      if (editProduct) {
-        setTitle(editProduct.title || '');
-        setTagline(editProduct.tagline || '');
-        
-        if (CATEGORY_OPTIONS.includes(editProduct.category)) {
-          setCategory(editProduct.category);
-          setCustomCategory('');
-        } else {
-          setCategory('Custom');
-          setCustomCategory(editProduct.category);
-        }
-
-        setPrice(editProduct.price !== undefined ? editProduct.price.toString() : '100');
-        setOriginalPrice(editProduct.originalPrice ? editProduct.originalPrice.toString() : '');
-        setStock(editProduct.stock !== undefined ? editProduct.stock.toString() : '15');
-        setImage(editProduct.image || '');
-        setSecondaryImages(editProduct.secondaryImages || []);
-        setYarnType(editProduct.yarnType || '100% Soft Cotton-Acrylic Blend');
-        setCraftTimeHours(editProduct.craftTimeHours !== undefined ? editProduct.craftTimeHours.toString() : '2');
-        setCareInstructions(editProduct.careInstructions || 'Gently hand wash in cold water with mild liquid soap. Air dry flat.');
-        setDescription(editProduct.description || '');
-        setTagsInput(editProduct.tags ? editProduct.tags.join(', ') : 'Handmade, Floral');
-        setIsBestSeller(!!editProduct.isBestSeller);
-        setIsFeatured(editProduct.isFeatured !== false);
-      } else {
-        // Reset defaults for adding new product
-        setTitle('');
-        setTagline('');
-        setCategory('Accessories');
-        setCustomCategory('');
-        setPrice('100');
-        setOriginalPrice('');
-        setStock('15');
-        setImage('/uploads/media_1791711047623.jpg');
-        setSecondaryImages([]);
-        setYarnType('100% Soft Cotton-Acrylic Blend');
-        setCraftTimeHours('2');
-        setCareInstructions('Gently hand wash in cold water with mild liquid soap. Air dry flat.');
-        setDescription('100% handmade with love, soft, and premium finish.');
-        setTagsInput('Handmade, Floral, Crochet');
-        setIsBestSeller(false);
-        setIsFeatured(true);
-      }
-    }
-  }, [isOpen, editProduct]);
 
   if (!isOpen) return null;
 
@@ -109,7 +107,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       setIsMainUploading(true);
       const uploadedUrl = await api.uploadImage(file);
       setImage(uploadedUrl);
-    } catch (err) {
+    } catch {
       alert('Failed to upload image file');
     } finally {
       setIsMainUploading(false);
@@ -124,7 +122,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       setIsSecondaryUploading(true);
       const uploadedUrl = await api.uploadImage(file);
       setSecondaryImages(prev => [...prev, uploadedUrl]);
-    } catch (err) {
+    } catch {
       alert('Failed to upload secondary angle image');
     } finally {
       setIsSecondaryUploading(false);

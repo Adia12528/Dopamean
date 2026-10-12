@@ -38,10 +38,10 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
       const results = await api.trackOrder(searchQuery.trim());
       setOrders(results);
       setHasSearched(true);
-    } catch (err: any) {
+    } catch (error: unknown) {
       setOrders([]);
       setHasSearched(true);
-      setErrorMessage(err.message || 'No orders found matching that query.');
+      setErrorMessage(error instanceof Error ? error.message : 'No orders found matching that query.');
     } finally {
       setIsLoading(false);
     }

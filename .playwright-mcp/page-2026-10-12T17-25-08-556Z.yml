@@ -1,0 +1,103 @@
+- generic [ref=f8e3]:
+  - banner [ref=f8e4]:
+    - generic [ref=f8e5]:
+      - generic [ref=f8e6]:
+        - generic [ref=f8e7]: SUPER ADMIN ACTIVE
+        - generic [ref=f8e8]: You have full studio privileges (product additions, offers, and settings). Normal visitors only see the customer storefront.
+      - generic [ref=f8e9]:
+        - button "← Preview Storefront as Customer" [active] [ref=f8e466] [cursor=pointer]
+        - button "Exit Admin" [ref=f8e11] [cursor=pointer]
+    - generic [ref=f8e16]:
+      - generic [ref=f8e20]: 100% Handmade with Love 🌸 Free Shipping on orders above ₹299
+      - generic [ref=f8e21]: 2 Active Offers
+    - generic [ref=f8e22]:
+      - generic [ref=f8e23] [cursor=pointer]:
+        - generic [ref=f8e24]: 🧶
+        - generic [ref=f8e25]:
+          - generic [ref=f8e26]:
+            - generic [ref=f8e27]: Cozy Loops by Deepa
+            - generic [ref=f8e28]: Studio
+          - paragraph [ref=f8e29]: Cozy, Handmade Happiness • Premium Crochet Hair Accessories
+      - textbox "Search bags, bucket hats, charms, cozies..." [ref=f8e34]
+      - generic [ref=f8e35]:
+        - generic [ref=f8e36]:
+          - button "Store" [ref=f8e37] [cursor=pointer]
+          - button "Studio" [ref=f8e43] [cursor=pointer]
+        - button "Add Product" [ref=f8e467] [cursor=pointer]
+  - main [ref=f8e63]:
+    - generic [ref=f8e470]:
+      - generic [ref=f8e471]:
+        - generic [ref=f8e472]:
+          - generic [ref=f8e473]: Cozy Loops by Deepa Creator Studio
+          - heading "Studio Dashboard" [level=1] [ref=f8e478]
+          - paragraph [ref=f8e479]: Manage your crochet catalog, upload latest product imagery, launch offers, and configure store branding.
+        - button "View Customer Storefront" [ref=f8e481] [cursor=pointer]
+      - generic [ref=f8e487]:
+        - button "Overview" [ref=f8e488] [cursor=pointer]
+        - button "Products & Images" [ref=f8e492] [cursor=pointer]
+        - button "Offers & Campaigns" [ref=f8e497] [cursor=pointer]
+        - button "Customer Orders" [ref=f8e502] [cursor=pointer]
+        - button "Studio Settings" [ref=f8e508] [cursor=pointer]
+      - generic [ref=f8e511]:
+        - generic [ref=f8e512]:
+          - generic [ref=f8e513]:
+            - generic [ref=f8e514]: Total Studio Sales
+            - generic [ref=f8e519]:
+              - generic [ref=f8e520]: ₹1600.00
+              - generic [ref=f8e521]: ↑ Based on real and simulated orders
+          - generic [ref=f8e522]:
+            - generic [ref=f8e523]: Active Products
+            - generic [ref=f8e529]:
+              - generic [ref=f8e530]: "5"
+              - generic [ref=f8e531]: All items well stocked
+          - generic [ref=f8e532]:
+            - generic [ref=f8e533]: Running Promotions
+            - generic [ref=f8e539]:
+              - generic [ref=f8e540]: "2"
+              - generic [ref=f8e541]: 2 total marketing banners
+          - generic [ref=f8e542]:
+            - generic [ref=f8e543]: Orders in Progress
+            - generic [ref=f8e550]:
+              - generic [ref=f8e551]: "0"
+              - generic [ref=f8e552]: 6 total lifetime orders
+        - generic [ref=f8e553]:
+          - generic [ref=f8e554]:
+            - generic [ref=f8e555]:
+              - generic [ref=f8e556]: Inventory Action
+              - heading "Add Latest Product & Photos" [level=3] [ref=f8e557]
+              - paragraph [ref=f8e558]: Upload new high-resolution images of your latest handcrafted totes, bucket hats, or amigurumi charms. Set prices, yarn composition, and craft time.
+            - button "Add New Product Now" [ref=f8e559] [cursor=pointer]
+          - generic [ref=f8e562]:
+            - generic [ref=f8e563]:
+              - generic [ref=f8e564]: Marketing Action
+              - heading "Create Seasonal Offer Banner" [level=3] [ref=f8e565]
+              - paragraph [ref=f8e566]: Generate discount codes (e.g. 20% OFF, Free Gifts) and upload custom promotional banner imagery that dynamically features on your customer storefront.
+            - button "Launch Offer Banner" [ref=f8e567] [cursor=pointer]
+        - generic [ref=f8e572]:
+          - generic [ref=f8e573]:
+            - heading "Recent Customer Orders" [level=4] [ref=f8e574]
+            - button "View All (6)" [ref=f8e575] [cursor=pointer]
+          - generic [ref=f8e579]:
+            - generic [ref=f8e580]:
+              - generic [ref=f8e581]:
+                - generic [ref=f8e582]: "#ORD-200685-126"
+                - generic [ref=f8e583]: Test Customer (1 items)
+              - generic [ref=f8e584]:
+                - generic [ref=f8e585]: pending
+                - generic [ref=f8e586]: ₹180.00
+            - generic [ref=f8e587]:
+              - generic [ref=f8e588]:
+                - generic [ref=f8e589]: "#ORD-664586-750"
+                - generic [ref=f8e590]: Test Customer (1 items)
+              - generic [ref=f8e591]:
+                - generic [ref=f8e592]: pending
+                - generic [ref=f8e593]: ₹180.00
+            - generic [ref=f8e594]:
+              - generic [ref=f8e595]:
+                - generic [ref=f8e596]: "#ORD-631935-837"
+                - generic [ref=f8e597]: Test Customer (1 items)
+              - generic [ref=f8e598]:
+                - generic [ref=f8e599]: pending
+                - generic [ref=f8e600]: ₹720.00
+  - contentinfo [ref=f8e421]:
+    - generic [ref=f8e601]: Cozy Loops by Deepa Studio Dashboard • Handcrafted Management System
