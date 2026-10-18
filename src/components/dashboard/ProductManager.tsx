@@ -20,6 +20,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [viewStyle, setViewStyle] = useState<'grid' | 'table'>('grid');
+  const [stockDrafts, setStockDrafts] = useState<Record<string, string>>({});
 
   const filtered = products.filter(p => {
     const matchesCat = categoryFilter === 'All' || p.category === categoryFilter;
@@ -34,6 +35,28 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
     const newStock = Math.max(0, product.stock + delta);
     updateProduct(product.id, { stock: newStock });
   };
+
+  const saveStockDraft = (product: Product) => {
+    const draft = stockDrafts[product.id];
+    if (draft === undefined) return;
+    if (!draft.trim()) {
+      setStockDrafts(current => {
+        const next = { ...current };
+        delete next[product.id];
+        return next;
+      });
+      return;
+    }
+    const stock = Math.max(0, Math.floor(Number(draft) || 0));
+    setStockDrafts(current => {
+      const next = { ...current };
+      delete next[product.id];
+      return next;
+    });
+    if (stock !== product.stock) updateProduct(product.id, { stock });
+  };
+
+  const lowStockThreshold = settings.lowStockThreshold ?? 5;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -181,7 +204,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                   {p.category}
                 </span>
 
-                {p.stock <= 5 && (
+                {p.stock <= lowStockThreshold && (
                   <span style={{
                     position: 'absolute',
                     top: '10px',
@@ -238,9 +261,17 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                       >
                         -
                       </button>
-                      <span style={{ fontWeight: 800, fontSize: '0.9rem', minWidth: '24px', textAlign: 'center' }}>
-                        {p.stock}
-                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        aria-label={`Set stock for ${p.title}`}
+                        value={stockDrafts[p.id] ?? p.stock}
+                        onChange={(e) => setStockDrafts(current => ({ ...current, [p.id]: e.target.value }))}
+                        onBlur={() => saveStockDraft(p)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                        style={{ width: '58px', padding: '3px 4px', border: '1px solid var(--border-medium)', borderRadius: '6px', textAlign: 'center', fontWeight: 800 }}
+                      />
                       <button
                         onClick={() => handleStockDelta(p, 1)}
                         style={{
@@ -373,9 +404,17 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                       >
                         -
                       </button>
-                      <span style={{ fontWeight: 700, color: p.stock <= 5 ? '#DC2626' : 'inherit' }}>
-                        {p.stock}
-                      </span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        aria-label={`Set stock for ${p.title}`}
+                        value={stockDrafts[p.id] ?? p.stock}
+                        onChange={(e) => setStockDrafts(current => ({ ...current, [p.id]: e.target.value }))}
+                        onBlur={() => saveStockDraft(p)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+                        style={{ width: '58px', padding: '3px 4px', border: '1px solid var(--border-medium)', borderRadius: '6px', textAlign: 'center', fontWeight: 700, color: p.stock <= lowStockThreshold ? '#DC2626' : 'inherit' }}
+                      />
                       <button
                         onClick={() => handleStockDelta(p, 1)}
                         style={{ width: '22px', height: '22px', borderRadius: '4px', border: '1px solid var(--border-medium)' }}

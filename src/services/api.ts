@@ -2,6 +2,13 @@ import type { Product, Offer, Order, StoreSettings, Review, UserProfile } from '
 
 const BASE_URL = '';
 
+const adminFetch = (url: string, init: RequestInit = {}) => {
+  const token = sessionStorage.getItem('dopamean_admin_token');
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(url, { ...init, headers });
+};
+
 export const api = {
   // SETTINGS
   getSettings: async (): Promise<StoreSettings> => {
@@ -11,7 +18,7 @@ export const api = {
   },
 
   updateSettings: async (settings: Partial<StoreSettings>): Promise<StoreSettings> => {
-    const res = await fetch(`${BASE_URL}/api/settings`, {
+    const res = await adminFetch(`${BASE_URL}/api/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings)
@@ -34,7 +41,7 @@ export const api = {
   },
 
   addProduct: async (productData: Omit<Product, 'id' | 'createdAt' | 'rating' | 'reviewsCount'>): Promise<Product> => {
-    const res = await fetch(`${BASE_URL}/api/products`, {
+    const res = await adminFetch(`${BASE_URL}/api/products`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(productData)
@@ -44,7 +51,7 @@ export const api = {
   },
 
   updateProduct: async (id: string, updates: Partial<Product>): Promise<Product> => {
-    const res = await fetch(`${BASE_URL}/api/products/${id}`, {
+    const res = await adminFetch(`${BASE_URL}/api/products/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -54,7 +61,7 @@ export const api = {
   },
 
   deleteProduct: async (id: string): Promise<boolean> => {
-    const res = await fetch(`${BASE_URL}/api/products/${id}`, {
+    const res = await adminFetch(`${BASE_URL}/api/products/${id}`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to delete product');
@@ -69,7 +76,7 @@ export const api = {
   },
 
   addOffer: async (offerData: Omit<Offer, 'id'>): Promise<Offer> => {
-    const res = await fetch(`${BASE_URL}/api/offers`, {
+    const res = await adminFetch(`${BASE_URL}/api/offers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(offerData)
@@ -79,7 +86,7 @@ export const api = {
   },
 
   updateOffer: async (id: string, updates: Partial<Offer>): Promise<Offer> => {
-    const res = await fetch(`${BASE_URL}/api/offers/${id}`, {
+    const res = await adminFetch(`${BASE_URL}/api/offers/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates)
@@ -89,7 +96,7 @@ export const api = {
   },
 
   deleteOffer: async (id: string): Promise<boolean> => {
-    const res = await fetch(`${BASE_URL}/api/offers/${id}`, {
+    const res = await adminFetch(`${BASE_URL}/api/offers/${id}`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to delete offer');
@@ -97,7 +104,7 @@ export const api = {
   },
 
   toggleOfferStatus: async (id: string): Promise<Offer> => {
-    const res = await fetch(`${BASE_URL}/api/offers/${id}/toggle`, {
+    const res = await adminFetch(`${BASE_URL}/api/offers/${id}/toggle`, {
       method: 'PATCH'
     });
     if (!res.ok) throw new Error('Failed to toggle offer status');
@@ -106,22 +113,23 @@ export const api = {
 
   // ORDERS & TRACKING
   getOrders: async (): Promise<Order[]> => {
-    const res = await fetch(`${BASE_URL}/api/orders`);
+    const res = await adminFetch(`${BASE_URL}/api/orders`);
     if (!res.ok) throw new Error('Failed to fetch orders');
     return res.json();
   },
 
   getOrderById: async (id: string): Promise<Order> => {
-    const res = await fetch(`${BASE_URL}/api/orders/${id}`);
+    const res = await adminFetch(`${BASE_URL}/api/orders/${id}`);
     if (!res.ok) throw new Error('Failed to fetch order');
     return res.json();
   },
 
-  trackOrder: async (query: string): Promise<Order[]> => {
-    const res = await fetch(`${BASE_URL}/api/orders/track/lookup?q=${encodeURIComponent(query)}`);
+  trackOrder: async (query: string, email: string): Promise<Order[]> => {
+    const params = new URLSearchParams({ q: query, email });
+    const res = await fetch(`${BASE_URL}/api/orders/track/lookup?${params.toString()}`);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || 'No orders found matching that Order ID or Phone number');
+      throw new Error(err.error || 'No order found. Check the ID and checkout email.');
     }
     return res.json();
   },
@@ -132,16 +140,19 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(orderData)
     });
-    if (!res.ok) throw new Error('Failed to create order');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to create order');
+    }
     return res.json();
   },
 
   updateOrderStatus: async (
     orderId: string, 
     status: Order['status'], 
-    extras?: { trackingNumber?: string; paymentStatus?: string }
+    extras?: { trackingNumber?: string; paymentStatus?: Order['paymentStatus'] }
   ): Promise<Order> => {
-    const res = await fetch(`${BASE_URL}/api/orders/${orderId}/status`, {
+    const res = await adminFetch(`${BASE_URL}/api/orders/${orderId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, ...extras })
@@ -174,7 +185,7 @@ export const api = {
   },
 
   deleteReview: async (id: string): Promise<boolean> => {
-    const res = await fetch(`${BASE_URL}/api/reviews/${id}`, {
+    const res = await adminFetch(`${BASE_URL}/api/reviews/${id}`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to delete review');
@@ -183,11 +194,8 @@ export const api = {
 
   // PAYMENTS (RAZORPAY)
   createRazorpayOrder: async (data: {
-    amount: number;
-    currency?: string;
-    receipt?: string;
-    notes?: Record<string, string | number | boolean | null | undefined>;
-  }): Promise<{ success: boolean; orderId: string; amount: number; currency: string; keyId: string }> => {
+    orderId: string;
+  }): Promise<{ success: boolean; orderId: string; storeOrderId: string; amount: number; currency: string; keyId: string }> => {
     const res = await fetch(`${BASE_URL}/api/payments/razorpay/create-order`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -205,7 +213,7 @@ export const api = {
     razorpay_payment_id: string;
     razorpay_signature: string;
     orderId?: string;
-  }): Promise<{ success: boolean; paymentId: string }> => {
+  }): Promise<{ success: boolean; paymentId: string; order: Order }> => {
     const res = await fetch(`${BASE_URL}/api/payments/razorpay/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -214,6 +222,21 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || 'Payment verification failed');
+    }
+    return res.json();
+  },
+
+  cancelRazorpayOrder: async (orderId: string): Promise<Order> => {
+    const res = await fetch(`${BASE_URL}/api/orders/${encodeURIComponent(orderId)}/cancel-payment`, { method: 'POST' });
+    if (!res.ok) throw new Error('Unable to release the reserved stock for this payment.');
+    return res.json();
+  },
+
+  testRazorpaySettings: async (): Promise<{ success: boolean }> => {
+    const res = await adminFetch(`${BASE_URL}/api/payments/razorpay/test`, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Could not verify Razorpay credentials');
     }
     return res.json();
   },
@@ -229,7 +252,9 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || 'Authentication failed');
     }
-    return res.json();
+    const result = await res.json();
+    sessionStorage.setItem('dopamean_admin_token', result.token);
+    return result;
   },
 
   superAdminLogin: async (superAdminId: string, superAdminPassword: string): Promise<{ success: boolean; token: string; role: string }> => {
@@ -242,8 +267,30 @@ export const api = {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.message || 'Authentication failed');
     }
-    return res.json();
+    const result = await res.json();
+    sessionStorage.setItem('dopamean_admin_token', result.token);
+    return result;
   },
+
+  verifyAdmin: async (): Promise<boolean> => {
+    const token = sessionStorage.getItem('dopamean_admin_token');
+    if (!token) return false;
+    try {
+      const res = await fetch(`${BASE_URL}/api/admin/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token })
+      });
+      if (!res.ok) return false;
+      const result = await res.json();
+      if (!result.valid) sessionStorage.removeItem('dopamean_admin_token');
+      return Boolean(result.valid);
+    } catch {
+      return false;
+    }
+  },
+
+  adminLogout: () => sessionStorage.removeItem('dopamean_admin_token'),
 
   // USER AUTH
   userRegister: async (data: { name: string; email: string; password: string; phone?: string; address?: string; city?: string; pincode?: string }): Promise<{ success: boolean; token: string; user: UserProfile }> => {
@@ -305,7 +352,7 @@ export const api = {
   uploadImage: async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('image', file);
-    const res = await fetch(`${BASE_URL}/api/upload`, {
+    const res = await adminFetch(`${BASE_URL}/api/upload`, {
       method: 'POST',
       body: formData
     });

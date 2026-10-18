@@ -45,6 +45,10 @@ export const StudioSettings: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [newPasscode, setNewPasscode] = useState('');
   const [confirmPasscode, setConfirmPasscode] = useState('');
+  const [clearRazorpaySecret, setClearRazorpaySecret] = useState(false);
+  const [clearRazorpayWebhookSecret, setClearRazorpayWebhookSecret] = useState(false);
+  const [isTestingRazorpay, setIsTestingRazorpay] = useState(false);
+  const [razorpayTestMessage, setRazorpayTestMessage] = useState('');
 
   const handleChange = <K extends keyof typeof form>(field: K, val: (typeof form)[K]) => {
     setForm(prev => ({ ...prev, [field]: val }));
@@ -78,24 +82,50 @@ export const StudioSettings: React.FC = () => {
     }
   };
 
-  const handleSave = async (e?: React.FormEvent) => {
+  const handleSave = async (e?: React.FormEvent): Promise<boolean> => {
     if (e) e.preventDefault();
     
     // Check if passcode is being updated
     const payload = { ...form };
+    delete payload.adminPasscode;
+    delete payload.razorpayKeySecret;
+    delete payload.razorpayWebhookSecret;
+    if (clearRazorpaySecret) payload.razorpayKeySecret = '';
+    else if (form.razorpayKeySecret?.trim()) payload.razorpayKeySecret = form.razorpayKeySecret.trim();
+    if (clearRazorpayWebhookSecret) payload.razorpayWebhookSecret = '';
+    else if (form.razorpayWebhookSecret?.trim()) payload.razorpayWebhookSecret = form.razorpayWebhookSecret.trim();
     if (newPasscode.trim()) {
       if (newPasscode !== confirmPasscode) {
         alert('Passcodes do not match! Please verify your new passcode.');
-        return;
+        return false;
+      }
+      if (newPasscode.trim().length < 12) {
+        alert('Use a passcode with at least 12 characters.');
+        return false;
       }
       payload.adminPasscode = newPasscode.trim();
     }
 
-    await updateSettings(payload);
-    setSavedSuccess(true);
-    setNewPasscode('');
-    setConfirmPasscode('');
-    setTimeout(() => setSavedSuccess(false), 2500);
+    try {
+      await updateSettings(payload);
+      setForm(prev => ({
+        ...prev,
+        razorpayKeySecret: '',
+        razorpayKeySecretConfigured: clearRazorpaySecret ? false : Boolean(prev.razorpayKeySecretConfigured || form.razorpayKeySecret?.trim()),
+        razorpayWebhookSecret: '',
+        razorpayWebhookSecretConfigured: clearRazorpayWebhookSecret ? false : Boolean(prev.razorpayWebhookSecretConfigured || form.razorpayWebhookSecret?.trim())
+      }));
+      setClearRazorpaySecret(false);
+      setClearRazorpayWebhookSecret(false);
+      setSavedSuccess(true);
+      setNewPasscode('');
+      setConfirmPasscode('');
+      setTimeout(() => setSavedSuccess(false), 2500);
+      return true;
+    } catch {
+      alert('Could not save settings. Check the required payment details and try again.');
+      return false;
+    }
   };
 
   const navItems = [
@@ -104,7 +134,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'hero' as const, label: 'Hero Banner', icon: <ImageIcon size={16} /> },
     { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
     { id: 'perks' as const, label: 'Trust Badges & Perks', icon: <ShieldCheck size={16} /> },
-    { id: 'shipping' as const, label: 'Currency & Shipping', icon: <Truck size={16} /> },
+    { id: 'shipping' as const, label: 'Shipping & Inventory', icon: <Truck size={16} /> },
     { id: 'payments' as const, label: 'Payment Gateways & UPI', icon: <CreditCard size={16} /> },
     { id: 'contact' as const, label: 'Contact & Socials', icon: <MessageCircle size={16} /> },
     { id: 'footer' as const, label: 'Footer & Copyright', icon: <Sliders size={16} /> },
@@ -145,7 +175,7 @@ export const StudioSettings: React.FC = () => {
             <span>Super Admin Full Control</span>
           </div>
           <h2 style={{ fontSize: '1.45rem', fontWeight: 800, color: 'var(--text-main)', marginTop: '2px' }}>
-            Landing Page & Studio Customization
+            Studio & Store Controls
           </h2>
           <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
             Complete "head-to-toe" control over branding, hero banner, artisan story, trust perks, colors, and logistics.
@@ -982,7 +1012,7 @@ export const StudioSettings: React.FC = () => {
                 </h3>
               </div>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
-                Configure store currency symbol, threshold for free shipping, and dispatch delivery SLA.
+                Configure currency, delivery rates, free shipping, and the stock level that triggers low inventory alerts.
               </p>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
@@ -1023,6 +1053,34 @@ export const StudioSettings: React.FC = () => {
                       border: '1px solid var(--border-medium)',
                       fontSize: '0.9rem'
                     }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Standard Shipping Fee ({form.currency})
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.shippingFee ?? 40}
+                    onChange={(e) => handleChange('shippingFee', Math.max(0, parseFloat(e.target.value) || 0))}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    Low Stock Alert At (units)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={form.lowStockThreshold ?? 5}
+                    onChange={(e) => handleChange('lowStockThreshold', Math.max(0, parseInt(e.target.value, 10) || 0))}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', fontSize: '0.9rem' }}
                   />
                 </div>
 
@@ -1202,8 +1260,9 @@ export const StudioSettings: React.FC = () => {
                     <input
                       type="password"
                       value={form.razorpayKeySecret || ''}
-                      onChange={(e) => handleChange('razorpayKeySecret', e.target.value)}
-                      placeholder={form.razorpayKeySecretConfigured ? '•••••••••••• (Configured)' : 'Enter Razorpay Key Secret'}
+                      autoComplete="new-password"
+                      onChange={(e) => { setClearRazorpaySecret(false); handleChange('razorpayKeySecret', e.target.value); }}
+                      placeholder={form.razorpayKeySecretConfigured ? 'Saved securely — enter a new value to replace' : 'Enter Razorpay Key Secret'}
                       style={{
                         width: '100%',
                         padding: '10px 14px',
@@ -1213,7 +1272,52 @@ export const StudioSettings: React.FC = () => {
                         fontSize: '0.88rem'
                       }}
                     />
+                    {form.razorpayKeySecretConfigured && (
+                      <button type="button" onClick={() => { setClearRazorpaySecret(value => !value); handleChange('razorpayKeySecret', ''); }} style={{ marginTop: '6px', border: 0, background: 'transparent', color: '#B91C1C', cursor: 'pointer', fontSize: '0.78rem' }}>
+                        {clearRazorpaySecret ? 'Keep saved key' : 'Remove saved key'}
+                      </button>
+                    )}
                   </div>
+                </div>
+                <div style={{ marginTop: '16px', padding: '14px', borderRadius: '12px', background: '#FFFFFF', border: '1px solid var(--border-medium)' }}>
+                  <h5 style={{ margin: '0 0 6px', fontSize: '0.86rem' }}>Razorpay webhook (recommended)</h5>
+                  <p style={{ margin: '0 0 10px', fontSize: '0.77rem', color: 'var(--text-muted)' }}>
+                    In Razorpay Dashboard → Account &amp; Settings → Webhooks, add your site URL ending in <code>/api/webhooks/razorpay</code>, subscribe to <code>payment.captured</code>, then paste its secret here. Webhook URL must use HTTPS.
+                  </p>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    value={form.razorpayWebhookSecret || ''}
+                    onChange={(e) => { setClearRazorpayWebhookSecret(false); handleChange('razorpayWebhookSecret', e.target.value); }}
+                    placeholder={form.razorpayWebhookSecretConfigured ? 'Saved securely — enter a new value to replace' : 'Enter webhook secret'}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', fontSize: '0.88rem' }}
+                  />
+                  {form.razorpayWebhookSecretConfigured && (
+                    <button type="button" onClick={() => { setClearRazorpayWebhookSecret(value => !value); handleChange('razorpayWebhookSecret', ''); }} style={{ marginTop: '6px', border: 0, background: 'transparent', color: '#B91C1C', cursor: 'pointer', fontSize: '0.78rem' }}>
+                      {clearRazorpayWebhookSecret ? 'Keep saved webhook secret' : 'Remove saved webhook secret'}
+                    </button>
+                  )}
+                </div>
+                <p style={{ margin: '12px 0 0', fontSize: '0.77rem', color: 'var(--text-muted)' }}>
+                  Start with Razorpay test keys. Key secrets are write-only and never sent back to the browser. Enable the gateway and save before testing a checkout.
+                </p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+                  <button type="button" className="btn-secondary" disabled={isTestingRazorpay} onClick={async () => {
+                    setRazorpayTestMessage('');
+                    if (!await handleSave()) return;
+                    setIsTestingRazorpay(true);
+                    try {
+                      await api.testRazorpaySettings();
+                      setRazorpayTestMessage('Connection verified. Razorpay accepted these credentials.');
+                    } catch (error) {
+                      setRazorpayTestMessage(error instanceof Error ? error.message : 'Could not verify Razorpay credentials.');
+                    } finally {
+                      setIsTestingRazorpay(false);
+                    }
+                  }} style={{ padding: '9px 14px', fontSize: '0.82rem', opacity: isTestingRazorpay ? 0.65 : 1 }}>
+                    {isTestingRazorpay ? 'Checking…' : 'Save & Test Razorpay'}
+                  </button>
+                  {razorpayTestMessage && <span role="status" style={{ fontSize: '0.8rem', color: razorpayTestMessage.startsWith('Connection verified') ? '#15803D' : '#B91C1C' }}>{razorpayTestMessage}</span>}
                 </div>
               </div>
 
@@ -1473,7 +1577,7 @@ export const StudioSettings: React.FC = () => {
               <div style={{ marginTop: '16px', padding: '12px 16px', borderRadius: '12px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <Info size={16} color="var(--text-muted)" />
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Current passcode: <strong>{settings.adminPasscode || 'admin123'}</strong>
+                  Passcodes are write-only. Set a new value above; the current passcode is never displayed.
                 </span>
               </div>
             </div>

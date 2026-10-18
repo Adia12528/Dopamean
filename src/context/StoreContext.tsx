@@ -11,12 +11,14 @@ const DEFAULT_SETTINGS: StoreSettings = {
   announcementText: '100% Handmade with Love 🌸 Free Shipping on orders above ₹299',
   currency: '₹',
   freeShippingThreshold: 299,
+  shippingFee: 40,
+  lowStockThreshold: 5,
   contactEmail: 'dsoni7018@gmail.com',
   contactPhone: '+91 98765 43210',
   instagramHandle: '@cozyloopsbydeepa',
   studioLocation: 'Handcrafted Studio, India',
   heroImage: '',
-  adminPasscode: 'admin123',
+  adminPasscode: '',
   paymentUpiEnabled: true,
   upiId: 'cozyloops@upi',
   upiPayeeName: 'Deepa Soni (Cozy Loops)',
@@ -86,7 +88,8 @@ interface StoreContextType {
       razorpayPaymentId?: string;
     }
   ) => Promise<Order | null>;
-  updateOrderStatus: (orderId: string, status: Order['status'], extras?: { trackingNumber?: string; paymentStatus?: string }) => Promise<void>;
+  syncOrder: (order: Order) => void;
+  updateOrderStatus: (orderId: string, status: Order['status'], extras?: { trackingNumber?: string; paymentStatus?: Order['paymentStatus'] }) => Promise<void>;
   submitReview: (productId: string, rating: number, comment: string, customerName?: string, customerEmail?: string) => Promise<Review>;
   refreshData: () => Promise<void>;
   resetDatabase: () => Promise<void>;
@@ -111,13 +114,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   });
 
   const [activePromo, setActivePromo] = useState<Offer | null>(null);
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('dopamean_admin_auth') === 'true';
-    } catch {
-      return false;
-    }
-  });
+  const [isAdmin, setIsAdmin] = useState(false);
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [activeInvoiceOrder, setActiveInvoiceOrder] = useState<Order | null>(null);
@@ -138,7 +135,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }, 4200);
   }, []);
 
-  // Fetch initial data from backend SQLite DB
+  // Fetch initial data from the configured backend database
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
@@ -164,7 +161,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Initial data hydration is intentionally triggered here to seed store state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
+    void api.verifyAdmin().then(valid => {
+      setIsAdmin(valid);
+      if (valid) void api.getOrders().then(setOrders).catch(() => setOrders([]));
+    });
   }, [loadData]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let active = true;
+    const refreshManagerData = async () => {
+      const [latestOrders, latestProducts] = await Promise.all([
+        api.getOrders().catch(() => null),
+        api.getProducts().catch(() => null)
+      ]);
+      if (!active) return;
+      if (latestOrders) setOrders(latestOrders);
+      if (latestProducts) setProducts(latestProducts);
+    };
+    const intervalId = window.setInterval(() => { void refreshManagerData(); }, 10000);
+    return () => { active = false; window.clearInterval(intervalId); };
+  }, [isAdmin]);
 
   // Dynamically update theme color across the whole application
   useEffect(() => {
@@ -197,17 +214,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         result = await api.adminLogin(passcode);
       }
       if (result?.success) {
+        const authenticatedOrders = await api.getOrders();
         setIsAdmin(true);
-        try {
-          localStorage.setItem('dopamean_admin_auth', 'true');
-          if (result.role === 'superadmin') {
-            localStorage.setItem('dopamean_admin_role', 'superadmin');
-          } else {
-            localStorage.setItem('dopamean_admin_role', 'admin');
-          }
-        } catch {
-          console.warn('Failed to persist admin auth state');
-        }
+        setOrders(authenticatedOrders);
         setIsAdminLoginModalOpen(false);
         setViewMode('dashboard');
         showToast(result.role === 'superadmin' ? '🔐 Super Admin mode activated!' : 'Welcome to Studio Dashboard!');
@@ -215,27 +224,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       return false;
     } catch {
-      // Fallback: try local passcode check if backend is unreachable
-      const correct = settings.adminPasscode || 'admin123';
-      if (!superAdmin && passcode.trim() === correct.trim()) {
-        setIsAdmin(true);
-        try { localStorage.setItem('dopamean_admin_auth', 'true'); } catch { /* ignore */ }
-        setIsAdminLoginModalOpen(false);
-        setViewMode('dashboard');
-        showToast('Welcome to Studio Dashboard!');
-        return true;
-      }
+      api.adminLogout();
+      setIsAdmin(false);
       return false;
     }
   };
 
   const adminLogout = () => {
     setIsAdmin(false);
-    try {
-      localStorage.removeItem('dopamean_admin_auth');
-    } catch {
-      console.warn('Failed to clear admin auth state');
-    }
+    api.adminLogout();
+    setOrders([]);
     setViewMode('store');
     showToast('Signed out of Admin mode', 'info');
   };
@@ -248,6 +246,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       showToast('Store settings updated successfully! ✨');
     } catch {
       showToast('Failed to update settings', 'error');
+      throw new Error('Failed to update settings');
     }
   };
 
@@ -413,17 +412,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         discount = Math.min(activePromo.discountValue, subtotal);
       }
     }
+    const freeShippingThreshold = settings.freeShippingThreshold ?? 299;
+    const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : (settings.shippingFee ?? 40);
 
     const orderPayload: Partial<Order> = {
-      customerName: customer.name,
-      customerEmail: customer.email,
-      customerPhone: customer.phone,
-      customerAddress: customer.address,
       customer: {
         name: customer.name,
         email: customer.email,
         phone: customer.phone,
-        address: customer.address
+        address: customer.address,
       },
       items: cart.map(item => ({
         productId: item.product.id,
@@ -434,9 +431,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       })),
       subtotal,
       discountAmount: Number(discount.toFixed(2)),
-      discount: Number(discount.toFixed(2)),
+      shippingAmount,
       promoCodeApplied: activePromo?.code,
-      total: Number(Math.max(subtotal - discount, 0).toFixed(2)),
+      total: Number(Math.max(subtotal - discount + shippingAmount, 0).toFixed(2)),
       paymentMethod: paymentInfo?.method || 'cod',
       paymentStatus: paymentInfo?.status || (paymentInfo?.method === 'cod' ? 'pending' : 'pending'),
       upiRefNumber: paymentInfo?.upiRefNumber,
@@ -466,7 +463,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateOrderStatus = async (
     orderId: string, 
     status: Order['status'], 
-    extras?: { trackingNumber?: string; paymentStatus?: string }
+    extras?: { trackingNumber?: string; paymentStatus?: Order['paymentStatus'] }
   ) => {
     try {
       const updated = await api.updateOrderStatus(orderId, status, extras);
@@ -475,6 +472,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {
       showToast('Failed to update status', 'error');
     }
+  };
+
+  const syncOrder = (order: Order) => {
+    setOrders(prev => prev.some(existing => existing.id === order.id)
+      ? prev.map(existing => existing.id === order.id ? order : existing)
+      : [order, ...prev]);
+    void api.getProducts().then(setProducts).catch(() => undefined);
   };
 
   // REVIEWS
@@ -556,6 +560,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         removePromoCode,
 
         createOrder,
+        syncOrder,
         updateOrderStatus,
         submitReview,
         refreshData: loadData,

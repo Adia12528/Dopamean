@@ -1,23 +1,35 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import express from 'express';
-import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import Razorpay from 'razorpay';
+import { createClient } from '@supabase/supabase-js';
 import { db } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const ADMIN_JWT_SECRET = process.env.JWT_SECRET || 'cozyloops_production_secret_key_2026';
-const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_ID || 'superadmin';
-const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || 'CozyLoops@SuperAdmin2026!';
-const USER_JWT_SECRET = process.env.USER_JWT_SECRET || (ADMIN_JWT_SECRET + '_user');
+const ADMIN_JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_ID || '';
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || '';
+const USER_JWT_SECRET = process.env.USER_JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const supabaseAuth = process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null;
+
+if (process.env.NODE_ENV === 'production') {
+  const missing = ['SUPABASE_DB_URL', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'JWT_SECRET', 'USER_JWT_SECRET', 'ADMIN_PASSCODE'].filter(name => !process.env[name]);
+  if (missing.length) throw new Error(`Missing required production configuration: ${missing.join(', ')}`);
+  if (process.env.JWT_SECRET.length < 32 || process.env.USER_JWT_SECRET.length < 32 || process.env.ADMIN_PASSCODE.length < 12) {
+    throw new Error('Production JWT secrets must be at least 32 characters and ADMIN_PASSCODE at least 12 characters.');
+  }
+}
 
 
 // Ensure uploads directory exists
@@ -26,23 +38,11 @@ if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 
-// Multer storage setup for image uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
-    const safeName = `crochet_${Date.now()}_${Math.floor(Math.random() * 10000)}${ext}`;
-    cb(null, safeName);
-  }
-});
-
 const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
+    if (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error('Only image files are allowed.'));
@@ -51,9 +51,57 @@ const upload = multer({
 });
 
 // Middleware
-app.use(cors());
-app.use(express.json({ limit: '15mb' }));
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-Frame-Options', 'DENY');
+  next();
+});
+app.use(express.json({ limit: '15mb', verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
 app.use('/uploads', express.static(UPLOADS_DIR));
+
+const requestWindows = new Map();
+function rateLimit({ windowMs, max, keyPrefix }) {
+  return (req, res, next) => {
+    const key = `${keyPrefix}:${req.ip}`;
+    const now = Date.now();
+    const bucket = requestWindows.get(key);
+    if (!bucket || now - bucket.startedAt >= windowMs) {
+      requestWindows.set(key, { startedAt: now, count: 1 });
+      return next();
+    }
+    bucket.count += 1;
+    if (bucket.count > max) return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+    next();
+  };
+}
+const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'login' });
+const lookupLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'order-lookup' });
+const uploadLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, keyPrefix: 'upload' });
+const orderLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, keyPrefix: 'order-create' });
+const reviewLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'review-create' });
+const paymentLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'payment' });
+
+function configuredAdminPasscode(settings) {
+  return settings.adminPasscode && settings.adminPasscode !== 'admin123'
+    ? settings.adminPasscode
+    : process.env.ADMIN_PASSCODE;
+}
+
+function getImageExtension(buffer) {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return '.jpg';
+  if (buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return '.png';
+  if (['GIF87a', 'GIF89a'].includes(buffer.subarray(0, 6).toString())) return '.gif';
+  if (buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP') return '.webp';
+  return null;
+}
+
+function safeEqualHex(left, right) {
+  const a = Buffer.from(String(left || ''), 'hex');
+  const b = Buffer.from(String(right || ''), 'hex');
+  return a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 // Simple admin auth helper token generator & validator
 function generateAdminToken(passcode) {
@@ -68,11 +116,10 @@ function verifyAdminToken(token, currentPasscode) {
     const raw = Buffer.from(token, 'base64').toString('utf8');
     const [payload, hmac] = raw.split('::');
     const expectedHmac = crypto.createHmac('sha256', ADMIN_JWT_SECRET).update(payload + currentPasscode).digest('hex');
-    if (hmac !== expectedHmac) return false;
+    if (!safeEqualHex(hmac, expectedHmac)) return false;
     const data = JSON.parse(payload);
     // Token valid for 7 days
-    if (Date.now() - data.ts > 7 * 24 * 60 * 60 * 1000) return false;
-    return true;
+    return data.role === 'admin' && Number.isFinite(data.ts) && data.ts <= Date.now() && Date.now() - data.ts <= 7 * 24 * 60 * 60 * 1000;
   } catch {
     return false;
   }
@@ -82,16 +129,14 @@ function verifyAdminToken(token, currentPasscode) {
 function requireAdmin(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const settings = db.getSettings();
-  if (!token || !verifyAdminToken(token, settings.adminPasscode || 'admin123')) {
-    // For backward-compatibility during transition, allow passcode header as fallback
-    const passcodeHeader = req.headers['x-admin-passcode'];
-    if (passcodeHeader && passcodeHeader === (settings.adminPasscode || 'admin123')) {
-      return next();
+  Promise.resolve().then(() => db.getSettings()).then(settings => {
+    const passcode = configuredAdminPasscode(settings);
+    const isSuperAdmin = token && verifyAdminToken(token, '__SUPER_ADMIN__');
+    if (!token || (!isSuperAdmin && (!passcode || !verifyAdminToken(token, passcode)))) {
+      return res.status(401).json({ error: 'Unauthorized: Super Admin credentials required.' });
     }
-    return res.status(401).json({ error: 'Unauthorized: Super Admin credentials required.' });
-  }
-  next();
+    next();
+  }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
 }
 
 // ── User JWT helpers ─────────────────────────────────────────────────────────
@@ -107,10 +152,10 @@ function verifyUserToken(token) {
     const raw = Buffer.from(token, 'base64').toString('utf8');
     const [payload, hmac] = raw.split('::');
     const expectedHmac = crypto.createHmac('sha256', USER_JWT_SECRET).update(payload).digest('hex');
-    if (hmac !== expectedHmac) return null;
+    if (!safeEqualHex(hmac, expectedHmac)) return null;
     const data = JSON.parse(payload);
     // Token valid for 30 days
-    if (Date.now() - data.ts > 30 * 24 * 60 * 60 * 1000) return null;
+    if (!data.userId || !Number.isFinite(data.ts) || data.ts > Date.now() || Date.now() - data.ts > 30 * 24 * 60 * 60 * 1000) return null;
     return data.userId;
   } catch {
     return null;
@@ -120,12 +165,23 @@ function verifyUserToken(token) {
 function requireUser(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (supabaseAuth) {
+    if (!token) return res.status(401).json({ error: 'Please log in to continue.' });
+    supabaseAuth.auth.getUser(token).then(async ({ data, error }) => {
+      if (error || !data.user?.email) return res.status(401).json({ error: 'Please log in to continue.' });
+      const user = await db.syncAuthUser({ id: data.user.id, email: data.user.email, name: data.user.user_metadata?.name || '', phone: data.user.user_metadata?.phone || '' });
+      req.user = user;
+      next();
+    }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
+    return;
+  }
   const userId = verifyUserToken(token);
   if (!userId) return res.status(401).json({ error: 'Please log in to continue.' });
-  const user = db.getUserById(userId);
-  if (!user) return res.status(401).json({ error: 'Account not found.' });
-  req.user = user;
-  next();
+  Promise.resolve().then(() => db.getUserById(userId)).then(user => {
+    if (!user) return res.status(401).json({ error: 'Account not found.' });
+    req.user = user;
+    next();
+  }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
 }
 
 
@@ -134,7 +190,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'Cozy Loops E-Commerce Production Engine',
-    database: 'SQLite 3 (WAL mode)',
+    database: process.env.SUPABASE_DB_URL ? 'Supabase PostgreSQL' : 'SQLite 3 (WAL mode)',
+    customerAuth: supabaseAuth ? 'Supabase Auth' : 'Legacy app authentication',
     time: new Date().toISOString()
   });
 });
@@ -142,13 +199,14 @@ app.get('/api/health', (req, res) => {
 // ==========================================
 // ADMIN AUTHENTICATION API
 // ==========================================
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', loginLimit, async (req, res) => {
   try {
     const { passcode, superAdminId, superAdminPassword } = req.body;
 
     // ── Tier 1: Super Admin (env-hardcoded, unchangeable) ────────────────────
     if (superAdminId !== undefined || superAdminPassword !== undefined) {
       if (
+        SUPER_ADMIN_ID && SUPER_ADMIN_PASSWORD &&
         superAdminId?.trim() === SUPER_ADMIN_ID &&
         superAdminPassword?.trim() === SUPER_ADMIN_PASSWORD
       ) {
@@ -164,9 +222,9 @@ app.post('/api/admin/login', (req, res) => {
     }
 
     // ── Tier 2: Regular Admin (store passcode, changeable in settings) ───────
-    const settings = db.getSettings();
-    const correctPasscode = settings.adminPasscode || 'admin123';
-    if (!passcode || passcode.trim() !== correctPasscode.trim()) {
+    const settings = await db.getSettings();
+    const correctPasscode = configuredAdminPasscode(settings);
+    if (!correctPasscode || !passcode || passcode.trim() !== correctPasscode.trim()) {
       return res.status(401).json({ success: false, message: 'Invalid Admin Passcode' });
     }
     const token = generateAdminToken(correctPasscode);
@@ -181,20 +239,22 @@ app.post('/api/admin/login', (req, res) => {
   }
 });
 
-app.post('/api/admin/verify', (req, res) => {
+app.post('/api/admin/verify', async (req, res) => {
   const { token } = req.body;
-  const settings = db.getSettings();
+  const settings = await db.getSettings();
   // A super-admin token is signed against the '__SUPER_ADMIN__' sentinel
   const isSuperAdmin = verifyAdminToken(token, '__SUPER_ADMIN__');
-  const isAdmin = isSuperAdmin || verifyAdminToken(token, settings.adminPasscode || 'admin123');
+  const passcode = configuredAdminPasscode(settings);
+  const isAdmin = isSuperAdmin || Boolean(passcode && verifyAdminToken(token, passcode));
   res.json({ valid: isAdmin, role: isSuperAdmin ? 'superadmin' : (isAdmin ? 'admin' : null) });
 });
 
 // ==========================================
 // USER (CUSTOMER) AUTHENTICATION API
 // ==========================================
-app.post('/api/users/register', (req, res) => {
+app.post('/api/users/register', loginLimit, async (req, res) => {
   try {
+    if (supabaseAuth) return res.status(410).json({ error: 'Use Supabase Auth to create customer accounts.' });
     const { name, email, password, phone, address, city, pincode } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required.' });
@@ -202,7 +262,7 @@ app.post('/api/users/register', (req, res) => {
     if (password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters.' });
     }
-    const user = db.createUser({ name, email, password, phone, address, city, pincode });
+    const user = await db.createUser({ name, email, password, phone, address, city, pincode });
     const token = generateUserToken(user.id);
     res.status(201).json({ success: true, token, user });
   } catch (err) {
@@ -214,13 +274,14 @@ app.post('/api/users/register', (req, res) => {
   }
 });
 
-app.post('/api/users/login', (req, res) => {
+app.post('/api/users/login', loginLimit, async (req, res) => {
   try {
+    if (supabaseAuth) return res.status(410).json({ error: 'Use Supabase Auth to sign in.' });
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
-    const user = db.getUserByEmail(email);
+    const user = await db.getUserByEmail(email);
     if (!user || !db.verifyPassword(password, user.passwordHash)) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -238,20 +299,10 @@ app.get('/api/users/me', requireUser, (req, res) => {
   res.json(req.user);
 });
 
-app.put('/api/users/me', requireUser, (req, res) => {
+app.put('/api/users/me', requireUser, async (req, res) => {
   try {
-    const { name, phone, address, city, pincode, password, currentPassword } = req.body;
-    // If changing password, verify current first
-    if (password) {
-      if (!currentPassword) {
-        return res.status(400).json({ error: 'Current password required to set a new one.' });
-      }
-      const userWithHash = db.getUserByEmail(req.user.email);
-      if (!db.verifyPassword(currentPassword, userWithHash.passwordHash)) {
-        return res.status(401).json({ error: 'Current password is incorrect.' });
-      }
-    }
-    const updated = db.updateUser(req.user.id, { name, phone, address, city, pincode, password });
+    const { name, phone, address, city, pincode } = req.body;
+    const updated = await db.updateUser(req.user.id, { name, phone, address, city, pincode });
     res.json(updated);
   } catch (err) {
     console.error('Update user error:', err);
@@ -259,9 +310,9 @@ app.put('/api/users/me', requireUser, (req, res) => {
   }
 });
 
-app.get('/api/users/my-orders', requireUser, (req, res) => {
+app.get('/api/users/my-orders', requireUser, async (req, res) => {
   try {
-    const orders = db.getUserOrders(req.user.id);
+    const orders = await db.getUserOrders(req.user.id);
     res.json(orders);
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve orders.' });
@@ -272,16 +323,20 @@ app.get('/api/users/my-orders', requireUser, (req, res) => {
 // ==========================================
 // IMAGE UPLOAD API
 // ==========================================
-app.post('/api/upload', upload.single('image'), (req, res) => {
+app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
-    const imageUrl = `/uploads/${req.file.filename}`;
+    const extension = getImageExtension(req.file.buffer);
+    if (!extension) return res.status(400).json({ error: 'Unsupported or invalid image file.' });
+    const filename = `crochet_${crypto.randomUUID()}${extension}`;
+    fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer, { flag: 'wx' });
+    const imageUrl = `/uploads/${filename}`;
     res.json({
       success: true,
       url: imageUrl,
-      filename: req.file.filename,
+      filename,
       size: req.file.size
     });
   } catch (err) {
@@ -293,29 +348,55 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
 // ==========================================
 // STORE SETTINGS API (Customizable by Owner)
 // ==========================================
-app.get('/api/settings', (req, res) => {
+app.get('/api/settings', async (req, res) => {
   try {
-    const settings = db.getSettings();
+    const settings = await db.getSettings();
     // Do not leak secret key in public settings GET
     const sanitized = { ...settings };
-    if (sanitized.razorpayKeySecret) {
+    delete sanitized.adminPasscode;
+    sanitized.razorpayKeyId = sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';
+    if (sanitized.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET) {
       sanitized.razorpayKeySecretConfigured = true;
       delete sanitized.razorpayKeySecret;
     }
+    if (sanitized.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET) {
+      sanitized.razorpayWebhookSecretConfigured = true;
+    }
+    delete sanitized.razorpayWebhookSecret;
     res.json(sanitized);
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve settings' });
   }
 });
 
-app.put('/api/settings', (req, res) => {
+app.put('/api/settings', requireAdmin, async (req, res) => {
   try {
-    const updated = db.updateSettings(req.body);
+    if (req.body.adminPasscode !== undefined && String(req.body.adminPasscode).trim().length < 12) {
+      return res.status(400).json({ error: 'Admin passcodes must be at least 12 characters.' });
+    }
+    const changes = { ...req.body };
+    delete changes.razorpayKeySecretConfigured;
+    delete changes.razorpayWebhookSecretConfigured;
+    const current = await db.getSettings();
+    const next = { ...current, ...changes };
+    if (changes.paymentRazorpayEnabled && (!(next.razorpayKeyId || process.env.RAZORPAY_KEY_ID) || !(next.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET))) {
+      return res.status(400).json({ error: 'Add both Razorpay Key ID and Key Secret before enabling Razorpay.' });
+    }
+    if (changes.paymentUpiEnabled && (!String(next.upiId || '').trim() || !String(next.upiPayeeName || '').trim())) {
+      return res.status(400).json({ error: 'Add a UPI ID and payee name before enabling UPI.' });
+    }
+    const updated = await db.updateSettings(changes);
     const sanitized = { ...updated };
-    if (sanitized.razorpayKeySecret) {
+    delete sanitized.adminPasscode;
+    sanitized.razorpayKeyId = sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';
+    if (sanitized.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET) {
       sanitized.razorpayKeySecretConfigured = true;
       delete sanitized.razorpayKeySecret;
     }
+    if (sanitized.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET) {
+      sanitized.razorpayWebhookSecretConfigured = true;
+    }
+    delete sanitized.razorpayWebhookSecret;
     res.json(sanitized);
   } catch (err) {
     res.status(500).json({ error: 'Failed to update settings' });
@@ -325,18 +406,18 @@ app.put('/api/settings', (req, res) => {
 // ==========================================
 // PRODUCTS API
 // ==========================================
-app.get('/api/products', (req, res) => {
+app.get('/api/products', async (req, res) => {
   try {
-    const products = db.getProducts();
+    const products = await db.getProducts();
     res.json(products);
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve products' });
   }
 });
 
-app.get('/api/products/:id', (req, res) => {
+app.get('/api/products/:id', async (req, res) => {
   try {
-    const product = db.getProductById(req.params.id);
+    const product = await db.getProductById(req.params.id);
     if (!product) return res.status(404).json({ error: 'Product not found' });
     res.json(product);
   } catch (err) {
@@ -344,18 +425,18 @@ app.get('/api/products/:id', (req, res) => {
   }
 });
 
-app.post('/api/products', (req, res) => {
+app.post('/api/products', requireAdmin, async (req, res) => {
   try {
-    const newProduct = db.addProduct(req.body);
+    const newProduct = await db.addProduct(req.body);
     res.status(201).json(newProduct);
   } catch (err) {
     res.status(500).json({ error: 'Failed to add product' });
   }
 });
 
-app.put('/api/products/:id', (req, res) => {
+app.put('/api/products/:id', requireAdmin, async (req, res) => {
   try {
-    const updated = db.updateProduct(req.params.id, req.body);
+    const updated = await db.updateProduct(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: 'Product not found' });
     res.json(updated);
   } catch (err) {
@@ -363,9 +444,9 @@ app.put('/api/products/:id', (req, res) => {
   }
 });
 
-app.delete('/api/products/:id', (req, res) => {
+app.delete('/api/products/:id', requireAdmin, async (req, res) => {
   try {
-    db.deleteProduct(req.params.id);
+    await db.deleteProduct(req.params.id);
     res.json({ success: true, message: 'Product deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete product' });
@@ -375,26 +456,26 @@ app.delete('/api/products/:id', (req, res) => {
 // ==========================================
 // OFFERS & PROMOS API
 // ==========================================
-app.get('/api/offers', (req, res) => {
+app.get('/api/offers', async (req, res) => {
   try {
-    res.json(db.getOffers());
+    res.json(await db.getOffers());
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve offers' });
   }
 });
 
-app.post('/api/offers', (req, res) => {
+app.post('/api/offers', requireAdmin, async (req, res) => {
   try {
-    const newOffer = db.addOffer(req.body);
+    const newOffer = await db.addOffer(req.body);
     res.status(201).json(newOffer);
   } catch (err) {
     res.status(500).json({ error: 'Failed to create offer' });
   }
 });
 
-app.put('/api/offers/:id', (req, res) => {
+app.put('/api/offers/:id', requireAdmin, async (req, res) => {
   try {
-    const updated = db.updateOffer(req.params.id, req.body);
+    const updated = await db.updateOffer(req.params.id, req.body);
     if (!updated) return res.status(404).json({ error: 'Offer not found' });
     res.json(updated);
   } catch (err) {
@@ -402,18 +483,18 @@ app.put('/api/offers/:id', (req, res) => {
   }
 });
 
-app.delete('/api/offers/:id', (req, res) => {
+app.delete('/api/offers/:id', requireAdmin, async (req, res) => {
   try {
-    db.deleteOffer(req.params.id);
+    await db.deleteOffer(req.params.id);
     res.json({ success: true, message: 'Offer deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete offer' });
   }
 });
 
-app.patch('/api/offers/:id/toggle', (req, res) => {
+app.patch('/api/offers/:id/toggle', requireAdmin, async (req, res) => {
   try {
-    const toggled = db.toggleOfferStatus(req.params.id);
+    const toggled = await db.toggleOfferStatus(req.params.id);
     if (!toggled) return res.status(404).json({ error: 'Offer not found' });
     res.json(toggled);
   } catch (err) {
@@ -424,17 +505,17 @@ app.patch('/api/offers/:id/toggle', (req, res) => {
 // ==========================================
 // ORDERS & TRACKING API
 // ==========================================
-app.get('/api/orders', (req, res) => {
+app.get('/api/orders', requireAdmin, async (req, res) => {
   try {
-    res.json(db.getOrders());
+    res.json(await db.getOrders());
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve orders' });
   }
 });
 
-app.get('/api/orders/:id', (req, res) => {
+app.get('/api/orders/:id', requireAdmin, async (req, res) => {
   try {
-    const order = db.getOrderById(req.params.id);
+    const order = await db.getOrderById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Order not found' });
     res.json(order);
   } catch (err) {
@@ -443,36 +524,55 @@ app.get('/api/orders/:id', (req, res) => {
 });
 
 // Public Order Tracking by Order ID, Phone, or Email
-app.get('/api/orders/track/lookup', (req, res) => {
+app.get('/api/orders/track/lookup', lookupLimit, async (req, res) => {
   try {
     const q = req.query.q;
-    if (!q || typeof q !== 'string' || q.trim().length < 2) {
-      return res.status(400).json({ error: 'Please provide a valid Order ID or Phone number' });
+    const checkoutEmail = req.query.email;
+    if (!q || typeof q !== 'string' || q.trim().length < 2 || !checkoutEmail || typeof checkoutEmail !== 'string') {
+      return res.status(400).json({ error: 'Order ID and checkout email are required.' });
     }
-    const matching = db.getOrdersByQuery(q.trim());
-    if (matching.length === 0) {
-      return res.status(404).json({ error: 'No order found matching your search. Please check your Order ID or phone number.' });
+    const order = await db.getOrderById(q.trim());
+    if (!order || order.customer?.email?.toLowerCase() !== checkoutEmail.trim().toLowerCase()) {
+      return res.status(404).json({ error: 'No order found. Check the ID and checkout email.' });
     }
-    res.json(matching);
+    const publicCustomer = { ...order.customer };
+    delete publicCustomer.email;
+    delete publicCustomer.phone;
+    delete publicCustomer.address;
+    delete publicCustomer.city;
+    delete publicCustomer.pincode;
+    res.json([{ ...order, customer: publicCustomer }]);
   } catch (err) {
     res.status(500).json({ error: 'Failed to track order' });
   }
 });
 
-app.post('/api/orders', (req, res) => {
+app.post('/api/orders', orderLimit, async (req, res) => {
   try {
-    const newOrder = db.createOrder(req.body);
+    const settings = await db.getSettings();
+    const method = req.body?.paymentMethod || 'cod';
+    if (method === 'upi' && settings.paymentUpiEnabled === false) return res.status(400).json({ error: 'UPI payments are currently unavailable.' });
+    if (method === 'cod' && settings.paymentCodEnabled === false) return res.status(400).json({ error: 'Cash on Delivery is currently unavailable.' });
+    if (method === 'razorpay' && (!settings.paymentRazorpayEnabled || !(settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID) || !(settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET))) {
+      return res.status(400).json({ error: 'Razorpay is not configured or enabled.' });
+    }
+    const newOrder = await db.createOrder(req.body);
     res.status(201).json(newOrder);
   } catch (err) {
+    const clientErrors = ['INVALID_CUSTOMER', 'EMPTY_ORDER', 'INVALID_QUANTITY', 'PRODUCT_NOT_FOUND', 'INSUFFICIENT_STOCK', 'INVALID_PROMO', 'INVALID_PAYMENT_METHOD'];
+    if (clientErrors.includes(err.message)) return res.status(400).json({ error: err.message });
     console.error('Create order error:', err);
     res.status(500).json({ error: 'Failed to create order' });
   }
 });
 
-app.patch('/api/orders/:id/status', (req, res) => {
+app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
   try {
     const { status, trackingNumber, paymentStatus } = req.body;
-    const updated = db.updateOrderStatus(req.params.id, status, { trackingNumber, paymentStatus });
+    if (!['pending', 'processing', 'shipped', 'delivered'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid order status.' });
+    }
+    const updated = await db.updateOrderStatus(req.params.id, status, { trackingNumber, paymentStatus });
     if (!updated) return res.status(404).json({ error: 'Order not found' });
     res.json(updated);
   } catch (err) {
@@ -483,22 +583,22 @@ app.patch('/api/orders/:id/status', (req, res) => {
 // ==========================================
 // REVIEWS API (Customer reviews & ratings)
 // ==========================================
-app.get('/api/reviews/:productId', (req, res) => {
+app.get('/api/reviews/:productId', async (req, res) => {
   try {
-    const reviews = db.getReviews(req.params.productId);
+    const reviews = await db.getReviews(req.params.productId);
     res.json(reviews);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch reviews' });
   }
 });
 
-app.post('/api/reviews', (req, res) => {
+app.post('/api/reviews', reviewLimit, async (req, res) => {
   try {
     const { productId, customerName, customerEmail, rating, comment } = req.body;
     if (!productId || !comment || !rating) {
       return res.status(400).json({ error: 'Product ID, rating, and review comment are required.' });
     }
-    const newReview = db.addReview({
+    const newReview = await db.addReview({
       productId,
       customerName: customerName || 'Verified Buyer',
       customerEmail: customerEmail || '',
@@ -512,9 +612,9 @@ app.post('/api/reviews', (req, res) => {
   }
 });
 
-app.delete('/api/reviews/:id', (req, res) => {
+app.delete('/api/reviews/:id', requireAdmin, async (req, res) => {
   try {
-    db.deleteReview(req.params.id);
+    await db.deleteReview(req.params.id);
     res.json({ success: true, message: 'Review deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Failed to delete review' });
@@ -524,18 +624,37 @@ app.delete('/api/reviews/:id', (req, res) => {
 // ==========================================
 // PAYMENT GATEWAYS API: RAZORPAY & UPI
 // ==========================================
-app.post('/api/payments/razorpay/create-order', async (req, res) => {
+app.post('/api/payments/razorpay/test', requireAdmin, paymentLimit, async (req, res) => {
+  const settings = await db.getSettings();
+  const keyId = settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID;
+  const keySecret = settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+  if (!keyId || !keySecret) return res.status(400).json({ error: 'Save both Razorpay Key ID and Key Secret first.' });
   try {
-    const { amount, currency = 'INR', receipt, notes } = req.body;
-    const settings = db.getSettings();
+    const instance = new Razorpay({ key_id: keyId, key_secret: keySecret });
+    await instance.orders.all({ count: 1 });
+    return res.json({ success: true });
+  } catch (err) {
+    return res.status(400).json({ error: 'Razorpay could not authenticate these keys. Check the Key ID, Key Secret, and test/live mode.' });
+  }
+});
+
+app.post('/api/payments/razorpay/create-order', paymentLimit, async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    const settings = await db.getSettings();
 
     const keyId = settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID;
     const keySecret = settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
 
-    if (!keyId || !keySecret) {
+    if (!settings.paymentRazorpayEnabled || !keyId || !keySecret) {
       return res.status(400).json({
         error: 'Razorpay keys are not configured yet in Studio Settings. You can also pay instantly via UPI QR or Cash on Delivery!'
       });
+    }
+
+    const storeOrder = await db.getOrderById(orderId);
+    if (!storeOrder || storeOrder.paymentMethod !== 'razorpay' || storeOrder.status !== 'pending' || storeOrder.razorpayOrderId) {
+      return res.status(400).json({ error: 'A valid pending Razorpay order is required.' });
     }
 
     const instance = new Razorpay({
@@ -544,16 +663,18 @@ app.post('/api/payments/razorpay/create-order', async (req, res) => {
     });
 
     const options = {
-      amount: Math.round(Number(amount) * 100), // amount in smallest currency unit (paise)
-      currency,
-      receipt: receipt || `rec_${Date.now()}`,
-      notes: notes || {}
+      amount: Math.round(storeOrder.total * 100),
+      currency: 'INR',
+      receipt: storeOrder.id,
+      notes: { storeOrderId: storeOrder.id }
     };
 
     const razorpayOrder = await instance.orders.create(options);
+    await db.linkRazorpayOrder(storeOrder.id, razorpayOrder.id);
     res.json({
       success: true,
       orderId: razorpayOrder.id,
+      storeOrderId: storeOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
       keyId
@@ -564,42 +685,101 @@ app.post('/api/payments/razorpay/create-order', async (req, res) => {
   }
 });
 
-app.post('/api/payments/razorpay/verify', (req, res) => {
+app.post('/api/payments/razorpay/verify', paymentLimit, async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
-    const settings = db.getSettings();
+    const settings = await db.getSettings();
     const keySecret = settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
 
     if (!keySecret) {
       return res.status(400).json({ error: 'Razorpay key secret not configured' });
     }
 
+    const storeOrder = await db.getOrderById(orderId);
+    if (!storeOrder || storeOrder.paymentMethod !== 'razorpay' || storeOrder.razorpayOrderId !== razorpay_order_id || storeOrder.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Payment does not match a pending store order.' });
+    }
+
     const generatedSignature = crypto
       .createHmac('sha256', keySecret)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .update(`${storeOrder.razorpayOrderId}|${razorpay_payment_id}`)
       .digest('hex');
 
-    if (generatedSignature !== razorpay_signature) {
+    if (!safeEqualHex(razorpay_signature, generatedSignature)) {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
     }
 
-    // Update order status if orderId provided
-    if (orderId) {
-      db.updateOrderStatus(orderId, 'processing', {
-        paymentStatus: 'paid',
-        razorpayOrderId: razorpay_order_id,
-        razorpayPaymentId: razorpay_payment_id
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Payment verified successfully',
-      paymentId: razorpay_payment_id
+    const instance = new Razorpay({
+      key_id: settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID,
+      key_secret: keySecret
     });
+    const payment = await instance.payments.fetch(razorpay_payment_id);
+    if (payment.order_id !== storeOrder.razorpayOrderId || payment.amount !== Math.round(storeOrder.total * 100)) {
+      return res.status(400).json({ success: false, message: 'Payment details do not match this order.' });
+    }
+    if (payment.status !== 'captured') {
+      return res.status(409).json({ success: false, message: 'Payment has not been captured yet.' });
+    }
+    const updated = await db.updateOrderStatus(orderId, 'processing', {
+      paymentStatus: 'paid',
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id
+    });
+    return res.json({ success: true, message: 'Payment verified successfully', paymentId: razorpay_payment_id, order: updated });
   } catch (err) {
     console.error('Razorpay verification error:', err);
     res.status(500).json({ error: 'Payment verification failed' });
+  }
+});
+
+app.post('/api/webhooks/razorpay', async (req, res) => {
+  try {
+    const settings = await db.getSettings();
+    const webhookSecret = settings.razorpayWebhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET;
+    if (!webhookSecret) return res.status(503).json({ error: 'Payment webhook is not configured.' });
+    const signature = req.headers['x-razorpay-signature'];
+    const expected = crypto.createHmac('sha256', webhookSecret).update(req.rawBody).digest('hex');
+    if (!safeEqualHex(signature, expected)) return res.status(401).json({ error: 'Invalid webhook signature.' });
+
+    const event = req.body?.event;
+    const payment = req.body?.payload?.payment?.entity;
+    if (event === 'payment.captured' && payment?.order_id && payment?.id) {
+      const order = await db.getOrderByRazorpayOrderId(payment.order_id);
+      if (order && payment.amount === Math.round(order.total * 100) && order.paymentStatus !== 'paid') {
+        await db.updateOrderStatus(order.id, 'processing', {
+          paymentStatus: 'paid',
+          razorpayOrderId: payment.order_id,
+          razorpayPaymentId: payment.id
+        });
+      }
+    }
+    res.json({ received: true });
+  } catch (err) {
+    console.error('Razorpay webhook processing error:', err);
+    res.status(500).json({ error: 'Webhook processing failed.' });
+  }
+});
+
+app.post('/api/orders/:id/cancel-payment', paymentLimit, async (req, res) => {
+  try {
+    const order = await db.getOrderById(req.params.id);
+    if (!order || order.paymentMethod !== 'razorpay' || order.paymentStatus !== 'pending') {
+      return res.status(404).json({ error: 'Pending payment order not found.' });
+    }
+    if (order.razorpayOrderId) {
+      const settings = await db.getSettings();
+      const instance = new Razorpay({
+        key_id: settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID,
+        key_secret: settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET
+      });
+      const payments = await instance.orders.fetchPayments(order.razorpayOrderId);
+      if ((payments.items || []).some(payment => ['authorized', 'captured'].includes(payment.status))) {
+        return res.status(409).json({ error: 'Payment is in progress. The order cannot be cancelled yet.' });
+      }
+    }
+    res.json(await db.cancelOrder(order.id));
+  } catch (err) {
+    res.status(400).json({ error: 'Unable to cancel this payment order.' });
   }
 });
 

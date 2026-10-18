@@ -12,6 +12,9 @@ export const OrdersManager: React.FC = () => {
     if (s.includes('deliver')) {
       return { bg: 'var(--accent-sage-light)', color: 'var(--accent-sage)', icon: <CheckCircle2 size={13} />, label: 'Delivered' };
     }
+    if (s.includes('cancel')) {
+      return { bg: '#FEE2E2', color: '#B91C1C', icon: <Clock size={13} />, label: 'Cancelled' };
+    }
     if (s.includes('ship')) {
       return { bg: '#E0F2FE', color: '#0369A1', icon: <Truck size={13} />, label: 'Shipped' };
     }
@@ -192,6 +195,7 @@ export const OrdersManager: React.FC = () => {
                       <option value="processing">In Crafting</option>
                       <option value="shipped">Shipped</option>
                       <option value="delivered">Delivered</option>
+                      {order.status === 'cancelled' && <option value="cancelled" disabled>Cancelled</option>}
                     </select>
                   </div>
                 </div>
@@ -259,20 +263,20 @@ export const OrdersManager: React.FC = () => {
                         Customer & Shipping Destination:
                       </h5>
                       <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '2px' }}>
-                        {order.customerName || order.customer?.name}
+                        {order.customer.name}
                       </div>
                       <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                        {order.customerEmail || order.customer?.email}
+                        {order.customer.email}
                       </div>
-                      {(order.customerPhone || order.customer?.phone) && (
+                      {order.customer.phone && (
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
-                          📞 {order.customerPhone || order.customer?.phone}
+                          📞 {order.customer.phone}
                         </div>
                       )}
-                      {(order.customerAddress || order.customer?.address) && (
+                      {order.customer.address && (
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', display: 'flex', gap: '6px' }}>
                           <MapPin size={14} style={{ flexShrink: 0, marginTop: '2px' }} />
-                          <span>{order.customerAddress || order.customer?.address}</span>
+                          <span>{order.customer.address}</span>
                         </div>
                       )}
                     </div>

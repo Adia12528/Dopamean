@@ -14,7 +14,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0;
 
-  const isLowStock = product.stock > 0 && product.stock <= 5;
+  const isLowStock = product.stock > 0 && product.stock <= (settings.lowStockThreshold ?? 5);
   const isOutOfStock = product.stock === 0;
 
   return (

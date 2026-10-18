@@ -21,6 +21,7 @@ interface OrderTrackingModalProps {
 export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, onClose }) => {
   const { settings, setActiveInvoiceOrder } = useStore();
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchEmail, setSearchEmail] = useState('');
   const [orders, setOrders] = useState<Order[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,12 +31,12 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
   const handleTrack = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!searchQuery.trim()) return;
+    if (!searchQuery.trim() || !searchEmail.trim()) return;
 
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const results = await api.trackOrder(searchQuery.trim());
+      const results = await api.trackOrder(searchQuery.trim(), searchEmail.trim());
       setOrders(results);
       setHasSearched(true);
     } catch (error: unknown) {
@@ -100,7 +101,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               </h2>
             </div>
             <p style={{ margin: '4px 0 0', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-              Enter your Order ID (e.g. ORD-123456) or the mobile phone number used during checkout.
+              Enter your Order ID and the email address used at checkout.
             </p>
           </div>
 
@@ -125,12 +126,12 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
         {/* Search Bar Form */}
         <div style={{ padding: '24px 28px', borderBottom: '1px solid var(--border-medium)' }}>
-          <form onSubmit={handleTrack} style={{ display: 'flex', gap: '10px' }}>
+          <form onSubmit={handleTrack} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
             <div style={{ position: 'relative', flex: 1 }}>
               <Search size={18} style={{ position: 'absolute', left: '14px', top: '13px', color: 'var(--text-subtle)' }} />
               <input
                 type="text"
-                placeholder="Order ID or Phone number (e.g. 9876543210)..."
+                placeholder="Enter your Order ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -146,14 +147,23 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               />
             </div>
 
+            <input
+              type="email"
+              required
+              placeholder="Checkout email address"
+              value={searchEmail}
+              onChange={(e) => setSearchEmail(e.target.value)}
+              style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1.5px solid var(--border-medium)', fontSize: '0.92rem', outline: 'none', color: 'var(--text-main)' }}
+            />
+
             <button
               type="submit"
-              disabled={isLoading || !searchQuery.trim()}
+              disabled={isLoading || !searchQuery.trim() || !searchEmail.trim()}
               className="btn-primary"
               style={{
                 padding: '0 24px',
                 fontSize: '0.9rem',
-                opacity: isLoading || !searchQuery.trim() ? 0.6 : 1
+                opacity: isLoading || !searchQuery.trim() || !searchEmail.trim() ? 0.6 : 1
               }}
             >
               {isLoading ? 'Searching...' : 'Track'}

@@ -206,14 +206,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
                 Billed & Shipped To:
               </div>
               <div style={{ fontWeight: 700, fontSize: '0.98rem', color: '#0F172A' }}>
-                {order.customerName || order.customer?.name}
+                {order.customer.name}
               </div>
               <div style={{ color: '#475569', fontSize: '0.85rem', marginTop: '2px' }}>
-                {order.customerEmail || order.customer?.email}
+                {order.customer.email}
               </div>
-              {(order.customerPhone || order.customer?.phone) && (
+              {order.customer.phone && (
                 <div style={{ color: '#475569', fontSize: '0.85rem' }}>
-                  {order.customerPhone || order.customer?.phone}
+                  {order.customer.phone}
                 </div>
               )}
             </div>
@@ -223,7 +223,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
                 Delivery Address:
               </div>
               <div style={{ color: '#334155', fontSize: '0.86rem', whiteSpace: 'pre-wrap' }}>
-                {order.customerAddress || order.customer?.address || 'Provided during WhatsApp confirmation'}
+                {order.customer.address || 'Provided during WhatsApp confirmation'}
               </div>
               {order.trackingNumber && (
                 <div style={{ marginTop: '6px', fontSize: '0.82rem', color: '#2563EB', fontWeight: 600 }}>
@@ -282,17 +282,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
                 <span>{settings.currency}{order.subtotal}</span>
               </div>
 
-              {(order.discountAmount > 0 || (order.discount && order.discount > 0)) && (
+              {order.discountAmount > 0 && (
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16A34A', fontSize: '0.88rem' }}>
                   <span>Discount ({order.promoCodeApplied || 'Promo'}):</span>
-                  <span>-{settings.currency}{order.discountAmount || order.discount}</span>
+                  <span>-{settings.currency}{order.discountAmount}</span>
                 </div>
               )}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748B', fontSize: '0.88rem' }}>
                 <span>Pan-India Shipping:</span>
                 <span style={{ color: '#16A34A', fontWeight: 600 }}>
-                  {order.subtotal >= settings.freeShippingThreshold ? 'FREE' : `${settings.currency}40`}
+                  {(order.shippingAmount ?? (order.subtotal >= settings.freeShippingThreshold ? 0 : (settings.shippingFee ?? 40))) === 0
+                    ? 'FREE'
+                    : `${settings.currency}${order.shippingAmount ?? settings.shippingFee ?? 40}`}
                 </span>
               </div>
 

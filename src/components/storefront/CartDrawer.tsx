@@ -38,6 +38,7 @@ interface RazorpayOptions {
     razorpay_payment_id?: string;
     razorpay_signature?: string;
   }) => void | Promise<void>;
+  modal?: { ondismiss?: () => void };
 }
 
 declare global {
@@ -59,6 +60,8 @@ export const CartDrawer: React.FC = () => {
     applyPromoCode,
     removePromoCode,
     createOrder,
+    syncOrder,
+    clearCart,
     settings,
     setIsTrackingModalOpen,
     setActiveInvoiceOrder
@@ -71,7 +74,11 @@ export const CartDrawer: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Payment method selection
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod' | 'whatsapp'>('upi');
+  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod' | 'whatsapp'>(() =>
+    settings.paymentUpiEnabled !== false ? 'upi'
+      : settings.paymentRazorpayEnabled ? 'razorpay'
+        : settings.paymentCodEnabled !== false ? 'cod' : 'whatsapp'
+  );
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
   const [upiUtrNumber, setUpiUtrNumber] = useState('');
 
@@ -93,9 +100,9 @@ export const CartDrawer: React.FC = () => {
     }
   }
 
-  const freeShippingThreshold = settings.freeShippingThreshold || 299;
+  const freeShippingThreshold = settings.freeShippingThreshold ?? 299;
   const isFreeShipping = subtotal >= freeShippingThreshold;
-  const shippingCost = isFreeShipping || subtotal === 0 ? 0 : 40;
+  const shippingCost = isFreeShipping || subtotal === 0 ? 0 : (settings.shippingFee ?? 40);
   const total = Math.max(0, subtotal - discount + shippingCost);
 
   // Generate UPI QR Code URL dynamically whenever paymentMethod is 'upi' or total changes
@@ -147,24 +154,37 @@ export const CartDrawer: React.FC = () => {
     if (!formData.name || !formData.email || !formData.address) return;
 
     setIsSubmitting(true);
+    let pendingRazorpayStoreOrderId: string | null = null;
+    let razorpayCheckoutOpened = false;
 
     try {
       // 1. RAZORPAY ONLINE GATEWAY FLOW
-      if (paymentMethod === 'razorpay' && settings.razorpayKeyId) {
+      if (paymentMethod === 'razorpay') {
+        if (!settings.razorpayKeyId) throw new Error('Online card payment is not configured. Please choose UPI or Cash on Delivery.');
         if (!window.Razorpay) {
           alert('Razorpay Checkout SDK is still loading. Please retry or choose UPI QR / COD.');
           setIsSubmitting(false);
           return;
         }
 
-        const rzpOrder = await api.createRazorpayOrder({
-          amount: total,
-          currency: 'INR',
-          notes: {
-            customerName: formData.name,
-            customerPhone: formData.phone
-          }
+        const storeOrder = await api.createOrder({
+          customer: { ...formData },
+          items: cart.map(item => ({
+            productId: item.product.id,
+            productTitle: item.product.title,
+            price: item.product.price,
+            quantity: item.quantity,
+            image: item.product.image,
+            color: item.selectedColor
+          })),
+          subtotal,
+          discountAmount: discount,
+          promoCodeApplied: activePromo?.code,
+          paymentMethod: 'razorpay',
+          status: 'pending'
         });
+        pendingRazorpayStoreOrderId = storeOrder.id;
+        const rzpOrder = await api.createRazorpayOrder({ orderId: storeOrder.id });
 
         const rzpOptions = {
           key: rzpOrder.keyId || settings.razorpayKeyId,
@@ -190,28 +210,27 @@ export const CartDrawer: React.FC = () => {
             const razorpayPaymentId = response.razorpay_payment_id ?? '';
             const razorpaySignature = response.razorpay_signature ?? '';
 
-            const placedOrder = await createOrder(formData, {
-              method: 'razorpay',
-              status: 'paid',
-              razorpayOrderId,
-              razorpayPaymentId
+            const verification = await api.verifyRazorpayPayment({
+              razorpay_order_id: razorpayOrderId,
+              razorpay_payment_id: razorpayPaymentId,
+              razorpay_signature: razorpaySignature,
+              orderId: storeOrder.id
             });
-
-            if (placedOrder) {
-              await api.verifyRazorpayPayment({
-                razorpay_order_id: razorpayOrderId,
-                razorpay_payment_id: razorpayPaymentId,
-                razorpay_signature: razorpaySignature,
-                orderId: placedOrder.id
-              });
-              setOrderComplete(placedOrder);
-              setIsCheckingOut(false);
-              triggerCelebration();
+            syncOrder(verification.order);
+            clearCart();
+            setOrderComplete(verification.order);
+            setIsCheckingOut(false);
+            triggerCelebration();
+          },
+          modal: {
+            ondismiss: () => {
+              void api.cancelRazorpayOrder(storeOrder.id).then(syncOrder).catch(() => undefined);
             }
           }
         };
 
         const rzp = new window.Razorpay(rzpOptions);
+        razorpayCheckoutOpened = true;
         rzp.open();
         setIsSubmitting(false);
         return;
@@ -230,6 +249,9 @@ export const CartDrawer: React.FC = () => {
         triggerCelebration();
       }
     } catch (error: unknown) {
+      if (pendingRazorpayStoreOrderId && !razorpayCheckoutOpened) {
+        await api.cancelRazorpayOrder(pendingRazorpayStoreOrderId).then(syncOrder).catch(() => undefined);
+      }
       const message = error instanceof Error ? error.message : 'Failed to place order. Please check your network connection.';
       alert(message);
     } finally {
@@ -380,7 +402,7 @@ export const CartDrawer: React.FC = () => {
                 Order #{orderComplete.id} Confirmed!
               </h2>
               <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, maxWidth: '380px' }}>
-                Thank you, <strong>{orderComplete.customerName}</strong>! Your order has been registered in our database. Deepa has started prepping your yarns and floral stitches!
+                Thank you, <strong>{orderComplete.customer.name}</strong>! Your order has been registered in our database. Deepa has started prepping your yarns and floral stitches!
               </p>
 
               {/* Action Buttons: Track + Invoice */}
@@ -548,7 +570,7 @@ export const CartDrawer: React.FC = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {/* Option 1: Instant UPI QR & Apps */}
-                  <label style={{
+                  {settings.paymentUpiEnabled !== false && <label style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '12px',
@@ -574,7 +596,7 @@ export const CartDrawer: React.FC = () => {
                         Scan & pay directly to store UPI ID without gateway fees
                       </div>
                     </div>
-                  </label>
+                  </label>}
 
                   {/* Option 2: Razorpay Gateway */}
                   {settings.paymentRazorpayEnabled && (

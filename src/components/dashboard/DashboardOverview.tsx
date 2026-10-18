@@ -19,8 +19,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
 
   const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
   const activeOffersCount = offers.filter(o => o.isActive).length;
-  const pendingOrders = orders.filter(o => o.status === 'Pending' || o.status === 'In Crafting').length;
-  const lowStockCount = products.filter(p => p.stock <= 5).length;
+  const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'processing').length;
+  const lowStockCount = products.filter(p => p.stock <= (settings.lowStockThreshold ?? 5)).length;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -341,7 +341,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
                   #{order.id}
                 </span>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '10px' }}>
-                  {order.customerName} ({order.items.length} items)
+                  {order.customer.name} ({order.items.length} items)
                 </span>
               </div>
 
@@ -351,8 +351,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
                   fontWeight: 700,
                   padding: '3px 8px',
                   borderRadius: '999px',
-                  backgroundColor: order.status === 'Delivered' ? 'var(--accent-sage-light)' : '#FEF3C7',
-                  color: order.status === 'Delivered' ? 'var(--accent-sage)' : '#B45309'
+                  backgroundColor: order.status === 'delivered' ? 'var(--accent-sage-light)' : '#FEF3C7',
+                  color: order.status === 'delivered' ? 'var(--accent-sage)' : '#B45309'
                 }}>
                   {order.status}
                 </span>

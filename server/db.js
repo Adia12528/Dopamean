@@ -3,9 +3,12 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+import { DEFAULT_SETTINGS } from './default-settings.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'store.db');
@@ -34,14 +37,14 @@ sqlite.exec(`
 
   CREATE TABLE IF NOT EXISTS products (
     id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
+    title TEXT NOT NULL CHECK (length(trim(title)) > 0),
     category TEXT NOT NULL,
-    price REAL NOT NULL,
+    price REAL NOT NULL CHECK (price >= 0),
     original_price REAL,
-    stock INTEGER NOT NULL DEFAULT 0,
+    stock INTEGER NOT NULL DEFAULT 0 CHECK (stock >= 0),
     is_featured INTEGER DEFAULT 0,
     is_bestseller INTEGER DEFAULT 0,
-    rating REAL DEFAULT 5.0,
+    rating REAL DEFAULT 5.0 CHECK (rating BETWEEN 0 AND 5),
     reviews_count INTEGER DEFAULT 0,
     data TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -51,6 +54,8 @@ sqlite.exec(`
     id TEXT PRIMARY KEY,
     code TEXT UNIQUE NOT NULL,
     is_active INTEGER DEFAULT 1,
+    discount_type TEXT NOT NULL CHECK (discount_type IN ('percentage', 'fixed')),
+    discount_value REAL NOT NULL CHECK (discount_value >= 0 AND (discount_type != 'percentage' OR discount_value <= 100)),
     data TEXT NOT NULL
   );
 
@@ -59,10 +64,10 @@ sqlite.exec(`
     customer_name TEXT NOT NULL,
     customer_email TEXT NOT NULL,
     customer_phone TEXT,
-    status TEXT NOT NULL DEFAULT 'pending',
-    total REAL NOT NULL,
-    payment_method TEXT NOT NULL DEFAULT 'cod',
-    payment_status TEXT NOT NULL DEFAULT 'pending',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')),
+    total REAL NOT NULL CHECK (total >= 0),
+    payment_method TEXT NOT NULL DEFAULT 'cod' CHECK (payment_method IN ('cod', 'upi', 'razorpay', 'whatsapp')),
+    payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed')),
     tracking_number TEXT,
     data TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -73,17 +78,18 @@ sqlite.exec(`
     product_id TEXT NOT NULL,
     customer_name TEXT NOT NULL,
     customer_email TEXT,
-    rating INTEGER NOT NULL,
+    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment TEXT NOT NULL,
     verified_purchase INTEGER DEFAULT 1,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+    email TEXT UNIQUE NOT NULL CHECK (email = trim(email) AND email GLOB '*?@?*.*?'),
+    password_hash TEXT NOT NULL CHECK (length(trim(password_hash)) > 0),
     phone TEXT,
     address TEXT,
     city TEXT,
@@ -91,6 +97,64 @@ sqlite.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+`);
+
+// Add offer discount columns to databases created by earlier versions.
+const offerColumns = sqlite.prepare('PRAGMA table_info(offers)').all().map(column => column.name);
+if (!offerColumns.includes('discount_type')) {
+  sqlite.exec("ALTER TABLE offers ADD COLUMN discount_type TEXT NOT NULL DEFAULT 'fixed' CHECK (discount_type IN ('percentage', 'fixed'))");
+}
+if (!offerColumns.includes('discount_value')) {
+  sqlite.exec('ALTER TABLE offers ADD COLUMN discount_value REAL NOT NULL DEFAULT 0 CHECK (discount_value >= 0 AND (discount_type != \'percentage\' OR discount_value <= 100))');
+}
+
+// Populate and normalize indexed values for legacy rows before enforcement.
+for (const row of sqlite.prepare('SELECT id, data FROM offers').all()) {
+  const offer = JSON.parse(row.data);
+  const type = offer.discountType === 'percentage' ? 'percentage' : 'fixed';
+  const value = Number.isFinite(Number(offer.discountValue)) ? Math.max(0, Math.min(type === 'percentage' ? 100 : Number.MAX_VALUE, Number(offer.discountValue))) : 0;
+  sqlite.prepare('UPDATE offers SET discount_type = ?, discount_value = ? WHERE id = ?').run(type, value, row.id);
+}
+
+// Triggers bring equivalent guarantees to pre-existing SQLite tables, which SQLite cannot alter in place.
+// Normalize old casing before order triggers are installed.
+sqlite.exec("UPDATE orders SET status = CASE lower(status) WHEN 'pending' THEN 'pending' WHEN 'in crafting' THEN 'processing' WHEN 'processing' THEN 'processing' WHEN 'shipped' THEN 'shipped' WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' ELSE 'pending' END");
+sqlite.exec('DROP TRIGGER IF EXISTS orders_validate_insert; DROP TRIGGER IF EXISTS orders_validate_update;');
+sqlite.exec(`
+  CREATE TRIGGER IF NOT EXISTS products_validate_insert BEFORE INSERT ON products WHEN
+    length(trim(NEW.title)) = 0 OR NEW.price < 0 OR NEW.stock < 0 OR NEW.rating NOT BETWEEN 0 AND 5
+    BEGIN SELECT RAISE(ABORT, 'invalid product'); END;
+  CREATE TRIGGER IF NOT EXISTS products_validate_update BEFORE UPDATE ON products WHEN
+    length(trim(NEW.title)) = 0 OR NEW.price < 0 OR NEW.stock < 0 OR NEW.rating NOT BETWEEN 0 AND 5
+    BEGIN SELECT RAISE(ABORT, 'invalid product'); END;
+  CREATE TRIGGER IF NOT EXISTS orders_validate_insert BEFORE INSERT ON orders WHEN
+    NEW.status NOT IN ('pending','processing','shipped','delivered','cancelled') OR NEW.total < 0 OR
+    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed')
+    BEGIN SELECT RAISE(ABORT, 'invalid order'); END;
+  CREATE TRIGGER IF NOT EXISTS orders_validate_update BEFORE UPDATE ON orders WHEN
+    NEW.status NOT IN ('pending','processing','shipped','delivered','cancelled') OR NEW.total < 0 OR
+    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed')
+    BEGIN SELECT RAISE(ABORT, 'invalid order'); END;
+  CREATE TRIGGER IF NOT EXISTS reviews_validate_insert BEFORE INSERT ON reviews WHEN
+    NEW.rating NOT BETWEEN 1 AND 5 OR NOT EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id)
+    BEGIN SELECT RAISE(ABORT, 'invalid review'); END;
+  CREATE TRIGGER IF NOT EXISTS reviews_validate_update BEFORE UPDATE ON reviews WHEN
+    NEW.rating NOT BETWEEN 1 AND 5 OR NOT EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id)
+    BEGIN SELECT RAISE(ABORT, 'invalid review'); END;
+  CREATE TRIGGER IF NOT EXISTS products_delete_reviews AFTER DELETE ON products
+    BEGIN DELETE FROM reviews WHERE product_id = OLD.id; END;
+  CREATE TRIGGER IF NOT EXISTS users_validate_insert BEFORE INSERT ON users WHEN
+    length(trim(NEW.name)) = 0 OR length(trim(NEW.password_hash)) = 0 OR NEW.email NOT GLOB '*?@?*.*?'
+    BEGIN SELECT RAISE(ABORT, 'invalid user'); END;
+  CREATE TRIGGER IF NOT EXISTS users_validate_update BEFORE UPDATE ON users WHEN
+    length(trim(NEW.name)) = 0 OR length(trim(NEW.password_hash)) = 0 OR NEW.email NOT GLOB '*?@?*.*?'
+    BEGIN SELECT RAISE(ABORT, 'invalid user'); END;
+  CREATE TRIGGER IF NOT EXISTS offers_validate_insert BEFORE INSERT ON offers WHEN
+    NEW.discount_type NOT IN ('percentage','fixed') OR NEW.discount_value < 0 OR (NEW.discount_type = 'percentage' AND NEW.discount_value > 100)
+    BEGIN SELECT RAISE(ABORT, 'invalid offer'); END;
+  CREATE TRIGGER IF NOT EXISTS offers_validate_update BEFORE UPDATE ON offers WHEN
+    NEW.discount_type NOT IN ('percentage','fixed') OR NEW.discount_value < 0 OR (NEW.discount_type = 'percentage' AND NEW.discount_value > 100)
+    BEGIN SELECT RAISE(ABORT, 'invalid offer'); END;
 `);
 
 // Backfill any empty customer_phone/customer_name in orders from data JSON
@@ -113,59 +177,7 @@ try {
 }
 
 // Default store settings
-const DEFAULT_SETTINGS = {
-  storeName: 'Cozy Loops by Deepa',
-  storeTagline: 'Cozy, Handmade Happiness • Premium Crochet Hair Accessories',
-  heroBadge: '🌸 100% Handcrafted with Love',
-  heroTitle: 'Cozy Loops by Deepa',
-  heroSubtitle: '100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories.',
-  heroPrimaryBtnText: 'Shop Handcrafted Collection',
-  heroSecondaryBtnText: 'View Special Combos',
-  showAnnouncement: true,
-  announcementText: '100% Handmade with Love 🌸 Free Shipping on orders above ₹299',
-  themeColor: '#C85A32',
-  showAboutSection: true,
-  aboutBadge: 'Our Story & Maker Ethos',
-  aboutTitle: 'Meet Deepa • The Hands Behind Every Petal & Loop',
-  aboutStory1: "Unlike industrial knitwear which can be copied by commercial machinery, true crochet cannot be replicated by any machine in existence. Every single loop, rose petal, and sunflower hair clip is personally crocheted by Deepa's hands.",
-  aboutStory2: "We use ultra-soft milk cotton and durable elastic bands to craft accessories that don't pull hair, hold securely, and bring a bloom of happiness to everyday styling.",
-  aboutQuote: 'Every stitch is a gentle pause of mindfulness, turning simple yarn into wearable floral art.',
-  aboutImage: '/uploads/media_1791711047623.jpg',
-  trustBadge1Icon: '🌸',
-  trustBadge1Title: '100% Handcrafted',
-  trustBadge1Desc: 'Stitch-by-stitch slowly made by artisan Deepa with utmost love & care.',
-  trustBadge2Icon: '🧶',
-  trustBadge2Title: 'Skin & Hair Friendly',
-  trustBadge2Desc: 'Soft milk-cotton yarn that holds firmly without pulling or snagging hair.',
-  trustBadge3Icon: '✨',
-  trustBadge3Title: 'Custom Orders & Combos',
-  trustBadge3Desc: 'Pair your favorite colors or order custom gifts for birthdays & returns.',
-  trustBadge4Icon: '📦',
-  trustBadge4Title: 'Fast Pan-India Dispatch',
-  trustBadge4Desc: 'Safely boxed in aesthetic packaging with care instructions and gift cards.',
-  currency: '₹',
-  freeShippingThreshold: 299,
-  shippingNotice: 'Dispatched within 24-48 hours across India • Free Shipping above ₹299',
-  contactEmail: 'dsoni7018@gmail.com',
-  contactPhone: '+91 98765 43210',
-  instagramHandle: '@cozyloopsbydeepa',
-  studioLocation: 'Handcrafted Studio, India',
-  heroImage: '/uploads/media_1791711047623.jpg',
-  footerAboutText: 'Cozy Loops by Deepa crafts slow-fashioned, joyful crochet hair accessories and gifts with organic soft cotton and gentle care.',
-  footerCopyright: '© 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion. All Rights Reserved.',
-  adminPasscode: 'admin123',
-  // Payment Options
-  paymentRazorpayEnabled: false,
-  razorpayKeyId: '',
-  razorpayKeySecret: '',
-  paymentUpiEnabled: true,
-  upiId: 'cozyloops@upi',
-  upiPayeeName: 'Deepa Soni (Cozy Loops)',
-  paymentCodEnabled: true,
-  paymentPayuEnabled: false,
-  payuMerchantKey: '',
-  payuMerchantSalt: ''
-};
+
 
 // Seed / Migrate from existing store.json if database is freshly created
 function seedOrMigrate() {
@@ -220,11 +232,11 @@ function seedOrMigrate() {
 
     // Insert offers
     const insertOffer = sqlite.prepare(`
-      INSERT INTO offers (id, code, is_active, data)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO offers (id, code, is_active, discount_type, discount_value, data)
+      VALUES (?, ?, ?, ?, ?, ?)
     `);
     for (const o of initialOffers) {
-      insertOffer.run(o.id, o.code, o.isActive ? 1 : 0, JSON.stringify(o));
+      insertOffer.run(o.id, o.code, o.isActive ? 1 : 0, o.discountType || 'fixed', Number(o.discountValue) || 0, JSON.stringify(o));
     }
 
     // Insert orders
@@ -233,12 +245,13 @@ function seedOrMigrate() {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const ord of initialOrders) {
+      const canonicalStatus = ({ 'in crafting': 'processing', 'pending': 'pending', 'processing': 'processing', 'shipped': 'shipped', 'delivered': 'delivered' })[String(ord.status || 'pending').toLowerCase()] || 'pending';
       insertOrder.run(
         ord.id,
         ord.customer?.name || 'Customer',
         ord.customer?.email || '',
         ord.customer?.phone || '',
-        ord.status || 'pending',
+        canonicalStatus,
         ord.total || 0,
         ord.paymentMethod || 'cod',
         ord.paymentStatus || 'pending',
@@ -265,7 +278,29 @@ function syncBackup() {
   }
 }
 
-export const db = {
+function normalizeOrder(order) {
+  const status = String(order.status || 'pending').toLowerCase();
+  const normalized = {
+    ...order,
+    status: status === 'in crafting' ? 'processing' : (['pending', 'processing', 'shipped', 'delivered', 'cancelled'].includes(status) ? status : 'pending'),
+    customer: {
+      ...order.customer,
+      name: order.customer?.name || order.customerName || 'Customer',
+      email: order.customer?.email || order.customerEmail || '',
+      phone: order.customer?.phone || order.customerPhone || '',
+      address: order.customer?.address || order.customerAddress || ''
+    },
+    discountAmount: Number(order.discountAmount ?? order.discount ?? 0)
+  };
+  delete normalized.customerName;
+  delete normalized.customerEmail;
+  delete normalized.customerPhone;
+  delete normalized.customerAddress;
+  delete normalized.discount;
+  return normalized;
+}
+
+const sqliteDb = {
   // SETTINGS
   getSettings: () => {
     const row = sqlite.prepare('SELECT data FROM settings WHERE id = 1').get();
@@ -367,9 +402,9 @@ export const db = {
       isActive: offerData.isActive !== false
     };
     sqlite.prepare(`
-      INSERT INTO offers (id, code, is_active, data)
-      VALUES (?, ?, ?, ?)
-    `).run(newOffer.id, newOffer.code.toUpperCase(), newOffer.isActive ? 1 : 0, JSON.stringify(newOffer));
+      INSERT INTO offers (id, code, is_active, discount_type, discount_value, data)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(newOffer.id, newOffer.code.toUpperCase(), newOffer.isActive ? 1 : 0, newOffer.discountType, newOffer.discountValue, JSON.stringify(newOffer));
     syncBackup();
     return newOffer;
   },
@@ -380,9 +415,9 @@ export const db = {
     const updated = { ...current, ...updates };
     sqlite.prepare(`
       UPDATE offers
-      SET code = ?, is_active = ?, data = ?
+      SET code = ?, is_active = ?, discount_type = ?, discount_value = ?, data = ?
       WHERE id = ?
-    `).run(updated.code.toUpperCase(), updated.isActive ? 1 : 0, JSON.stringify(updated), id);
+    `).run(updated.code.toUpperCase(), updated.isActive ? 1 : 0, updated.discountType, updated.discountValue, JSON.stringify(updated), id);
     syncBackup();
     return updated;
   },
@@ -405,96 +440,165 @@ export const db = {
   // ORDERS
   getOrders: () => {
     const rows = sqlite.prepare('SELECT data FROM orders ORDER BY rowid DESC').all();
-    return rows.map(r => JSON.parse(r.data));
+    return rows.map(r => normalizeOrder(JSON.parse(r.data)));
   },
   getOrderById: (id) => {
     const row = sqlite.prepare('SELECT data FROM orders WHERE id = ?').get(id);
-    return row ? JSON.parse(row.data) : null;
+    return row ? normalizeOrder(JSON.parse(row.data)) : null;
+  },
+  getOrderByRazorpayOrderId: (razorpayOrderId) => {
+    const row = sqlite.prepare("SELECT data FROM orders WHERE json_extract(data, '$.razorpayOrderId') = ?").get(razorpayOrderId);
+    return row ? normalizeOrder(JSON.parse(row.data)) : null;
   },
   getOrdersByQuery: (q) => {
-    const sanitized = `%${q.trim().toLowerCase()}%`;
-    const rows = sqlite.prepare(`
-      SELECT data FROM orders
-      WHERE LOWER(id) LIKE ? 
-         OR LOWER(customer_phone) LIKE ? 
-         OR LOWER(customer_email) LIKE ?
-         OR LOWER(customer_name) LIKE ?
-         OR LOWER(IFNULL(tracking_number, '')) LIKE ?
-      ORDER BY rowid DESC
-    `).all(sanitized, sanitized, sanitized, sanitized, sanitized);
-    return rows.map(r => JSON.parse(r.data));
+    const row = sqlite.prepare('SELECT data FROM orders WHERE LOWER(id) = LOWER(?)').get(q.trim());
+    return row ? [normalizeOrder(JSON.parse(row.data))] : [];
   },
   createOrder: (orderData) => {
-    const id = orderData.id || `ORD-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
-    const customerName = orderData.customer?.name || orderData.customerName || 'Customer';
-    const customerEmail = orderData.customer?.email || orderData.customerEmail || '';
-    const customerPhone = orderData.customer?.phone || orderData.customerPhone || '';
-    const customerAddress = orderData.customer?.address || orderData.shippingAddress || orderData.address || '';
-    const customerCity = orderData.customer?.city || orderData.city || '';
-    const customerPincode = orderData.customer?.pincode || orderData.pincode || '';
-
-    const newOrder = {
-      ...orderData,
-      id,
-      customer: {
-        name: customerName,
-        email: customerEmail,
-        phone: customerPhone,
-        address: customerAddress,
-        city: customerCity,
-        pincode: customerPincode
-      },
-      customerName,
-      customerEmail,
-      customerPhone,
-      status: orderData.status || 'pending',
-      paymentMethod: orderData.paymentMethod || 'cod',
-      paymentStatus: orderData.paymentStatus || (orderData.paymentMethod === 'cod' ? 'pending' : 'pending'),
-      trackingNumber: orderData.trackingNumber || '',
-      timeline: [
-        {
-          status: 'Order Placed',
-          timestamp: new Date().toISOString(),
-          note: `Order received via ${orderData.paymentMethod ? orderData.paymentMethod.toUpperCase() : 'COD'}.`
-        }
-      ],
-      createdAt: new Date().toISOString()
+    const customerInput = orderData.customer || {};
+    const customer = {
+      name: String(customerInput.name || '').trim(),
+      email: String(customerInput.email || '').trim().toLowerCase(),
+      phone: String(customerInput.phone || '').trim(),
+      address: String(customerInput.address || '').trim(),
+      city: String(customerInput.city || '').trim(),
+      pincode: String(customerInput.pincode || '').trim()
     };
-
-    sqlite.prepare(`
-      INSERT INTO orders (id, customer_name, customer_email, customer_phone, status, total, payment_method, payment_status, tracking_number, data, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      newOrder.id,
-      customerName,
-      customerEmail,
-      customerPhone,
-      newOrder.status,
-      newOrder.total,
-      newOrder.paymentMethod,
-      newOrder.paymentStatus,
-      newOrder.trackingNumber || null,
-      JSON.stringify(newOrder),
-      newOrder.createdAt
-    );
-
-    // Decrement stock for purchased products
-    if (Array.isArray(newOrder.items)) {
-      for (const item of newOrder.items) {
-        if (item.productId && item.quantity) {
-          const prod = db.getProductById(item.productId);
-          if (prod) {
-            const nextStock = Math.max(0, (prod.stock || 0) - item.quantity);
-            db.updateProduct(item.productId, { stock: nextStock });
-          }
-        }
-      }
+    if (!customer.name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email) || !customer.address) {
+      throw new Error('INVALID_CUSTOMER');
     }
+    const paymentMethod = orderData.paymentMethod || 'cod';
+    if (!['cod', 'upi', 'razorpay', 'whatsapp'].includes(paymentMethod)) throw new Error('INVALID_PAYMENT_METHOD');
+    if (!Array.isArray(orderData.items) || orderData.items.length === 0) throw new Error('EMPTY_ORDER');
 
-    syncBackup();
-    return newOrder;
+    sqlite.exec('BEGIN IMMEDIATE');
+    try {
+      const quantities = new Map();
+      for (const item of orderData.items) {
+        const quantity = Number(item.quantity);
+        if (!item.productId || !Number.isSafeInteger(quantity) || quantity < 1) throw new Error('INVALID_QUANTITY');
+        quantities.set(item.productId, (quantities.get(item.productId) || 0) + quantity);
+      }
+
+      const products = [];
+      let subtotal = 0;
+      for (const [productId, quantity] of quantities) {
+        const product = db.getProductById(productId);
+        if (!product) throw new Error('PRODUCT_NOT_FOUND');
+        if (!Number.isSafeInteger(product.stock) || product.stock < quantity) throw new Error('INSUFFICIENT_STOCK');
+        const item = {
+          productId,
+          productTitle: product.title,
+          price: Number(product.price),
+          quantity,
+          image: product.image,
+          color: orderData.items.find(entry => entry.productId === productId)?.color
+        };
+        subtotal += item.price * quantity;
+        products.push({ product, item, remainingStock: product.stock - quantity });
+      }
+      subtotal = Number(subtotal.toFixed(2));
+
+      let discountAmount = 0;
+      let promoCodeApplied;
+      if (orderData.promoCodeApplied) {
+        const offerRow = sqlite.prepare('SELECT data FROM offers WHERE UPPER(code) = UPPER(?) AND is_active = 1').get(String(orderData.promoCodeApplied).trim());
+        const offer = offerRow ? JSON.parse(offerRow.data) : null;
+        const now = Date.now();
+        const startsAt = offer?.startDate ? Date.parse(offer.startDate) : 0;
+        const endsAt = offer?.endDate ? Date.parse(offer.endDate) : Infinity;
+        if (!offer || (startsAt && now < startsAt) || (endsAt && now > endsAt) || subtotal < Number(offer.minOrderValue || 0)) {
+          throw new Error('INVALID_PROMO');
+        }
+        discountAmount = offer.discountType === 'percentage'
+          ? subtotal * Number(offer.discountValue) / 100
+          : Math.min(subtotal, Number(offer.discountValue));
+        discountAmount = Number(discountAmount.toFixed(2));
+        promoCodeApplied = offer.code;
+      }
+
+      const settings = db.getSettings();
+      const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299));
+      const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40));
+      const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
+      const id = `ORD-${crypto.randomUUID()}`;
+      const createdAt = new Date().toISOString();
+      const newOrder = {
+        id,
+        customer,
+        items: products.map(entry => entry.item),
+        subtotal,
+        discountAmount,
+        shippingAmount,
+        promoCodeApplied,
+        total,
+        status: 'pending',
+        paymentMethod,
+        paymentStatus: 'pending',
+        trackingNumber: '',
+        timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }],
+        createdAt
+      };
+
+      sqlite.prepare(`
+        INSERT INTO orders (id, customer_name, customer_email, customer_phone, status, total, payment_method, payment_status, tracking_number, data, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, customer.name, customer.email, customer.phone, 'pending', total, paymentMethod, 'pending', null, JSON.stringify(newOrder), createdAt);
+
+      const updateProductStock = sqlite.prepare('UPDATE products SET stock = ?, data = ? WHERE id = ?');
+      for (const entry of products) {
+        updateProductStock.run(entry.remainingStock, JSON.stringify({ ...entry.product, stock: entry.remainingStock }), entry.product.id);
+      }
+      sqlite.exec('COMMIT');
+      syncBackup();
+      return newOrder;
+    } catch (error) {
+      sqlite.exec('ROLLBACK');
+      throw error;
+    }
+  },
+  linkRazorpayOrder: (id, razorpayOrderId) => {
+    const current = db.getOrderById(id);
+    if (!current || current.paymentMethod !== 'razorpay' || current.paymentStatus !== 'pending' || current.razorpayOrderId) {
+      throw new Error('INVALID_PAYMENT_ORDER');
+    }
+    const updated = { ...current, razorpayOrderId };
+    sqlite.prepare('UPDATE orders SET data = ? WHERE id = ?').run(JSON.stringify(updated), id);
+    return updated;
+  },
+  cancelOrder: (id) => {
+    const current = db.getOrderById(id);
+    if (!current) return null;
+    if (current.status === 'cancelled') return current;
+    if (['shipped', 'delivered'].includes(current.status)) throw new Error('ORDER_ALREADY_FULFILLED');
+    if (current.paymentStatus === 'paid') throw new Error('REFUND_REQUIRED_BEFORE_CANCELLATION');
+    sqlite.exec('BEGIN IMMEDIATE');
+    try {
+      for (const item of current.items || []) {
+        const product = db.getProductById(item.productId);
+        if (!product) continue;
+        const restocked = product.stock + item.quantity;
+        sqlite.prepare('UPDATE products SET stock = ?, data = ? WHERE id = ?')
+          .run(restocked, JSON.stringify({ ...product, stock: restocked }), product.id);
+      }
+      const updated = {
+        ...current,
+        status: 'cancelled',
+        paymentStatus: current.paymentStatus === 'pending' ? 'failed' : current.paymentStatus,
+        timeline: [...(current.timeline || []), { status: 'Order Cancelled', timestamp: new Date().toISOString(), note: 'Inventory returned to stock.' }]
+      };
+      sqlite.prepare('UPDATE orders SET status = ?, payment_status = ?, data = ? WHERE id = ?')
+        .run(updated.status, updated.paymentStatus, JSON.stringify(updated), id);
+      sqlite.exec('COMMIT');
+      syncBackup();
+      return updated;
+    } catch (error) {
+      sqlite.exec('ROLLBACK');
+      throw error;
+    }
   },
   updateOrderStatus: (id, status, extraFields = {}) => {
+    if (status === 'cancelled') return db.cancelOrder(id);
     const current = db.getOrderById(id);
     if (!current) return null;
     const timeline = current.timeline || [];
@@ -693,3 +797,7 @@ export const db = {
     return rows.map(r => JSON.parse(r.data));
   }
 };
+
+export const db = process.env.SUPABASE_DB_URL
+  ? (await import('./postgres-db.js')).postgresDb
+  : sqliteDb;

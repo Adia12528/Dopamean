@@ -42,6 +42,8 @@ export interface StoreSettings {
   // Logistics & Currency
   currency: string;
   freeShippingThreshold: number;
+  shippingFee: number;
+  lowStockThreshold: number;
   shippingNotice?: string;
   
   // Contact & Socials
@@ -62,6 +64,8 @@ export interface StoreSettings {
   razorpayKeyId?: string;
   razorpayKeySecret?: string;
   razorpayKeySecretConfigured?: boolean;
+  razorpayWebhookSecret?: string;
+  razorpayWebhookSecretConfigured?: boolean;
   paymentUpiEnabled?: boolean;
   upiId?: string;
   upiPayeeName?: string;
@@ -144,23 +148,21 @@ export interface OrderTimelineEvent {
 
 export interface Order {
   id: string;
-  customerName: string;
-  customerEmail: string;
-  customerPhone?: string;
-  customerAddress?: string;
-  customer?: {
+  customer: {
     name: string;
     email: string;
     phone?: string;
     address?: string;
+    city?: string;
+    pincode?: string;
   };
   items: OrderItem[];
   subtotal: number;
   discountAmount: number;
-  discount?: number;
+  shippingAmount?: number;
   promoCodeApplied?: string;
   total: number;
-  status: 'Pending' | 'In Crafting' | 'Shipped' | 'Delivered' | 'pending' | 'processing' | 'shipped' | 'delivered';
+  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
   paymentMethod?: 'cod' | 'upi' | 'razorpay' | 'whatsapp';
   paymentStatus?: 'pending' | 'paid' | 'failed';
   trackingNumber?: string;
