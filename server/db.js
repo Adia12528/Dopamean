@@ -757,16 +757,32 @@ const sqliteDb = {
     };
   },
 
+  syncAuthUser: ({ id, email, name = '', phone = '' }) => {
+    if (!id || !email) throw new Error('AUTH_PROFILE_MISSING');
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = sqliteDb.getUserByEmail(normalizedEmail);
+    if (existing) {
+      sqlite.prepare('UPDATE users SET name = COALESCE(NULLIF(?, \'\'), name), phone = COALESCE(NULLIF(?, \'\'), phone), updated_at = ? WHERE id = ?')
+        .run(name.trim(), phone.trim(), new Date().toISOString(), existing.id);
+      return sqliteDb.getUserById(existing.id);
+    }
+    const now = new Date().toISOString();
+    sqlite.prepare(
+      'INSERT INTO users (id, name, email, password_hash, phone, address, city, pincode, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, \'\', \'\', \'\', ?, ?)'
+    ).run(id, name.trim() || normalizedEmail.split('@')[0], normalizedEmail, phone.trim(), now, now);
+    return sqliteDb.getUserById(id);
+  },
+
   createUser: ({ name, email, password, phone = '', address = '', city = '', pincode = '' }) => {
     const existing = sqlite.prepare('SELECT id FROM users WHERE LOWER(email) = LOWER(?)').get(email);
     if (existing) throw new Error('EMAIL_EXISTS');
     const id = `usr_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-    const passwordHash = db.hashPassword(password);
+    const passwordHash = sqliteDb.hashPassword(password);
     const now = new Date().toISOString();
     sqlite.prepare(
       'INSERT INTO users (id, name, email, password_hash, phone, address, city, pincode, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(id, name.trim(), email.trim().toLowerCase(), passwordHash, phone, address, city, pincode, now, now);
-    return db.getUserById(id);
+    return sqliteDb.getUserById(id);
   },
 
   updateUser: (id, updates) => {
@@ -779,18 +795,18 @@ const sqliteDb = {
     if (updates.pincode !== undefined) { fields.push('pincode = ?'); vals.push(updates.pincode); }
     if (updates.password) {
       fields.push('password_hash = ?');
-      vals.push(db.hashPassword(updates.password));
+      vals.push(sqliteDb.hashPassword(updates.password));
     }
-    if (fields.length === 0) return db.getUserById(id);
+    if (fields.length === 0) return sqliteDb.getUserById(id);
     fields.push('updated_at = ?');
     vals.push(new Date().toISOString());
     vals.push(id);
     sqlite.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(...vals);
-    return db.getUserById(id);
+    return sqliteDb.getUserById(id);
   },
 
   getUserOrders: (userId) => {
-    const user = db.getUserById(userId);
+    const user = sqliteDb.getUserById(userId);
     if (!user) return [];
     // Match orders by email
     const rows = sqlite.prepare('SELECT data FROM orders WHERE LOWER(customer_email) = LOWER(?) ORDER BY rowid DESC').all(user.email);

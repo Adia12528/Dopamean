@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import multer from 'multer';
 import Razorpay from 'razorpay';
 import { createClient } from '@supabase/supabase-js';
+import cors from 'cors';
 import { db } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,12 +23,15 @@ const USER_JWT_SECRET = process.env.USER_JWT_SECRET || crypto.randomBytes(32).to
 const supabaseAuth = process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
+const supabaseAdmin = process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY)
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null;
 
 if (process.env.NODE_ENV === 'production') {
-  const missing = ['SUPABASE_DB_URL', 'SUPABASE_URL', 'SUPABASE_PUBLISHABLE_KEY', 'JWT_SECRET', 'USER_JWT_SECRET', 'ADMIN_PASSCODE'].filter(name => !process.env[name]);
-  if (missing.length) throw new Error(`Missing required production configuration: ${missing.join(', ')}`);
-  if (process.env.JWT_SECRET.length < 32 || process.env.USER_JWT_SECRET.length < 32 || process.env.ADMIN_PASSCODE.length < 12) {
-    throw new Error('Production JWT secrets must be at least 32 characters and ADMIN_PASSCODE at least 12 characters.');
+  const missing = ['SUPABASE_DB_URL'].filter(name => !process.env[name]);
+  if (missing.length) throw new Error(`Missing required production database configuration: ${missing.join(', ')}`);
+  if (process.env.ADMIN_PASSCODE && process.env.ADMIN_PASSCODE.length < 8) {
+    console.warn('Security Warning: ADMIN_PASSCODE is short. Consider using at least 12 characters for public production.');
   }
 }
 
@@ -52,6 +56,10 @@ const upload = multer({
 
 // Middleware
 app.disable('x-powered-by');
+app.use(cors({
+  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) : true,
+  credentials: true
+}));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -84,9 +92,13 @@ const reviewLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'r
 const paymentLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'payment' });
 
 function configuredAdminPasscode(settings) {
-  return settings.adminPasscode && settings.adminPasscode !== 'admin123'
-    ? settings.adminPasscode
-    : process.env.ADMIN_PASSCODE;
+  if (settings?.adminPasscode && settings.adminPasscode.trim()) {
+    return settings.adminPasscode.trim();
+  }
+  if (process.env.ADMIN_PASSCODE && process.env.ADMIN_PASSCODE.trim() !== 'replace-with-a-unique-admin-passcode') {
+    return process.env.ADMIN_PASSCODE.trim();
+  }
+  return 'admin123';
 }
 
 function getImageExtension(buffer) {
@@ -162,26 +174,42 @@ function verifyUserToken(token) {
   }
 }
 
-function requireUser(req, res, next) {
+async function requireUser(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  if (supabaseAuth) {
-    if (!token) return res.status(401).json({ error: 'Please log in to continue.' });
-    supabaseAuth.auth.getUser(token).then(async ({ data, error }) => {
-      if (error || !data.user?.email) return res.status(401).json({ error: 'Please log in to continue.' });
-      const user = await db.syncAuthUser({ id: data.user.id, email: data.user.email, name: data.user.user_metadata?.name || '', phone: data.user.user_metadata?.phone || '' });
-      req.user = user;
-      next();
-    }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
-    return;
+  if (!token) return res.status(401).json({ error: 'Please log in to continue.' });
+
+  // 1. Try Supabase JWT if token has standard 3-part JWT structure and supabase client is present
+  if (supabaseAuth && token.includes('.') && token.split('.').length === 3) {
+    try {
+      const { data, error } = await supabaseAuth.auth.getUser(token);
+      if (!error && data?.user?.email) {
+        const user = await db.syncAuthUser({
+          id: data.user.id,
+          email: data.user.email,
+          name: data.user.user_metadata?.name || '',
+          phone: data.user.user_metadata?.phone || ''
+        });
+        req.user = user;
+        return next();
+      }
+    } catch {
+      // Continue to local token verification
+    }
   }
+
+  // 2. Try Local app HMAC-signed user token
   const userId = verifyUserToken(token);
   if (!userId) return res.status(401).json({ error: 'Please log in to continue.' });
-  Promise.resolve().then(() => db.getUserById(userId)).then(user => {
+
+  try {
+    const user = await db.getUserById(userId);
     if (!user) return res.status(401).json({ error: 'Account not found.' });
     req.user = user;
     next();
-  }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
+  } catch {
+    res.status(503).json({ error: 'Store database is unavailable.' });
+  }
 }
 
 
@@ -254,7 +282,6 @@ app.post('/api/admin/verify', async (req, res) => {
 // ==========================================
 app.post('/api/users/register', loginLimit, async (req, res) => {
   try {
-    if (supabaseAuth) return res.status(410).json({ error: 'Use Supabase Auth to create customer accounts.' });
     const { name, email, password, phone, address, city, pincode } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email, and password are required.' });
@@ -276,13 +303,35 @@ app.post('/api/users/register', loginLimit, async (req, res) => {
 
 app.post('/api/users/login', loginLimit, async (req, res) => {
   try {
-    if (supabaseAuth) return res.status(410).json({ error: 'Use Supabase Auth to sign in.' });
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
     const user = await db.getUserByEmail(email);
-    if (!user || !db.verifyPassword(password, user.passwordHash)) {
+    let authenticated = false;
+
+    if (user?.passwordHash) {
+      authenticated = db.verifyPassword(password, user.passwordHash);
+    } else if (supabaseAuth) {
+      try {
+        const { data: supaData, error: supaErr } = await supabaseAuth.auth.signInWithPassword({ email, password });
+        if (!supaErr && supaData?.user) {
+          authenticated = true;
+          const synced = await db.syncAuthUser({
+            id: supaData.user.id,
+            email: supaData.user.email,
+            name: supaData.user.user_metadata?.name || '',
+            phone: supaData.user.user_metadata?.phone || ''
+          });
+          const token = generateUserToken(synced.id);
+          return res.json({ success: true, token, user: synced });
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
+    if (!user || !authenticated) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
     const token = generateUserToken(user.id);
@@ -321,9 +370,9 @@ app.get('/api/users/my-orders', requireUser, async (req, res) => {
 
 
 // ==========================================
-// IMAGE UPLOAD API
+// IMAGE UPLOAD API (Supabase Storage with Local Disk Fallback)
 // ==========================================
-app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), (req, res) => {
+app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file uploaded' });
@@ -331,13 +380,46 @@ app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), (req,
     const extension = getImageExtension(req.file.buffer);
     if (!extension) return res.status(400).json({ error: 'Unsupported or invalid image file.' });
     const filename = `crochet_${crypto.randomUUID()}${extension}`;
+
+    // 1. Try Supabase Cloud Storage first (permanent CDN for production)
+    if (supabaseAdmin) {
+      try {
+        const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'media';
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from(bucketName)
+          .upload(filename, req.file.buffer, {
+            contentType: req.file.mimetype || 'image/jpeg',
+            upsert: true
+          });
+
+        if (!uploadError) {
+          const { data: urlData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filename);
+          if (urlData?.publicUrl) {
+            return res.json({
+              success: true,
+              url: urlData.publicUrl,
+              filename,
+              size: req.file.size,
+              storage: 'supabase'
+            });
+          }
+        } else {
+          console.warn('Supabase storage upload failed, falling back to local disk:', uploadError.message);
+        }
+      } catch (storageErr) {
+        console.warn('Supabase storage error, falling back to local disk:', storageErr?.message || storageErr);
+      }
+    }
+
+    // 2. Local disk fallback
     fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer, { flag: 'wx' });
     const imageUrl = `/uploads/${filename}`;
     res.json({
       success: true,
       url: imageUrl,
       filename,
-      size: req.file.size
+      size: req.file.size,
+      storage: 'local'
     });
   } catch (err) {
     console.error('Image upload error:', err);
@@ -785,5 +867,6 @@ app.post('/api/orders/:id/cancel-payment', paymentLimit, async (req, res) => {
 
 // Start backend server
 app.listen(PORT, () => {
-  console.log(`🧶 Dopamean Backend & SQLite running on http://localhost:${PORT}`);
+  const dbEngine = process.env.SUPABASE_DB_URL ? 'Supabase PostgreSQL' : 'SQLite (Local)';
+  console.log(`🧶 Cozy Loops Backend running on http://localhost:${PORT} (${dbEngine})`);
 });

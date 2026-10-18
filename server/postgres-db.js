@@ -1,4 +1,4 @@
-﻿import crypto from 'node:crypto';
+import crypto from 'node:crypto';
 import { Pool } from 'pg';
 import { DEFAULT_SETTINGS } from './default-settings.js';
 
@@ -8,6 +8,10 @@ const pool = new Pool({
   max: Number(process.env.DB_POOL_SIZE) || 10,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 10_000
+});
+
+pool.on('error', (err) => {
+  console.error('Postgres pool idle client warning (auto-reconnecting):', err?.message || err);
 });
 
 const parse = value => typeof value === 'string' ? JSON.parse(value) : value;
@@ -185,8 +189,11 @@ export const postgresDb = {
     if (!id || !email) throw new Error('AUTH_PROFILE_MISSING');
     const normalizedEmail = email.trim().toLowerCase();
     const existing = await postgresDb.getUserByEmail(normalizedEmail);
-    if (existing && existing.id !== id) {
-      const { rows } = await pool.query('UPDATE users SET id=$1,name=COALESCE(NULLIF($2,\'\'),name),phone=COALESCE(NULLIF($3,\'\'),phone),password_hash=NULL,updated_at=now() WHERE id=$4 RETURNING *', [id, name.trim(), phone.trim(), existing.id]);
+    if (existing) {
+      const { rows } = await pool.query(
+        'UPDATE users SET name=COALESCE(NULLIF($2,\'\'),name),phone=COALESCE(NULLIF($3,\'\'),phone),updated_at=now() WHERE id=$1 RETURNING *',
+        [existing.id, name.trim(), phone.trim()]
+      );
       return cleanUser(rows[0]);
     }
     const { rows } = await pool.query(`INSERT INTO users(id,name,email,password_hash,phone) VALUES($1,$2,$3,NULL,$4)

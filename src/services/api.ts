@@ -1,6 +1,6 @@
 import type { Product, Offer, Order, StoreSettings, Review, UserProfile } from '../types';
 
-const BASE_URL = '';
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '';
 
 const adminFetch = (url: string, init: RequestInit = {}) => {
   const token = sessionStorage.getItem('dopamean_admin_token');

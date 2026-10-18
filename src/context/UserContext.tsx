@@ -36,33 +36,60 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [userAuthModalTab, setUserAuthModalTab] = useState<'signin' | 'signup'>('signin');
   const [isLoadingUser, setIsLoadingUser] = useState(() => Boolean(userToken));
 
-  // Rehydrate user from stored token on mount
+  // Rehydrate user from stored token or Supabase session on mount
   useEffect(() => {
+    let active = true;
+
+    const restoreLocalToken = async () => {
+      const stored = localStorage.getItem(USER_TOKEN_KEY);
+      if (!stored) {
+        if (active) setIsLoadingUser(false);
+        return;
+      }
+      try {
+        const user = await api.getMe(stored);
+        if (active) {
+          setUserToken(stored);
+          setCurrentUser(user);
+        }
+      } catch {
+        localStorage.removeItem(USER_TOKEN_KEY);
+        if (active) {
+          setUserToken(null);
+          setCurrentUser(null);
+        }
+      } finally {
+        if (active) setIsLoadingUser(false);
+      }
+    };
+
     if (supabaseAuthEnabled && supabase) {
-      let active = true;
       supabase.auth.getSession().then(({ data }) => {
         if (!active) return;
-        const token = data.session?.access_token || null;
-        setUserToken(token);
-        if (!token) setIsLoadingUser(false);
+        const supaToken = data.session?.access_token || null;
+        if (supaToken) {
+          setUserToken(supaToken);
+          api.getMe(supaToken)
+            .then(user => { if (active) setCurrentUser(user); })
+            .catch(() => {})
+            .finally(() => { if (active) setIsLoadingUser(false); });
+        } else {
+          void restoreLocalToken();
+        }
       });
       const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-        const token = session?.access_token || null;
-        setUserToken(token);
-        if (!token) { setCurrentUser(null); setIsLoadingUser(false); }
+        const supaToken = session?.access_token || null;
+        if (supaToken) {
+          setUserToken(supaToken);
+          api.getMe(supaToken).then(user => { if (active) setCurrentUser(user); }).catch(() => {});
+        }
       });
       return () => { active = false; listener.subscription.unsubscribe(); };
     }
-    if (!userToken) return;
-    api.getMe(userToken)
-      .then(user => setCurrentUser(user))
-      .catch(() => {
-        // Token invalid / expired — clear it
-        localStorage.removeItem(USER_TOKEN_KEY);
-        setUserToken(null);
-      })
-      .finally(() => setIsLoadingUser(false));
-  }, [userToken]);
+
+    void restoreLocalToken();
+    return () => { active = false; };
+  }, []);
 
   const persistToken = (token: string) => {
     setUserToken(token);
@@ -80,19 +107,24 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const userRegister = useCallback(async (data: { name: string; email: string; password: string; phone?: string }) => {
     if (supabaseAuthEnabled && supabase) {
-      const { data: result, error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: { data: { name: data.name, phone: data.phone || '' } }
-      });
-      if (error) throw error;
-      if (!result.session) throw new Error('Account created. Check your email to confirm it, then sign in.');
-      persistToken(result.session.access_token);
-      const user = await api.getMe(result.session.access_token);
-      setCurrentUser(user);
-      setIsUserAuthModalOpen(false);
-      return;
+      try {
+        const { data: result, error } = await supabase.auth.signUp({
+          email: data.email,
+          password: data.password,
+          options: { data: { name: data.name, phone: data.phone || '' } }
+        });
+        if (!error && result.session?.access_token) {
+          persistToken(result.session.access_token);
+          const user = await api.getMe(result.session.access_token);
+          setCurrentUser(user);
+          setIsUserAuthModalOpen(false);
+          return;
+        }
+      } catch {
+        // Fall back to direct backend database registration
+      }
     }
+    // Direct database registration
     const result = await api.userRegister(data);
     persistToken(result.token);
     setCurrentUser(result.user);
@@ -101,14 +133,18 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const userLogin = useCallback(async (email: string, password: string) => {
     if (supabaseAuthEnabled && supabase) {
-      const { data: result, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      if (!result.session) throw new Error('Sign in could not be completed. Please try again.');
-      persistToken(result.session.access_token);
-      const user = await api.getMe(result.session.access_token);
-      setCurrentUser(user);
-      setIsUserAuthModalOpen(false);
-      return;
+      try {
+        const { data: result, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (!error && result.session?.access_token) {
+          persistToken(result.session.access_token);
+          const user = await api.getMe(result.session.access_token);
+          setCurrentUser(user);
+          setIsUserAuthModalOpen(false);
+          return;
+        }
+      } catch {
+        // Fall back to backend database login
+      }
     }
     const result = await api.userLogin(email, password);
     persistToken(result.token);

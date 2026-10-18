@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: dopamean-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: USER_JWT_SECRET
+        generateValue: true
+      - key: ADMIN_PASSCODE
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false

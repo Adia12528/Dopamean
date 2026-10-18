@@ -7,9 +7,13 @@ React storefront and Studio dashboard with an Express API. Local development use
 1. Copy `.env.example` to `.env` and replace the placeholder secrets.
 2. Install the frontend dependencies with `npm install`.
 3. Install the backend dependencies with `npm --prefix server install`.
-4. Start the API with `npm --prefix server run dev` and the storefront with `npm run dev` in separate terminals.
+4. Start both the API backend and the storefront frontend together with a single command:
+   ```bash
+   npm run dev
+   ```
+   *(Or individually: `npm run server` and `npm run client`)*
 
-The Vite development server proxies `/api` and `/uploads` to `http://localhost:5000`.
+The Vite development server runs on `http://localhost:5173` and proxies `/api` and `/uploads` to `http://localhost:5000`.
 
 ## Supabase PostgreSQL setup
 
