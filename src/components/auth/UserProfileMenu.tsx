@@ -81,11 +81,22 @@ const EditProfileForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
 
   const field = (label: string, value: string, setter: (v: string) => void, type = 'text', ph = '') => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      <label style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-main)' }}>{label}</label>
-      <input type={type} value={value} onChange={e => setter(e.target.value)} placeholder={ph}
+      <label style={{ fontSize: '0.74rem', fontWeight: 700, color: 'var(--text-main)' }}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={e => setter(e.target.value)}
+        placeholder={ph}
         style={{
-          padding: '8px 10px', borderRadius: 8, border: '1px solid var(--border-medium)',
-          fontSize: '0.84rem', outline: 'none', backgroundColor: '#FFFFFF', color: 'var(--text-main)'
+          padding: '9px 12px',
+          minHeight: '40px',
+          borderRadius: 8,
+          border: '1px solid var(--border-medium)',
+          fontSize: '16px', // Prevents iOS auto-zoom
+          outline: 'none',
+          backgroundColor: '#FFFFFF',
+          color: 'var(--text-main)',
+          boxSizing: 'border-box'
         }}
         onFocus={e => e.target.style.borderColor = 'var(--accent-terracotta)'}
         onBlur={e => e.target.style.borderColor = 'var(--border-medium)'}
@@ -191,7 +202,8 @@ export const UserProfileMenu: React.FC = () => {
         <div style={{
           position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
           backgroundColor: '#FFFFFF', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
-          border: '1px solid var(--border-medium)', minWidth: 280, overflow: 'hidden',
+          border: '1px solid var(--border-medium)', minWidth: 280, maxWidth: 'calc(100vw - 24px)', overflow: 'hidden',
+          boxSizing: 'border-box',
           animation: 'fadeIn 0.15s ease-out'
         }}>
           {/* Header */}

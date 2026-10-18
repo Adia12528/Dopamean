@@ -144,8 +144,8 @@ export const StorefrontView: React.FC = () => {
           ) : (
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(270px, 1fr))',
-              gap: '24px'
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
+              gap: 'clamp(14px, 3vw, 24px)'
             }}>
               {filteredProducts.map(product => (
                 <ProductCard key={product.id} product={product} />

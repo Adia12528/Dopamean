@@ -67,21 +67,23 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '16px'
+        padding: 'clamp(10px, 3vw, 20px)',
+        boxSizing: 'border-box'
       }}
     >
       <div
         style={{
           backgroundColor: '#FFFFFF',
-          borderRadius: '28px',
+          borderRadius: 'clamp(18px, 4vw, 28px)',
           width: '100%',
           maxWidth: '680px',
-          maxHeight: '90vh',
+          maxHeight: '92vh',
           display: 'flex',
           flexDirection: 'column',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
           border: '1px solid var(--border-medium)',
-          overflow: 'hidden'
+          overflow: 'hidden',
+          boxSizing: 'border-box'
         }}
       >
         {/* Header */}
@@ -89,14 +91,14 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '22px 28px',
+          padding: 'clamp(16px, 3vw, 22px) clamp(16px, 3vw, 28px)',
           borderBottom: '1px solid var(--border-medium)',
           backgroundColor: 'var(--bg-surface-soft)'
         }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Truck size={20} color="var(--accent-terracotta)" />
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
+              <h2 style={{ fontSize: 'clamp(1.1rem, 3vw, 1.25rem)', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
                 Track Your Handcrafted Order
               </h2>
             </div>
@@ -107,6 +109,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
           <button
             onClick={onClose}
+            aria-label="Close tracking modal"
             style={{
               width: '36px',
               height: '36px',
@@ -117,7 +120,8 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              color: 'var(--text-muted)'
+              color: 'var(--text-muted)',
+              flexShrink: 0
             }}
           >
             <X size={18} />
@@ -125,10 +129,10 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
         </div>
 
         {/* Search Bar Form */}
-        <div style={{ padding: '24px 28px', borderBottom: '1px solid var(--border-medium)' }}>
-          <form onSubmit={handleTrack} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '10px' }}>
-            <div style={{ position: 'relative', flex: 1 }}>
-              <Search size={18} style={{ position: 'absolute', left: '14px', top: '13px', color: 'var(--text-subtle)' }} />
+        <div style={{ padding: 'clamp(16px, 3vw, 24px) clamp(16px, 3vw, 28px)', borderBottom: '1px solid var(--border-medium)' }}>
+          <form onSubmit={handleTrack} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '10px' }}>
+            <div style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center' }}>
+              <Search size={18} style={{ position: 'absolute', left: '14px', color: 'var(--text-subtle)', pointerEvents: 'none' }} />
               <input
                 type="text"
                 placeholder="Enter your Order ID..."
@@ -136,12 +140,14 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: '11px 16px 11px 42px',
+                  minHeight: '44px',
+                  padding: '10px 14px 10px 42px',
                   borderRadius: '12px',
                   border: '1.5px solid var(--border-medium)',
-                  fontSize: '0.92rem',
+                  fontSize: '16px', // 16px prevents iOS zoom
                   outline: 'none',
-                  color: 'var(--text-main)'
+                  color: 'var(--text-main)',
+                  boxSizing: 'border-box'
                 }}
                 autoFocus
               />
@@ -153,7 +159,17 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               placeholder="Checkout email address"
               value={searchEmail}
               onChange={(e) => setSearchEmail(e.target.value)}
-              style={{ width: '100%', padding: '11px 14px', borderRadius: '12px', border: '1.5px solid var(--border-medium)', fontSize: '0.92rem', outline: 'none', color: 'var(--text-main)' }}
+              style={{
+                width: '100%',
+                minHeight: '44px',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                border: '1.5px solid var(--border-medium)',
+                fontSize: '16px', // 16px prevents iOS zoom
+                outline: 'none',
+                color: 'var(--text-main)',
+                boxSizing: 'border-box'
+              }}
             />
 
             <button
@@ -161,9 +177,11 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               disabled={isLoading || !searchQuery.trim() || !searchEmail.trim()}
               className="btn-primary"
               style={{
+                minHeight: '44px',
                 padding: '0 24px',
-                fontSize: '0.9rem',
-                opacity: isLoading || !searchQuery.trim() || !searchEmail.trim() ? 0.6 : 1
+                fontSize: '0.92rem',
+                opacity: isLoading || !searchQuery.trim() || !searchEmail.trim() ? 0.6 : 1,
+                cursor: isLoading ? 'wait' : 'pointer'
               }}
             >
               {isLoading ? 'Searching...' : 'Track'}
@@ -172,7 +190,12 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
         </div>
 
         {/* Results Area */}
-        <div style={{ padding: '24px 28px', overflowY: 'auto', flex: 1 }}>
+        <div style={{
+          padding: 'clamp(16px, 3vw, 24px) clamp(16px, 3vw, 28px)',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          flex: 1
+        }}>
           {errorMessage && (
             <div style={{
               backgroundColor: '#FEF2F2',

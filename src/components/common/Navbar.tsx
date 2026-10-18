@@ -67,16 +67,17 @@ export const Navbar: React.FC = () => {
               padding: '2px 8px',
               borderRadius: '999px',
               fontSize: '0.68rem',
-              letterSpacing: '0.04em'
+              letterSpacing: '0.04em',
+              flexShrink: 0
             }}>
               SUPER ADMIN ACTIVE
             </span>
-            <span style={{ color: '#CBD5E1' }}>
+            <span className="hide-on-mobile" style={{ color: '#CBD5E1' }}>
               You have full studio privileges (product additions, offers, and settings). Normal visitors only see the customer storefront.
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
               onClick={() => setViewMode(viewMode === 'store' ? 'dashboard' : 'store')}
               style={{
@@ -86,7 +87,7 @@ export const Navbar: React.FC = () => {
                 cursor: 'pointer'
               }}
             >
-              {viewMode === 'store' ? 'Open Studio Dashboard →' : '← Preview Storefront as Customer'}
+              {viewMode === 'store' ? 'Open Dashboard →' : '← Preview Store'}
             </button>
 
             <button
@@ -106,7 +107,7 @@ export const Navbar: React.FC = () => {
               title="Logout from Super Admin mode"
             >
               <LogOut size={12} />
-              <span>Exit Admin</span>
+              <span>Exit</span>
             </button>
           </div>
         </div>
@@ -146,13 +147,14 @@ export const Navbar: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingTop: '12px',
-        paddingBottom: '12px',
-        gap: '16px',
+        paddingTop: '10px',
+        paddingBottom: '10px',
+        gap: '12px',
         flexWrap: 'wrap'
       }}>
         {/* Brand Logo */}
         <div 
+          className="nav-brand-wrapper"
           onClick={() => setViewMode('store')}
           style={{
             display: 'flex',
@@ -163,15 +165,15 @@ export const Navbar: React.FC = () => {
           }}
         >
           <div style={{
-            width: '40px',
-            height: '40px',
+            width: '38px',
+            height: '38px',
             borderRadius: '12px',
             background: 'linear-gradient(135deg, #FDE1D3, #F5C6B0)',
             border: '1.5px dashed var(--accent-terracotta)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '20px',
+            fontSize: '18px',
             boxShadow: 'var(--shadow-sm)',
             flexShrink: 0
           }}>
@@ -185,7 +187,7 @@ export const Navbar: React.FC = () => {
             }}>
               <span style={{
                 fontFamily: 'var(--font-serif)',
-                fontSize: '1.45rem',
+                fontSize: '1.35rem',
                 fontWeight: 700,
                 color: 'var(--accent-terracotta)',
                 letterSpacing: '-0.02em',
@@ -194,7 +196,7 @@ export const Navbar: React.FC = () => {
                 {settings.storeName || 'Dopamean'}
               </span>
               <span style={{
-                fontSize: '0.62rem',
+                fontSize: '0.6rem',
                 fontWeight: 700,
                 color: '#FFFFFF',
                 background: 'var(--accent-sage)',
@@ -206,11 +208,12 @@ export const Navbar: React.FC = () => {
                 Studio
               </span>
             </div>
-            <p style={{
-              fontSize: '0.72rem',
+            <p className="hide-on-mobile-sm" style={{
+              fontSize: '0.7rem',
               color: 'var(--text-muted)',
               fontWeight: 500,
-              marginTop: '2px'
+              marginTop: '2px',
+              margin: 0
             }}>
               {settings.storeTagline || 'Handcrafted Crochet Accessories'}
             </p>
@@ -218,33 +221,36 @@ export const Navbar: React.FC = () => {
         </div>
 
         {/* Search bar (for storefront product filtering) */}
-        <div style={{
-          flex: '1',
-          maxWidth: '400px',
+        <div className="nav-search-wrapper" style={{
+          flex: '1 1 240px',
+          maxWidth: '420px',
           display: 'flex',
           alignItems: 'center',
           position: 'relative'
         }}>
-          <Search size={17} style={{
+          <Search size={16} style={{
             position: 'absolute',
             left: '14px',
-            color: 'var(--text-subtle)'
+            color: 'var(--text-subtle)',
+            pointerEvents: 'none'
           }} />
           <input
             type="text"
-            placeholder="Search bags, bucket hats, charms, cozies..."
+            placeholder="Search bags, bucket hats, charms..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
               width: '100%',
-              padding: '9px 16px 9px 40px',
+              minHeight: '38px',
+              padding: '8px 34px 8px 38px',
               borderRadius: 'var(--radius-full)',
               border: '1px solid var(--border-medium)',
               backgroundColor: '#FFFFFF',
-              fontSize: '0.86rem',
+              fontSize: '16px', // 16px to prevent iOS Safari auto-zoom
               color: 'var(--text-main)',
               outline: 'none',
-              transition: 'var(--transition-smooth)'
+              transition: 'var(--transition-smooth)',
+              boxSizing: 'border-box'
             }}
             onFocus={(e) => e.target.style.borderColor = 'var(--accent-terracotta)'}
             onBlur={(e) => e.target.style.borderColor = 'var(--border-medium)'}
@@ -252,12 +258,18 @@ export const Navbar: React.FC = () => {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
               style={{
                 position: 'absolute',
-                right: '12px',
-                fontSize: '0.8rem',
+                right: '10px',
+                fontSize: '0.82rem',
                 color: 'var(--text-subtle)',
-                padding: '2px 6px'
+                width: 22,
+                height: 22,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
               }}
             >
               ✕
@@ -266,10 +278,10 @@ export const Navbar: React.FC = () => {
         </div>
 
         {/* Right Navigation & Action Controls */}
-        <div style={{
+        <div className="nav-actions-wrapper" style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '12px'
+          gap: '8px'
         }}>
           {/* If Super Admin is logged in, show the Switcher Controls */}
           {isAdmin && (
@@ -286,10 +298,10 @@ export const Navbar: React.FC = () => {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
+                  gap: '5px',
+                  padding: '6px 12px',
                   borderRadius: 'var(--radius-full)',
-                  fontSize: '0.84rem',
+                  fontSize: '0.82rem',
                   fontWeight: 600,
                   color: viewMode === 'store' ? '#FFFFFF' : 'var(--text-muted)',
                   backgroundColor: viewMode === 'store' ? 'var(--accent-terracotta)' : 'transparent',
@@ -297,7 +309,7 @@ export const Navbar: React.FC = () => {
                   transition: 'var(--transition-smooth)'
                 }}
               >
-                <Store size={15} />
+                <Store size={14} />
                 <span>Store</span>
               </button>
 
@@ -306,10 +318,10 @@ export const Navbar: React.FC = () => {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
+                  gap: '5px',
+                  padding: '6px 12px',
                   borderRadius: 'var(--radius-full)',
-                  fontSize: '0.84rem',
+                  fontSize: '0.82rem',
                   fontWeight: 600,
                   color: viewMode === 'dashboard' ? '#FFFFFF' : 'var(--text-muted)',
                   backgroundColor: viewMode === 'dashboard' ? 'var(--accent-sage)' : 'transparent',
@@ -317,7 +329,7 @@ export const Navbar: React.FC = () => {
                   transition: 'var(--transition-smooth)'
                 }}
               >
-                <LayoutDashboard size={15} />
+                <LayoutDashboard size={14} />
                 <span>Studio</span>
               </button>
             </div>
@@ -328,19 +340,21 @@ export const Navbar: React.FC = () => {
             <>
               <button
                 onClick={() => setIsTrackingModalOpen(true)}
+                title="Track your order"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '6px',
-                  padding: '8px 14px',
+                  padding: '8px 12px',
                   borderRadius: 'var(--radius-full)',
                   backgroundColor: 'transparent',
                   border: '1px solid var(--border-medium)',
                   color: 'var(--text-main)',
                   fontWeight: 600,
-                  fontSize: '0.84rem',
+                  fontSize: '0.82rem',
                   cursor: 'pointer',
-                  transition: 'var(--transition-smooth)'
+                  transition: 'var(--transition-smooth)',
+                  minHeight: '36px'
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = 'var(--accent-terracotta)';
@@ -351,8 +365,8 @@ export const Navbar: React.FC = () => {
                   e.currentTarget.style.color = 'var(--text-main)';
                 }}
               >
-                <Truck size={16} />
-                <span>Track Order</span>
+                <Truck size={15} />
+                <span className="hide-on-mobile-sm">Track Order</span>
               </button>
 
               {/* User Account (Sign In or Avatar Menu) */}

@@ -491,15 +491,17 @@ export const CartDrawer: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   style={{
                     width: '100%',
+                    minHeight: '44px',
                     padding: '10px 14px',
                     borderRadius: '10px',
                     border: '1px solid var(--border-medium)',
-                    fontSize: '0.88rem'
+                    fontSize: '16px', // Prevents iOS auto-zoom
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '5px' }}>
                     Email Address *
@@ -512,10 +514,12 @@ export const CartDrawer: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     style={{
                       width: '100%',
+                      minHeight: '44px',
                       padding: '10px 14px',
                       borderRadius: '10px',
                       border: '1px solid var(--border-medium)',
-                      fontSize: '0.88rem'
+                      fontSize: '16px', // Prevents iOS auto-zoom
+                      boxSizing: 'border-box'
                     }}
                   />
                 </div>
@@ -532,10 +536,12 @@ export const CartDrawer: React.FC = () => {
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     style={{
                       width: '100%',
+                      minHeight: '44px',
                       padding: '10px 14px',
                       borderRadius: '10px',
                       border: '1px solid var(--border-medium)',
-                      fontSize: '0.88rem'
+                      fontSize: '16px', // Prevents iOS auto-zoom
+                      boxSizing: 'border-box'
                     }}
                   />
                 </div>
@@ -553,11 +559,13 @@ export const CartDrawer: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   style={{
                     width: '100%',
+                    minHeight: '60px',
                     padding: '10px 14px',
                     borderRadius: '10px',
                     border: '1px solid var(--border-medium)',
-                    fontSize: '0.88rem',
-                    fontFamily: 'inherit'
+                    fontSize: '16px', // Prevents iOS auto-zoom
+                    fontFamily: 'inherit',
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>

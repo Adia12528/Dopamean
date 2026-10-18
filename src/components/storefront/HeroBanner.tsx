@@ -25,13 +25,13 @@ export const HeroBanner: React.FC = () => {
         {/* Main Hero Card */}
         <div className="hero-card" style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
           backgroundColor: '#FFFFFF',
-          borderRadius: '28px',
+          borderRadius: 'clamp(20px, 4vw, 28px)',
           overflow: 'hidden',
           border: '1px solid var(--border-medium)',
           boxShadow: '0 20px 40px rgba(35, 28, 22, 0.07)',
-          minHeight: '420px'
+          minHeight: '380px'
         }}>
           {/* Left Text & CTA */}
           <div style={{
@@ -192,7 +192,8 @@ export const HeroBanner: React.FC = () => {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            minHeight: '260px'
           }}>
             <img
               src={settings.heroImage || '/uploads/media_1791711047623.jpg'}
@@ -207,11 +208,11 @@ export const HeroBanner: React.FC = () => {
             {/* Floating Editorial Badge */}
             <div style={{
               position: 'absolute',
-              bottom: '24px',
-              left: '24px',
+              bottom: '16px',
+              left: '16px',
               background: 'rgba(255, 255, 255, 0.92)',
               backdropFilter: 'blur(10px)',
-              padding: '12px 18px',
+              padding: '10px 14px',
               borderRadius: '16px',
               boxShadow: '0 8px 24px rgba(0, 0, 0, 0.12)',
               border: '1px solid rgba(255, 255, 255, 0.8)',

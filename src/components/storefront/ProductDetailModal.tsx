@@ -39,24 +39,27 @@ export const ProductDetailModal: React.FC = () => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '20px',
-        animation: 'fadeIn 0.25s ease-out'
+        padding: 'clamp(10px, 3vw, 20px)',
+        animation: 'fadeIn 0.25s ease-out',
+        boxSizing: 'border-box'
       }}
     >
       <div 
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
-          borderRadius: '26px',
+          borderRadius: 'clamp(18px, 4vw, 26px)',
           width: '100%',
           maxWidth: '920px',
-          maxHeight: '90vh',
+          maxHeight: '92vh',
           overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
           boxShadow: '0 25px 60px rgba(0, 0, 0, 0.25)',
           border: '1px solid var(--border-medium)',
           position: 'relative',
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))'
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))',
+          boxSizing: 'border-box'
         }}
       >
         {/* Close Button */}
@@ -167,7 +170,7 @@ export const ProductDetailModal: React.FC = () => {
 
         {/* Right: Info & Actions */}
         <div style={{
-          padding: '36px 32px',
+          padding: 'clamp(20px, 4vw, 36px) clamp(16px, 4vw, 32px)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between'
@@ -345,7 +348,8 @@ export const ProductDetailModal: React.FC = () => {
             <div style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '16px'
+              gap: '12px',
+              flexWrap: 'wrap'
             }}>
               {/* Quantity selector */}
               <div style={{
