@@ -27,6 +27,11 @@ export const ProductDetailModal: React.FC = () => {
     setSelectedProductForModal(null);
   };
 
+  const maxAllowed = Math.min(
+    product.stock,
+    product.maxOrderQuantity ?? product.stock
+  );
+
   return (
     <div 
       onClick={() => setSelectedProductForModal(null)}
@@ -354,48 +359,67 @@ export const ProductDetailModal: React.FC = () => {
               {/* Quantity selector */}
               <div style={{
                 display: 'flex',
-                alignItems: 'center',
-                border: '1.5px solid var(--border-medium)',
-                borderRadius: 'var(--radius-full)',
-                padding: '4px'
+                flexDirection: 'column',
+                gap: '6px'
               }}>
-                <button
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--bg-surface-soft)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 700
-                  }}
-                >
-                  -
-                </button>
-                <span style={{
-                  padding: '0 16px',
-                  fontWeight: 700,
-                  fontSize: '0.95rem'
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  border: '1.5px solid var(--border-medium)',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '4px'
                 }}>
-                  {quantity}
-                </span>
-                <button
-                  onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-                  style={{
-                    width: '32px',
-                    height: '32px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--bg-surface-soft)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 700
-                  }}
-                >
-                  +
-                </button>
+                  <button
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--bg-surface-soft)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700
+                    }}
+                  >
+                    -
+                  </button>
+                  <span style={{
+                    padding: '0 16px',
+                    fontWeight: 700,
+                    fontSize: '0.95rem'
+                  }}>
+                    {quantity}
+                  </span>
+                  <button
+                    onClick={() => setQuantity(Math.min(maxAllowed, quantity + 1))}
+                    disabled={quantity >= maxAllowed}
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '50%',
+                      backgroundColor: quantity >= maxAllowed ? '#F3EFEA' : 'var(--bg-surface-soft)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      opacity: quantity >= maxAllowed ? 0.45 : 1,
+                      cursor: quantity >= maxAllowed ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
+                {product.maxOrderQuantity && (
+                  <span style={{
+                    fontSize: '0.72rem',
+                    color: 'var(--accent-terracotta)',
+                    fontWeight: 600,
+                    textAlign: 'center'
+                  }}>
+                    🚦 Max {product.maxOrderQuantity} per order
+                  </span>
+                )}
               </div>
 
               {/* Add to Cart button */}

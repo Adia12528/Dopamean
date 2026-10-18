@@ -839,26 +839,47 @@ export const CartDrawer: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '8px' }}>
                       <div style={{
                         display: 'flex',
-                        alignItems: 'center',
-                        border: '1px solid var(--border-medium)',
-                        borderRadius: '999px',
-                        padding: '2px'
+                        flexDirection: 'column',
+                        gap: '4px'
                       }}>
-                        <button
-                          onClick={() => updateCartQuantity(item.product.id, -1)}
-                          style={{ width: '24px', height: '24px', borderRadius: '50%', fontWeight: 700, border: 'none', background: 'transparent', cursor: 'pointer' }}
-                        >
-                          -
-                        </button>
-                        <span style={{ padding: '0 10px', fontSize: '0.85rem', fontWeight: 700 }}>
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => updateCartQuantity(item.product.id, 1)}
-                          style={{ width: '24px', height: '24px', borderRadius: '50%', fontWeight: 700, border: 'none', background: 'transparent', cursor: 'pointer' }}
-                        >
-                          +
-                        </button>
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          border: '1px solid var(--border-medium)',
+                          borderRadius: '999px',
+                          padding: '2px'
+                        }}>
+                          <button
+                            onClick={() => updateCartQuantity(item.product.id, -1)}
+                            style={{ width: '24px', height: '24px', borderRadius: '50%', fontWeight: 700, border: 'none', background: 'transparent', cursor: 'pointer' }}
+                          >
+                            -
+                          </button>
+                          <span style={{ padding: '0 10px', fontSize: '0.85rem', fontWeight: 700 }}>
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateCartQuantity(item.product.id, 1)}
+                            disabled={!!(item.product.maxOrderQuantity && item.quantity >= item.product.maxOrderQuantity)}
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              fontWeight: 700,
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: (item.product.maxOrderQuantity && item.quantity >= item.product.maxOrderQuantity) ? 'not-allowed' : 'pointer',
+                              opacity: (item.product.maxOrderQuantity && item.quantity >= item.product.maxOrderQuantity) ? 0.35 : 1
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                        {item.product.maxOrderQuantity && (
+                          <span style={{ fontSize: '0.66rem', color: 'var(--accent-terracotta)', fontWeight: 600, textAlign: 'center' }}>
+                            max {item.product.maxOrderQuantity}
+                          </span>
+                        )}
                       </div>
 
                       <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-terracotta)' }}>

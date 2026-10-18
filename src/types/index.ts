@@ -94,6 +94,7 @@ export interface Product {
   tags: string[];
   isFeatured?: boolean;
   isBestSeller?: boolean;
+  maxOrderQuantity?: number;
   createdAt: string;
 }
 

@@ -329,14 +329,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addToCart = (product: Product, quantity = 1) => {
     setCart(prev => {
       const existing = prev.find(item => item.product.id === product.id);
+      const maxQty = product.maxOrderQuantity;
       if (existing) {
+        const newQty = existing.quantity + quantity;
+        const cappedQty = maxQty ? Math.min(newQty, maxQty) : newQty;
+        if (maxQty && existing.quantity >= maxQty) {
+          showToast(`⚠️ Max ${maxQty} per order for "${product.title}"`, 'error');
+          return prev;
+        }
         return prev.map(item =>
           item.product.id === product.id
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: cappedQty }
             : item
         );
       }
-      return [...prev, { product, quantity }];
+      const initialQty = maxQty ? Math.min(quantity, maxQty) : quantity;
+      return [...prev, { product, quantity: initialQty }];
     });
     setIsCartOpen(true);
     showToast(`Added ${quantity}x "${product.title}" to cart! 🧶`);
@@ -347,7 +355,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return prev
         .map(item => {
           if (item.product.id === productId) {
+            const maxQty = item.product.maxOrderQuantity;
             const newQty = item.quantity + delta;
+            if (maxQty && newQty > maxQty) {
+              showToast(`⚠️ Max ${maxQty} per order for "${item.product.title}"`, 'error');
+              return { ...item, quantity: maxQty };
+            }
             return newQty > 0 ? { ...item, quantity: newQty } : null;
           }
           return item;

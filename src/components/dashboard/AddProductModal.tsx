@@ -33,6 +33,7 @@ const buildInitialFormState = (editProduct?: Product | null) => {
       price: '100',
       originalPrice: '',
       stock: '15',
+      maxOrderQuantity: '',
       image: '/uploads/media_1791711047623.jpg',
       secondaryImages: [] as string[],
       newSecondaryUrl: '',
@@ -56,6 +57,7 @@ const buildInitialFormState = (editProduct?: Product | null) => {
     price: editProduct.price !== undefined ? editProduct.price.toString() : '100',
     originalPrice: editProduct.originalPrice ? editProduct.originalPrice.toString() : '',
     stock: editProduct.stock !== undefined ? editProduct.stock.toString() : '15',
+    maxOrderQuantity: editProduct.maxOrderQuantity ? editProduct.maxOrderQuantity.toString() : '',
     image: editProduct.image || '',
     secondaryImages: editProduct.secondaryImages || [],
     newSecondaryUrl: '',
@@ -83,6 +85,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
   const [price, setPrice] = useState(initialForm.price);
   const [originalPrice, setOriginalPrice] = useState(initialForm.originalPrice);
   const [stock, setStock] = useState(initialForm.stock);
+  const [maxOrderQuantity, setMaxOrderQuantity] = useState(initialForm.maxOrderQuantity);
   const [image, setImage] = useState(initialForm.image);
   const [secondaryImages, setSecondaryImages] = useState<string[]>(initialForm.secondaryImages);
   const [newSecondaryUrl, setNewSecondaryUrl] = useState(initialForm.newSecondaryUrl);
@@ -162,6 +165,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     const numOriginal = originalPrice.trim() ? parseFloat(originalPrice) : undefined;
     const numStock = parseInt(stock, 10) || 0;
     const numCraftHours = parseFloat(craftTimeHours) || 2;
+    const numMaxOrderQty = maxOrderQuantity.trim() ? parseInt(maxOrderQuantity, 10) : undefined;
 
     const productPayload = {
       title: title.trim(),
@@ -170,6 +174,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       price: numPrice,
       originalPrice: numOriginal,
       stock: numStock,
+      maxOrderQuantity: numMaxOrderQty,
       image: image.trim(),
       secondaryImages,
       yarnType: yarnType.trim(),
@@ -642,6 +647,30 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                     fontSize: '0.95rem'
                   }}
                 />
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                  🚦 Max Order Qty / Customer
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={maxOrderQuantity}
+                  onChange={(e) => setMaxOrderQuantity(e.target.value)}
+                  placeholder="e.g. 5 (leave blank for no limit)"
+                  style={{
+                    width: '100%',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: '1.5px dashed var(--accent-terracotta)',
+                    fontSize: '0.95rem',
+                    backgroundColor: '#FFF8F5'
+                  }}
+                />
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                  Customers can order at most this many pieces per item. Leave blank for unlimited.
+                </span>
               </div>
             </div>
 
