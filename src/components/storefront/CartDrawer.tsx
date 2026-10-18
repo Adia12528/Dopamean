@@ -440,7 +440,7 @@ export const CartDrawer: React.FC = () => {
                   }}
                 >
                   <FileText size={16} />
-                  <span>View / Print Tax Invoice</span>
+                  <span>Download Invoice PDF</span>
                 </button>
 
                 <button

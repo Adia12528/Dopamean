@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Order } from '../../types';
 import { useStore } from '../../context/StoreContext';
-import { Printer, X, Package } from 'lucide-react';
+import { Download, X, Package } from 'lucide-react';
 
 interface InvoiceModalProps {
   order: Order | null;
@@ -10,11 +10,56 @@ interface InvoiceModalProps {
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) => {
   const { settings } = useStore();
+  const [isDownloading, setIsDownloading] = useState(false);
 
   if (!order) return null;
 
-  const handlePrint = () => {
-    window.print();
+  const handleDownload = async () => {
+    setIsDownloading(true);
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const { default: jsPDF } = await import('jspdf');
+
+      const element = document.getElementById('printable-invoice');
+      if (!element) return;
+
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * pageWidth) / canvas.width;
+
+      // If content overflows a page, split across pages
+      let yPosition = 0;
+      let remainingHeight = imgHeight;
+      while (remainingHeight > 0) {
+        pdf.addImage(imgData, 'PNG', 0, -yPosition, imgWidth, imgHeight);
+        remainingHeight -= pageHeight;
+        yPosition += pageHeight;
+        if (remainingHeight > 0) pdf.addPage();
+      }
+
+      pdf.save(`Invoice-${order.id}.pdf`);
+    } catch (err) {
+      console.error('PDF download failed:', err);
+      // Fallback to print dialog
+      window.print();
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   const invoiceDate = new Date(order.createdAt).toLocaleDateString('en-IN', {
@@ -74,23 +119,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <button
-              onClick={handlePrint}
+              onClick={handleDownload}
+              disabled={isDownloading}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                padding: '8px 16px',
-                backgroundColor: 'var(--accent-terracotta)',
+                padding: '8px 18px',
+                backgroundColor: isDownloading ? '#aaa' : 'var(--accent-terracotta)',
                 color: '#FFFFFF',
                 borderRadius: '999px',
                 fontSize: '0.84rem',
                 fontWeight: 600,
                 border: 'none',
-                cursor: 'pointer'
+                cursor: isDownloading ? 'wait' : 'pointer',
+                transition: 'background 0.2s'
               }}
             >
-              <Printer size={15} />
-              <span>Print / Save as PDF</span>
+              <Download size={15} />
+              <span>{isDownloading ? 'Generating PDF…' : 'Download Invoice PDF'}</span>
             </button>
 
             <button
