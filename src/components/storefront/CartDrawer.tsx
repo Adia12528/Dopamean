@@ -14,9 +14,10 @@ import {
   CreditCard, 
   QrCode, 
   Truck, 
-  FileText, 
-  ShieldCheck
+  ShieldCheck,
+  Download
 } from 'lucide-react';
+import { downloadInvoicePDF } from '../../utils/downloadInvoicePdf';
 
 interface RazorpayOptions {
   key: string;
@@ -63,8 +64,7 @@ export const CartDrawer: React.FC = () => {
     syncOrder,
     clearCart,
     settings,
-    setIsTrackingModalOpen,
-    setActiveInvoiceOrder
+    setIsTrackingModalOpen
   } = useStore();
 
   const [promoInput, setPromoInput] = useState('');
@@ -72,6 +72,7 @@ export const CartDrawer: React.FC = () => {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [orderComplete, setOrderComplete] = useState<Order | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
 
   // Payment method selection
   const [paymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod' | 'whatsapp'>(() =>
@@ -160,11 +161,19 @@ export const CartDrawer: React.FC = () => {
     try {
       // 1. RAZORPAY ONLINE GATEWAY FLOW
       if (paymentMethod === 'razorpay') {
-        if (!settings.razorpayKeyId) throw new Error('Online card payment is not configured. Please choose UPI or Cash on Delivery.');
         if (!window.Razorpay) {
-          alert('Razorpay Checkout SDK is still loading. Please retry or choose UPI QR / COD.');
-          setIsSubmitting(false);
-          return;
+          const loaded = await new Promise<boolean>((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+          });
+          if (!loaded || !window.Razorpay) {
+            alert('Razorpay Checkout SDK is still loading. Please retry or choose UPI QR / COD.');
+            setIsSubmitting(false);
+            return;
+          }
         }
 
         const storeOrder = await api.createOrder({
@@ -186,10 +195,13 @@ export const CartDrawer: React.FC = () => {
         pendingRazorpayStoreOrderId = storeOrder.id;
         const rzpOrder = await api.createRazorpayOrder({ orderId: storeOrder.id });
 
+        const rzpKey = rzpOrder.keyId || settings.razorpayKeyId || '';
+        if (!rzpKey) throw new Error('Razorpay public key is missing. Please contact store support.');
+
         const rzpOptions = {
-          key: rzpOrder.keyId || settings.razorpayKeyId,
+          key: rzpKey,
           amount: rzpOrder.amount,
-          currency: rzpOrder.currency,
+          currency: rzpOrder.currency || 'INR',
           name: settings.storeName,
           description: `Handcrafted Crochet Order (${cart.length} items)`,
           order_id: rzpOrder.orderId,
@@ -420,9 +432,19 @@ export const CartDrawer: React.FC = () => {
                 </button>
 
                 <button
-                  onClick={() => {
-                    setActiveInvoiceOrder(orderComplete);
+                  onClick={async () => {
+                    if (!orderComplete || isDownloadingInvoice) return;
+                    setIsDownloadingInvoice(true);
+                    try {
+                      await downloadInvoicePDF(orderComplete, settings);
+                    } catch (err) {
+                      console.error('Invoice download failed:', err);
+                      alert('Could not generate PDF. Please try again or track parcel.');
+                    } finally {
+                      setIsDownloadingInvoice(false);
+                    }
                   }}
+                  disabled={isDownloadingInvoice}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -432,15 +454,17 @@ export const CartDrawer: React.FC = () => {
                     padding: '12px',
                     borderRadius: 'var(--radius-full)',
                     border: '1.5px solid var(--accent-terracotta)',
-                    backgroundColor: '#FFFFFF',
+                    backgroundColor: isDownloadingInvoice ? '#FFF7ED' : '#FFFFFF',
                     color: 'var(--accent-terracotta)',
                     fontWeight: 700,
                     fontSize: '0.9rem',
-                    cursor: 'pointer'
+                    cursor: isDownloadingInvoice ? 'wait' : 'pointer',
+                    opacity: isDownloadingInvoice ? 0.8 : 1,
+                    transition: 'all 0.2s ease'
                   }}
                 >
-                  <FileText size={16} />
-                  <span>Download Invoice PDF</span>
+                  <Download size={16} />
+                  <span>{isDownloadingInvoice ? 'Downloading Invoice PDF…' : 'Download Invoice PDF'}</span>
                 </button>
 
                 <button

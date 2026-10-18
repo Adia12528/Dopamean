@@ -436,7 +436,7 @@ app.get('/api/settings', async (req, res) => {
     // Do not leak secret key in public settings GET
     const sanitized = { ...settings };
     delete sanitized.adminPasscode;
-    sanitized.razorpayKeyId = sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';
+    sanitized.razorpayKeyId = (sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
     if (sanitized.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET) {
       sanitized.razorpayKeySecretConfigured = true;
       delete sanitized.razorpayKeySecret;
@@ -445,6 +445,12 @@ app.get('/api/settings', async (req, res) => {
       sanitized.razorpayWebhookSecretConfigured = true;
     }
     delete sanitized.razorpayWebhookSecret;
+
+    // Enable Razorpay if keys are configured (either via DB or process.env) unless explicitly disabled
+    const hasRazorpayKeys = Boolean(sanitized.razorpayKeyId && sanitized.razorpayKeySecretConfigured);
+    if (hasRazorpayKeys && settings.paymentRazorpayEnabled !== false) {
+      sanitized.paymentRazorpayEnabled = true;
+    }
     res.json(sanitized);
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve settings' });
@@ -635,8 +641,13 @@ app.post('/api/orders', orderLimit, async (req, res) => {
     const method = req.body?.paymentMethod || 'cod';
     if (method === 'upi' && settings.paymentUpiEnabled === false) return res.status(400).json({ error: 'UPI payments are currently unavailable.' });
     if (method === 'cod' && settings.paymentCodEnabled === false) return res.status(400).json({ error: 'Cash on Delivery is currently unavailable.' });
-    if (method === 'razorpay' && (!settings.paymentRazorpayEnabled || !(settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID) || !(settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET))) {
-      return res.status(400).json({ error: 'Razorpay is not configured or enabled.' });
+    const rzpKeyId = (settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
+    const rzpKeySecret = (settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
+    const isRazorpayConfigured = Boolean(rzpKeyId && rzpKeySecret);
+    const isRazorpayActive = isRazorpayConfigured && settings.paymentRazorpayEnabled !== false;
+
+    if (method === 'razorpay' && !isRazorpayActive) {
+      return res.status(400).json({ error: 'Razorpay online payment is currently unavailable. Please choose UPI QR or Cash on Delivery.' });
     }
     const newOrder = await db.createOrder(req.body);
     res.status(201).json(newOrder);
@@ -708,8 +719,8 @@ app.delete('/api/reviews/:id', requireAdmin, async (req, res) => {
 // ==========================================
 app.post('/api/payments/razorpay/test', requireAdmin, paymentLimit, async (req, res) => {
   const settings = await db.getSettings();
-  const keyId = settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID;
-  const keySecret = settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+  const keyId = (settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
+  const keySecret = (settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
   if (!keyId || !keySecret) return res.status(400).json({ error: 'Save both Razorpay Key ID and Key Secret first.' });
   try {
     const instance = new Razorpay({ key_id: keyId, key_secret: keySecret });
@@ -725,10 +736,10 @@ app.post('/api/payments/razorpay/create-order', paymentLimit, async (req, res) =
     const { orderId } = req.body;
     const settings = await db.getSettings();
 
-    const keyId = settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID;
-    const keySecret = settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+    const keyId = (settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
+    const keySecret = (settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
 
-    if (!settings.paymentRazorpayEnabled || !keyId || !keySecret) {
+    if (!keyId || !keySecret) {
       return res.status(400).json({
         error: 'Razorpay keys are not configured yet in Studio Settings. You can also pay instantly via UPI QR or Cash on Delivery!'
       });
@@ -747,7 +758,8 @@ app.post('/api/payments/razorpay/create-order', paymentLimit, async (req, res) =
     const options = {
       amount: Math.round(storeOrder.total * 100),
       currency: 'INR',
-      receipt: storeOrder.id,
+      receipt: String(storeOrder.id).slice(0, 40),
+      payment_capture: 1,
       notes: { storeOrderId: storeOrder.id }
     };
 
@@ -771,7 +783,8 @@ app.post('/api/payments/razorpay/verify', paymentLimit, async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
     const settings = await db.getSettings();
-    const keySecret = settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET;
+    const keyId = (settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
+    const keySecret = (settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
 
     if (!keySecret) {
       return res.status(400).json({ error: 'Razorpay key secret not configured' });
@@ -792,15 +805,25 @@ app.post('/api/payments/razorpay/verify', paymentLimit, async (req, res) => {
     }
 
     const instance = new Razorpay({
-      key_id: settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID,
+      key_id: keyId,
       key_secret: keySecret
     });
-    const payment = await instance.payments.fetch(razorpay_payment_id);
+    let payment = await instance.payments.fetch(razorpay_payment_id);
     if (payment.order_id !== storeOrder.razorpayOrderId || payment.amount !== Math.round(storeOrder.total * 100)) {
       return res.status(400).json({ success: false, message: 'Payment details do not match this order.' });
     }
+
+    // Auto-capture if merchant Razorpay account is in authorized mode
+    if (payment.status === 'authorized') {
+      try {
+        payment = await instance.payments.capture(razorpay_payment_id, Math.round(storeOrder.total * 100), 'INR');
+      } catch (capErr) {
+        console.error('Razorpay auto-capture error:', capErr);
+      }
+    }
+
     if (payment.status !== 'captured') {
-      return res.status(409).json({ success: false, message: 'Payment has not been captured yet.' });
+      return res.status(409).json({ success: false, message: `Payment status is ${payment.status}, expected captured.` });
     }
     const updated = await db.updateOrderStatus(orderId, 'processing', {
       paymentStatus: 'paid',
