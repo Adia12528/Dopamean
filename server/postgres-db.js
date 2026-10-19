@@ -105,6 +105,13 @@ export const postgresDb = {
     await pool.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL');
     await pool.query('ALTER TABLE users DROP CONSTRAINT IF EXISTS users_password_hash_check');
     await pool.query('ALTER TABLE users ADD CONSTRAINT users_password_hash_check CHECK(password_hash IS NULL OR length(trim(password_hash))>0)');
+    // Ensure order status and payment status constraints accommodate full delivery lifecycle and cancellations
+    await pool.query(`
+      ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+      ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK(status IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled'));
+      ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_status_check;
+      ALTER TABLE orders ADD CONSTRAINT orders_payment_status_check CHECK(payment_status IN ('pending','paid','failed','refund_pending','refunded'));
+    `);
     await pool.query('INSERT INTO settings(id,data) VALUES (1,$1::jsonb) ON CONFLICT(id) DO NOTHING', [JSON.stringify(DEFAULT_SETTINGS)]);
     await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_idx ON users(lower(email))');
   },

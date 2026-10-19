@@ -9,6 +9,15 @@ const adminFetch = (url: string, init: RequestInit = {}) => {
   return fetch(url, { ...init, headers });
 };
 
+// Uses whichever authenticated token is present (admin or delivery)
+const authFetch = (url: string, init: RequestInit = {}) => {
+  const token = sessionStorage.getItem('dopamean_admin_token') || sessionStorage.getItem('dopamean_delivery_token');
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(url, { ...init, headers });
+};
+
+
 export const api = {
   // SETTINGS
   getSettings: async (): Promise<StoreSettings> => {
@@ -319,7 +328,53 @@ export const api = {
     }
   },
 
-  adminLogout: () => sessionStorage.removeItem('dopamean_admin_token'),
+  adminLogout: () => {
+    sessionStorage.removeItem('dopamean_admin_token');
+    sessionStorage.removeItem('dopamean_delivery_token');
+  },
+
+  // DELIVERY AGENT AUTH
+  deliveryAgentLogin: async (passcode: string): Promise<{ success: boolean; token: string; role: string }> => {
+    const res = await fetch(`${BASE_URL}/api/delivery/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passcode })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.message || 'Authentication failed');
+    }
+    const result = await res.json();
+    sessionStorage.setItem('dopamean_delivery_token', result.token);
+    return result;
+  },
+
+  deliveryLogout: () => {
+    sessionStorage.removeItem('dopamean_delivery_token');
+  },
+
+  getDeliveryOrders: async (): Promise<import('../types').Order[]> => {
+    const res = await authFetch(`${BASE_URL}/api/delivery/orders`);
+    if (!res.ok) throw new Error('Failed to fetch delivery orders');
+    return res.json();
+  },
+
+  updateDeliveryOrderStatus: async (
+    orderId: string,
+    status: 'out_for_delivery' | 'delivered',
+    extras?: { deliveryNotes?: string; trackingNumber?: string }
+  ): Promise<import('../types').Order> => {
+    const res = await authFetch(`${BASE_URL}/api/delivery/orders/${orderId}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status, ...extras })
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update delivery status');
+    }
+    return res.json();
+  },
 
   // USER AUTH
   userRegister: async (data: { name: string; email: string; password: string; phone?: string; address?: string; city?: string; pincode?: string }): Promise<{ success: boolean; token: string; user: UserProfile }> => {

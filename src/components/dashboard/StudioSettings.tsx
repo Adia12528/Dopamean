@@ -16,9 +16,13 @@ import {
   Lock, 
   Database,
   Eye,
+  EyeOff,
   Info,
   CreditCard,
-  QrCode
+  QrCode,
+  User,
+  KeyRound,
+  ShieldAlert
 } from 'lucide-react';
 
 // Recommended harmonious palettes for artisanal crochet
@@ -43,8 +47,21 @@ export const StudioSettings: React.FC = () => {
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Security Credentials state
+  const [superAdminIdInput, setSuperAdminIdInput] = useState(() => settings.superAdminId || 'superadmin');
+  const [newSuperAdminPassword, setNewSuperAdminPassword] = useState('');
+  const [confirmSuperAdminPassword, setConfirmSuperAdminPassword] = useState('');
+  const [showSuperAdminPw, setShowSuperAdminPw] = useState(false);
+
+  const [newDeliveryPasscode, setNewDeliveryPasscode] = useState('');
+  const [confirmDeliveryPasscode, setConfirmDeliveryPasscode] = useState('');
+  const [showDeliveryPasscode, setShowDeliveryPasscode] = useState(false);
+
   const [newPasscode, setNewPasscode] = useState('');
   const [confirmPasscode, setConfirmPasscode] = useState('');
+  const [showPasscode, setShowPasscode] = useState(false);
+
   const [clearRazorpaySecret, setClearRazorpaySecret] = useState(false);
   const [clearRazorpayWebhookSecret, setClearRazorpayWebhookSecret] = useState(false);
   const [isTestingRazorpay, setIsTestingRazorpay] = useState(false);
@@ -85,22 +102,60 @@ export const StudioSettings: React.FC = () => {
   const handleSave = async (e?: React.FormEvent): Promise<boolean> => {
     if (e) e.preventDefault();
     
-    // Check if passcode is being updated
     const payload = { ...form };
     delete payload.adminPasscode;
+    delete payload.superAdminPassword;
+    delete payload.deliveryAgentPasscode;
     delete payload.razorpayKeySecret;
     delete payload.razorpayWebhookSecret;
     if (clearRazorpaySecret) payload.razorpayKeySecret = '';
     else if (form.razorpayKeySecret?.trim()) payload.razorpayKeySecret = form.razorpayKeySecret.trim();
     if (clearRazorpayWebhookSecret) payload.razorpayWebhookSecret = '';
     else if (form.razorpayWebhookSecret?.trim()) payload.razorpayWebhookSecret = form.razorpayWebhookSecret.trim();
-    if (newPasscode.trim()) {
-      if (newPasscode !== confirmPasscode) {
-        alert('Passcodes do not match! Please verify your new passcode.');
+
+    // 1. Super Admin ID change
+    if (superAdminIdInput.trim() && superAdminIdInput.trim() !== (settings.superAdminId || 'superadmin')) {
+      if (superAdminIdInput.trim().length < 3) {
+        alert('Super Admin ID must be at least 3 characters.');
         return false;
       }
-      if (newPasscode.trim().length < 12) {
-        alert('Use a passcode with at least 12 characters.');
+      payload.superAdminId = superAdminIdInput.trim();
+    }
+
+    // 2. Super Admin Password change
+    if (newSuperAdminPassword.trim()) {
+      if (newSuperAdminPassword !== confirmSuperAdminPassword) {
+        alert('Super Admin passwords do not match! Please verify.');
+        return false;
+      }
+      if (newSuperAdminPassword.trim().length < 6) {
+        alert('Super Admin password must be at least 6 characters.');
+        return false;
+      }
+      payload.superAdminPassword = newSuperAdminPassword.trim();
+    }
+
+    // 3. Delivery Agent Passcode change
+    if (newDeliveryPasscode.trim()) {
+      if (newDeliveryPasscode !== confirmDeliveryPasscode) {
+        alert('Delivery Agent passcodes do not match! Please verify.');
+        return false;
+      }
+      if (newDeliveryPasscode.trim().length < 6) {
+        alert('Delivery Agent passcode must be at least 6 characters.');
+        return false;
+      }
+      payload.deliveryAgentPasscode = newDeliveryPasscode.trim();
+    }
+
+    // 4. Studio Admin Passcode change (optional)
+    if (newPasscode.trim()) {
+      if (newPasscode !== confirmPasscode) {
+        alert('Studio Staff Passcodes do not match! Please verify.');
+        return false;
+      }
+      if (newPasscode.trim().length < 6) {
+        alert('Studio Staff Passcode must be at least 6 characters.');
         return false;
       }
       payload.adminPasscode = newPasscode.trim();
@@ -118,12 +173,16 @@ export const StudioSettings: React.FC = () => {
       setClearRazorpaySecret(false);
       setClearRazorpayWebhookSecret(false);
       setSavedSuccess(true);
+      setNewSuperAdminPassword('');
+      setConfirmSuperAdminPassword('');
+      setNewDeliveryPasscode('');
+      setConfirmDeliveryPasscode('');
       setNewPasscode('');
       setConfirmPasscode('');
       setTimeout(() => setSavedSuccess(false), 2500);
       return true;
     } catch {
-      alert('Could not save settings. Check the required payment details and try again.');
+      alert('Could not save settings. Check the required details and try again.');
       return false;
     }
   };
@@ -138,7 +197,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'payments' as const, label: 'Payment Gateways & UPI', icon: <CreditCard size={16} /> },
     { id: 'contact' as const, label: 'Contact & Socials', icon: <MessageCircle size={16} /> },
     { id: 'footer' as const, label: 'Footer & Copyright', icon: <Sliders size={16} /> },
-    { id: 'security' as const, label: 'Admin Passcode', icon: <Lock size={16} /> },
+    { id: 'security' as const, label: 'Security & Access Passcodes', icon: <Lock size={16} /> },
     { id: 'db' as const, label: 'Database & Backup', icon: <Database size={16} /> }
   ];
 
@@ -1515,70 +1574,338 @@ export const StudioSettings: React.FC = () => {
             </div>
           )}
 
-          {/* 9. SECURITY & PASSCODE */}
+          {/* 9. SECURITY & CREDENTIALS MANAGEMENT */}
           {activeSection === 'security' && (
-            <div style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '20px',
-              padding: '28px',
-              border: '1px solid var(--border-medium)',
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                <Lock size={20} color="var(--accent-terracotta)" />
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                  Super Admin Security Passcode
-                </h3>
-              </div>
-              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
-                Change your studio master passcode. Normal users cannot access this studio unless they enter this passcode.
-              </p>
-
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
-                    New Super Admin Passcode
-                  </label>
-                  <input
-                    type="password"
-                    value={newPasscode}
-                    onChange={(e) => setNewPasscode(e.target.value)}
-                    placeholder="Enter new master passcode..."
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
-                      border: '1px solid var(--border-medium)',
-                      fontSize: '0.9rem'
-                    }}
-                  />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* Card 1: Super Admin Master Account */}
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '20px',
+                padding: '28px',
+                border: '1.5px solid #FCA5A5',
+                boxShadow: '0 4px 20px rgba(220, 38, 38, 0.06)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 12,
+                      backgroundColor: '#FEF2F2', border: '1px solid #FECACA',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <ShieldCheck size={22} color="#DC2626" />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                        Super Admin Master Account
+                      </h3>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        Full studio ownership privileges: theme customization, prices, payment gateways, and order operations.
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{
+                    backgroundColor: '#FEF2F2',
+                    color: '#DC2626',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    border: '1px solid #FECACA'
+                  }}>
+                    👑 Full Master Access
+                  </span>
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
-                    Confirm New Passcode
-                  </label>
-                  <input
-                    type="password"
-                    value={confirmPasscode}
-                    onChange={(e) => setConfirmPasscode(e.target.value)}
-                    placeholder="Confirm new passcode..."
-                    style={{
-                      width: '100%',
-                      padding: '10px 14px',
-                      borderRadius: '10px',
-                      border: '1px solid var(--border-medium)',
-                      fontSize: '0.9rem'
-                    }}
-                  />
+                <div style={{
+                  marginTop: '16px',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  backgroundColor: '#FFF5F5',
+                  border: '1px dashed #FECACA',
+                  fontSize: '0.8rem',
+                  color: '#991B1B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <ShieldAlert size={16} style={{ flexShrink: 0 }} />
+                  <span>
+                    When changed, the new password is saved to both the live database and your server <strong>.env</strong> file. All previous passwords become immediately invalid.
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px', marginTop: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Super Admin Username / ID
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <User size={16} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-subtle)' }} />
+                      <input
+                        type="text"
+                        value={superAdminIdInput}
+                        onChange={(e) => setSuperAdminIdInput(e.target.value)}
+                        placeholder="e.g. superadmin"
+                        style={{
+                          width: '100%',
+                          padding: '10px 14px 10px 38px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-medium)',
+                          fontSize: '0.9rem',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      New Super Admin Password
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <Lock size={16} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-subtle)' }} />
+                      <input
+                        type={showSuperAdminPw ? 'text' : 'password'}
+                        value={newSuperAdminPassword}
+                        onChange={(e) => setNewSuperAdminPassword(e.target.value)}
+                        placeholder="Enter new master password (min 6 chars)..."
+                        style={{
+                          width: '100%',
+                          padding: '10px 42px 10px 38px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-medium)',
+                          fontSize: '0.9rem',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowSuperAdminPw(!showSuperAdminPw)}
+                        style={{
+                          position: 'absolute', right: 8, top: 8, width: 32, height: 32,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        {showSuperAdminPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Confirm Master Password
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <Lock size={16} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-subtle)' }} />
+                      <input
+                        type={showSuperAdminPw ? 'text' : 'password'}
+                        value={confirmSuperAdminPassword}
+                        onChange={(e) => setConfirmSuperAdminPassword(e.target.value)}
+                        placeholder="Confirm new master password..."
+                        style={{
+                          width: '100%',
+                          padding: '10px 14px 10px 38px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-medium)',
+                          fontSize: '0.9rem',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div style={{ marginTop: '16px', padding: '12px 16px', borderRadius: '12px', backgroundColor: 'var(--bg-surface-soft)', border: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <Info size={16} color="var(--text-muted)" />
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Passcodes are write-only. Set a new value above; the current passcode is never displayed.
-                </span>
+              {/* Card 2: Delivery Agent Access Passcode */}
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '20px',
+                padding: '28px',
+                border: '1.5px solid #93C5FD',
+                boxShadow: '0 4px 20px rgba(37, 99, 235, 0.06)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: 12,
+                      backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                      <Truck size={22} color="#2563EB" />
+                    </div>
+                    <div>
+                      <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                        Delivery Agent Passcode
+                      </h3>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        Restricted portal for field dispatchers and delivery drivers — no access to finances or catalog.
+                      </p>
+                    </div>
+                  </div>
+                  <span style={{
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    fontSize: '0.74rem',
+                    fontWeight: 700,
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    border: '1px solid #BFDBFE'
+                  }}>
+                    🚚 Field Delivery Only
+                  </span>
+                </div>
+
+                <div style={{
+                  marginTop: '16px',
+                  padding: '12px 16px',
+                  borderRadius: '12px',
+                  backgroundColor: '#F0F9FF',
+                  border: '1px dashed #BAE6FD',
+                  fontSize: '0.8rem',
+                  color: '#0369A1',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <Info size={16} style={{ flexShrink: 0 }} />
+                  <span>
+                    Delivery agents log in with this passcode to view dispatched orders, update tracking to <strong>Out for Delivery</strong> / <strong>Delivered</strong>, and trigger WhatsApp COD reminders. Default: <strong>deliver123</strong>.
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px', marginTop: '20px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      New Delivery Agent Passcode
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <KeyRound size={16} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-subtle)' }} />
+                      <input
+                        type={showDeliveryPasscode ? 'text' : 'password'}
+                        value={newDeliveryPasscode}
+                        onChange={(e) => setNewDeliveryPasscode(e.target.value)}
+                        placeholder="Enter new delivery passcode (min 6 chars)..."
+                        style={{
+                          width: '100%',
+                          padding: '10px 42px 10px 38px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-medium)',
+                          fontSize: '0.9rem',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowDeliveryPasscode(!showDeliveryPasscode)}
+                        style={{
+                          position: 'absolute', right: 8, top: 8, width: 32, height: 32,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        {showDeliveryPasscode ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Confirm Delivery Passcode
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <KeyRound size={16} style={{ position: 'absolute', left: 12, top: 13, color: 'var(--text-subtle)' }} />
+                      <input
+                        type={showDeliveryPasscode ? 'text' : 'password'}
+                        value={confirmDeliveryPasscode}
+                        onChange={(e) => setConfirmDeliveryPasscode(e.target.value)}
+                        placeholder="Confirm delivery passcode..."
+                        style={{
+                          width: '100%',
+                          padding: '10px 14px 10px 38px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-medium)',
+                          fontSize: '0.9rem',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Optional Studio Staff Admin Passcode */}
+              <div style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: '20px',
+                padding: '24px',
+                border: '1px solid var(--border-medium)',
+                boxShadow: 'var(--shadow-sm)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <Lock size={18} color="var(--accent-terracotta)" />
+                  <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                    Studio Staff Admin Passcode (Optional)
+                  </h4>
+                </div>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                  Secondary passcode for studio assistants who help manage products, craft queues, and catalog items.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      New Studio Staff Passcode
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showPasscode ? 'text' : 'password'}
+                        value={newPasscode}
+                        onChange={(e) => setNewPasscode(e.target.value)}
+                        placeholder="Enter staff passcode..."
+                        style={{
+                          width: '100%',
+                          padding: '10px 42px 10px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid var(--border-medium)',
+                          fontSize: '0.88rem',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasscode(!showPasscode)}
+                        style={{
+                          position: 'absolute', right: 8, top: 8, width: 32, height: 32,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: 'var(--text-subtle)', background: 'none', border: 'none', cursor: 'pointer'
+                        }}
+                      >
+                        {showPasscode ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Confirm Staff Passcode
+                    </label>
+                    <input
+                      type={showPasscode ? 'text' : 'password'}
+                      value={confirmPasscode}
+                      onChange={(e) => setConfirmPasscode(e.target.value)}
+                      placeholder="Confirm staff passcode..."
+                      style={{
+                        width: '100%',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-medium)',
+                        fontSize: '0.88rem',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           )}

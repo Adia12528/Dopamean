@@ -124,21 +124,24 @@ function getSuperAdminCredentials(settings) {
 
 function getValidAdminPasscodes(settings) {
   // If passcode is explicitly configured in DB settings, ONLY that passcode is valid!
-  // No other passcode remains valid after the password is changed.
   const dbPass = settings?.adminPasscode?.trim();
-  if (dbPass) {
-    return [dbPass];
-  }
+  if (dbPass) return [dbPass];
   const envPass = process.env.ADMIN_PASSCODE?.trim();
-  if (envPass && envPass !== 'replace-with-a-unique-admin-passcode') {
-    return [envPass];
-  }
+  if (envPass && envPass !== 'replace-with-a-unique-admin-passcode') return [envPass];
   return ['admin123'];
 }
 
 function configuredAdminPasscode(settings) {
-  const passcodes = getValidAdminPasscodes(settings);
-  return passcodes[0] || 'admin123';
+  return getValidAdminPasscodes(settings)[0] || 'admin123';
+}
+
+// ── Delivery Agent Auth ────────────────────────────────────────────────────────
+function getDeliveryAgentPasscode(settings) {
+  const dbPass = settings?.deliveryAgentPasscode?.trim();
+  if (dbPass) return dbPass;
+  const envPass = process.env.DELIVERY_AGENT_PASSCODE?.trim();
+  if (envPass) return envPass;
+  return 'deliver123';
 }
 
 function getImageExtension(buffer) {
@@ -155,9 +158,9 @@ function safeEqualHex(left, right) {
   return a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-// Simple admin auth helper token generator & validator
-function generateAdminToken(passcode) {
-  const payload = JSON.stringify({ role: 'admin', ts: Date.now() });
+// ── Admin token (superadmin / studio) ────────────────────────────────────────
+function generateAdminToken(passcode, role = 'admin') {
+  const payload = JSON.stringify({ role, ts: Date.now() });
   const hmac = crypto.createHmac('sha256', ADMIN_JWT_SECRET).update(payload + passcode).digest('hex');
   return Buffer.from(`${payload}::${hmac}`).toString('base64');
 }
@@ -170,29 +173,65 @@ function verifyAdminToken(token, currentPasscode) {
     const expectedHmac = crypto.createHmac('sha256', ADMIN_JWT_SECRET).update(payload + currentPasscode).digest('hex');
     if (!safeEqualHex(hmac, expectedHmac)) return false;
     const data = JSON.parse(payload);
-    // Token valid for 7 days
-    return data.role === 'admin' && Number.isFinite(data.ts) && data.ts <= Date.now() && Date.now() - data.ts <= 7 * 24 * 60 * 60 * 1000;
-  } catch {
-    return false;
-  }
+    return ['admin','superadmin'].includes(data.role) && Number.isFinite(data.ts) && data.ts <= Date.now() && Date.now() - data.ts <= 7 * 24 * 60 * 60 * 1000;
+  } catch { return false; }
 }
 
-// Optional auth middleware for sensitive admin endpoints
+// ── Delivery Agent token ──────────────────────────────────────────────────────
+function generateDeliveryToken(passcode) {
+  const payload = JSON.stringify({ role: 'delivery_agent', ts: Date.now() });
+  const hmac = crypto.createHmac('sha256', ADMIN_JWT_SECRET).update(payload + passcode).digest('hex');
+  return Buffer.from(`${payload}::${hmac}`).toString('base64');
+}
+
+function verifyDeliveryToken(token, currentPasscode) {
+  if (!token) return false;
+  try {
+    const raw = Buffer.from(token, 'base64').toString('utf8');
+    const [payload, hmac] = raw.split('::');
+    const expectedHmac = crypto.createHmac('sha256', ADMIN_JWT_SECRET).update(payload + currentPasscode).digest('hex');
+    if (!safeEqualHex(hmac, expectedHmac)) return false;
+    const data = JSON.parse(payload);
+    return data.role === 'delivery_agent' && Number.isFinite(data.ts) && data.ts <= Date.now() && Date.now() - data.ts <= 12 * 60 * 60 * 1000; // 12h session
+  } catch { return false; }
+}
+
+// ── Admin middleware (superadmin full access) ─────────────────────────────────
 function requireAdmin(req, res, next) {
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Unauthorized: Admin authentication required.' });
 
   const isSuperAdmin = verifyAdminToken(token, '__SUPER_ADMIN__');
-  if (isSuperAdmin) return next();
+  if (isSuperAdmin) { req.adminRole = 'superadmin'; return next(); }
 
   Promise.resolve().then(() => db.getSettings()).then(settings => {
     const validPasscodes = getValidAdminPasscodes(settings);
     const isValid = validPasscodes.some(p => verifyAdminToken(token, p));
-    if (!isValid) {
-      return res.status(401).json({ error: 'Unauthorized: Valid admin credentials required.' });
-    }
+    if (!isValid) return res.status(401).json({ error: 'Unauthorized: Valid admin credentials required.' });
+    req.adminRole = 'admin';
     next();
+  }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
+}
+
+// ── Delivery Agent middleware ──────────────────────────────────────────────────
+// Allows: superadmin (full) or delivery_agent (delivery ops only)
+function requireDeliveryAgent(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Delivery agent authentication required.' });
+
+  // Superadmin can access everything
+  if (verifyAdminToken(token, '__SUPER_ADMIN__')) { req.adminRole = 'superadmin'; return next(); }
+
+  Promise.resolve().then(() => db.getSettings()).then(settings => {
+    // Check if it's a regular admin token
+    const adminPasscodes = getValidAdminPasscodes(settings);
+    if (adminPasscodes.some(p => verifyAdminToken(token, p))) { req.adminRole = 'admin'; return next(); }
+    // Check if it's a delivery agent token
+    const deliveryPasscode = getDeliveryAgentPasscode(settings);
+    if (verifyDeliveryToken(token, deliveryPasscode)) { req.adminRole = 'delivery_agent'; return next(); }
+    return res.status(401).json({ error: 'Unauthorized: Valid credentials required.' });
   }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
 }
 
@@ -320,17 +359,92 @@ app.post('/api/admin/verify', async (req, res) => {
     const { token } = req.body;
     if (!token) return res.json({ valid: false, role: null });
     const isSuperAdmin = verifyAdminToken(token, '__SUPER_ADMIN__');
-    if (isSuperAdmin) {
-      return res.json({ valid: true, role: 'superadmin' });
-    }
+    if (isSuperAdmin) return res.json({ valid: true, role: 'superadmin' });
     const settings = await db.getSettings();
     const validPasscodes = getValidAdminPasscodes(settings);
     const isAdmin = validPasscodes.some(p => verifyAdminToken(token, p));
-    res.json({ valid: isAdmin, role: isAdmin ? 'admin' : null });
+    if (isAdmin) return res.json({ valid: true, role: 'admin' });
+    // Check delivery agent
+    const deliveryPasscode = getDeliveryAgentPasscode(settings);
+    const isDelivery = verifyDeliveryToken(token, deliveryPasscode);
+    res.json({ valid: isDelivery, role: isDelivery ? 'delivery_agent' : null });
   } catch {
     res.json({ valid: false, role: null });
   }
 });
+
+// ==========================================
+// DELIVERY AGENT AUTHENTICATION API
+// ==========================================
+app.post('/api/delivery/login', loginLimit, async (req, res) => {
+  try {
+    const { passcode } = req.body;
+    const settings = await db.getSettings();
+    const deliveryPasscode = getDeliveryAgentPasscode(settings);
+    const provided = String(passcode || '').trim();
+    if (!provided || provided !== deliveryPasscode) {
+      return res.status(401).json({ success: false, message: 'Invalid delivery agent passcode' });
+    }
+    const token = generateDeliveryToken(deliveryPasscode);
+    res.json({
+      success: true,
+      token,
+      role: 'delivery_agent',
+      message: 'Delivery agent authenticated successfully'
+    });
+  } catch {
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
+// Delivery agent: get orders in their pipeline (shipped + out_for_delivery)
+app.get('/api/delivery/orders', requireDeliveryAgent, async (req, res) => {
+  try {
+    const allOrders = await db.getOrders();
+    // Superadmin and admin see all; delivery agent sees only actionable orders
+    const deliveryStatuses = ['shipped', 'out_for_delivery', 'delivered'];
+    const visible = req.adminRole === 'delivery_agent'
+      ? allOrders.filter(o => deliveryStatuses.includes(o.status))
+      : allOrders;
+    res.json(visible);
+  } catch {
+    res.status(500).json({ error: 'Failed to retrieve delivery orders' });
+  }
+});
+
+// Delivery agent: update status — restricted to out_for_delivery and delivered only
+app.patch('/api/delivery/orders/:id/status', requireDeliveryAgent, async (req, res) => {
+  try {
+    const rawStatus = String(req.body.status || '').trim().toLowerCase();
+    const statusMap = {
+      'out_for_delivery': 'out_for_delivery',
+      'out for delivery': 'out_for_delivery',
+      'delivered': 'delivered',
+      'deliver': 'delivered'
+    };
+    const status = statusMap[rawStatus];
+
+    if (req.adminRole === 'delivery_agent' && !status) {
+      return res.status(403).json({ error: 'Delivery agents can only update status to "out_for_delivery" or "delivered".' });
+    }
+
+    // Superadmin/admin: fall through to full status update
+    const effectiveStatus = status || rawStatus;
+    const allowedStatuses = ['pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled'];
+    if (!allowedStatuses.includes(effectiveStatus)) {
+      return res.status(400).json({ error: `Invalid status: "${req.body.status}"` });
+    }
+
+    const { deliveryNotes, trackingNumber } = req.body;
+    const updated = await db.updateOrderStatus(req.params.id, effectiveStatus, { deliveryNotes, trackingNumber });
+    if (!updated) return res.status(404).json({ error: 'Order not found' });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message || 'Failed to update order status' });
+  }
+});
+
+
 
 // ==========================================
 // USER (CUSTOMER) AUTHENTICATION API
@@ -577,6 +691,20 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
       }
     }
 
+    // 4. Delivery Agent Passcode Update
+    if (changes.deliveryAgentPasscode !== undefined) {
+      const newDeliveryPass = String(changes.deliveryAgentPasscode || '').trim();
+      if (newDeliveryPass.length > 0) {
+        if (newDeliveryPass.length < 6) {
+          return res.status(400).json({ error: 'Delivery agent passcode must be at least 6 characters.' });
+        }
+        changes.deliveryAgentPasscode = newDeliveryPass;
+        envUpdates.DELIVERY_AGENT_PASSCODE = newDeliveryPass;
+      } else {
+        delete changes.deliveryAgentPasscode;
+      }
+    }
+
     // Write to codebase .env file and process.env immediately
     if (Object.keys(envUpdates).length > 0) {
       updateEnvFile(envUpdates);
@@ -594,9 +722,11 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     const sanitized = { ...updated };
     delete sanitized.adminPasscode;
     delete sanitized.superAdminPassword;
+    delete sanitized.deliveryAgentPasscode;
     sanitized.superAdminId = updated.superAdminId || process.env.SUPER_ADMIN_ID || 'superadmin';
     sanitized.adminPasscodeConfigured = Boolean(updated.adminPasscode || process.env.ADMIN_PASSCODE);
     sanitized.superAdminConfigured = Boolean(updated.superAdminPassword || process.env.SUPER_ADMIN_PASSWORD);
+    sanitized.deliveryAgentPasscodeConfigured = Boolean(updated.deliveryAgentPasscode || process.env.DELIVERY_AGENT_PASSCODE);
     if (newToken) sanitized.newToken = newToken;
 
     sanitized.razorpayKeyId = sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';

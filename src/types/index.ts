@@ -58,6 +58,13 @@ export interface StoreSettings {
   
   // Security
   adminPasscode?: string;
+  superAdminId?: string;
+  superAdminPassword?: string;
+  superAdminConfigured?: boolean;
+  adminPasscodeConfigured?: boolean;
+  // Delivery Agent
+  deliveryAgentPasscode?: string;
+  deliveryAgentPasscodeConfigured?: boolean;
 
   // Studio Orders & Commission Tracking Settings
   artisanCommissionRate?: number;
@@ -188,8 +195,10 @@ export interface Order {
   createdAt: string;
 }
 
-export type ViewMode = 'store' | 'dashboard';
+export type ViewMode = 'store' | 'dashboard' | 'delivery';
+export type AdminRole = 'superadmin' | 'admin' | 'delivery_agent' | null;
 export type DashboardTab = 'overview' | 'products' | 'offers' | 'orders' | 'settings';
+
 
 export interface UserProfile {
   id: string;

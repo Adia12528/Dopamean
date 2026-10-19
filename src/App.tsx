@@ -5,6 +5,7 @@ import { Navbar } from './components/common/Navbar';
 import { Toast } from './components/common/Toast';
 import { StorefrontView } from './components/storefront/StorefrontView';
 import { DashboardView } from './components/dashboard/DashboardView';
+import { DeliveryDashboard } from './components/delivery/DeliveryDashboard';
 import { CartDrawer } from './components/storefront/CartDrawer';
 import { ProductDetailModal } from './components/storefront/ProductDetailModal';
 import { OrderTrackingModal } from './components/storefront/OrderTrackingModal';
@@ -21,6 +22,17 @@ const MainApp: React.FC = () => {
     activeInvoiceOrder, 
     setActiveInvoiceOrder 
   } = useStore();
+
+  // Delivery agent gets its own standalone portal — no navbar/footer clutter
+  if (viewMode === 'delivery') {
+    return (
+      <>
+        <DeliveryDashboard />
+        <Toast />
+        <AdminLoginModal />
+      </>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -52,6 +64,7 @@ const MainApp: React.FC = () => {
     </div>
   );
 };
+
 
 export default function App() {
   return (

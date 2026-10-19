@@ -64,10 +64,10 @@ sqlite.exec(`
     customer_name TEXT NOT NULL,
     customer_email TEXT NOT NULL,
     customer_phone TEXT,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled')),
     total REAL NOT NULL CHECK (total >= 0),
     payment_method TEXT NOT NULL DEFAULT 'cod' CHECK (payment_method IN ('cod', 'upi', 'razorpay', 'whatsapp')),
-    payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed')),
+    payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refund_pending', 'refunded')),
     tracking_number TEXT,
     data TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -99,6 +99,33 @@ sqlite.exec(`
   );
 `);
 
+// Migrate pre-existing SQLite orders table if it was created with restrictive check constraints
+try {
+  const ordersTableInfo = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'").get();
+  if (ordersTableInfo?.sql && !ordersTableInfo.sql.includes('confirmed')) {
+    sqlite.exec(`
+      CREATE TABLE orders_v2 (
+        id TEXT PRIMARY KEY,
+        customer_name TEXT NOT NULL,
+        customer_email TEXT NOT NULL,
+        customer_phone TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled')),
+        total REAL NOT NULL CHECK (total >= 0),
+        payment_method TEXT NOT NULL DEFAULT 'cod' CHECK (payment_method IN ('cod', 'upi', 'razorpay', 'whatsapp')),
+        payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refund_pending', 'refunded')),
+        tracking_number TEXT,
+        data TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO orders_v2 SELECT * FROM orders;
+      DROP TABLE orders;
+      ALTER TABLE orders_v2 RENAME TO orders;
+    `);
+  }
+} catch (err) {
+  console.warn('SQLite orders table migration note:', err.message);
+}
+
 // Add offer discount columns to databases created by earlier versions.
 const offerColumns = sqlite.prepare('PRAGMA table_info(offers)').all().map(column => column.name);
 if (!offerColumns.includes('discount_type')) {
@@ -118,7 +145,7 @@ for (const row of sqlite.prepare('SELECT id, data FROM offers').all()) {
 
 // Triggers bring equivalent guarantees to pre-existing SQLite tables, which SQLite cannot alter in place.
 // Normalize old casing before order triggers are installed.
-sqlite.exec("UPDATE orders SET status = CASE lower(status) WHEN 'pending' THEN 'pending' WHEN 'in crafting' THEN 'processing' WHEN 'processing' THEN 'processing' WHEN 'shipped' THEN 'shipped' WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' ELSE 'pending' END");
+sqlite.exec("UPDATE orders SET status = CASE lower(status) WHEN 'pending' THEN 'pending' WHEN 'in crafting' THEN 'processing' WHEN 'processing' THEN 'processing' WHEN 'shipped' THEN 'shipped' WHEN 'out for delivery' THEN 'out_for_delivery' WHEN 'out_for_delivery' THEN 'out_for_delivery' WHEN 'confirmed' THEN 'confirmed' WHEN 'delivered' THEN 'delivered' WHEN 'cancelled' THEN 'cancelled' ELSE 'pending' END");
 sqlite.exec('DROP TRIGGER IF EXISTS orders_validate_insert; DROP TRIGGER IF EXISTS orders_validate_update;');
 sqlite.exec(`
   CREATE TRIGGER IF NOT EXISTS products_validate_insert BEFORE INSERT ON products WHEN
@@ -128,12 +155,12 @@ sqlite.exec(`
     length(trim(NEW.title)) = 0 OR NEW.price < 0 OR NEW.stock < 0 OR NEW.rating NOT BETWEEN 0 AND 5
     BEGIN SELECT RAISE(ABORT, 'invalid product'); END;
   CREATE TRIGGER IF NOT EXISTS orders_validate_insert BEFORE INSERT ON orders WHEN
-    NEW.status NOT IN ('pending','processing','shipped','delivered','cancelled') OR NEW.total < 0 OR
-    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed')
+    NEW.status NOT IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled') OR NEW.total < 0 OR
+    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed','refund_pending','refunded')
     BEGIN SELECT RAISE(ABORT, 'invalid order'); END;
   CREATE TRIGGER IF NOT EXISTS orders_validate_update BEFORE UPDATE ON orders WHEN
-    NEW.status NOT IN ('pending','processing','shipped','delivered','cancelled') OR NEW.total < 0 OR
-    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed')
+    NEW.status NOT IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled') OR NEW.total < 0 OR
+    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed','refund_pending','refunded')
     BEGIN SELECT RAISE(ABORT, 'invalid order'); END;
   CREATE TRIGGER IF NOT EXISTS reviews_validate_insert BEFORE INSERT ON reviews WHEN
     NEW.rating NOT BETWEEN 1 AND 5 OR NOT EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id)

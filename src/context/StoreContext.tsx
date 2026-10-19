@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Product, Offer, Order, CartItem, ViewMode, DashboardTab, StoreSettings, Review } from '../types';
+import type { Product, Offer, Order, CartItem, ViewMode, DashboardTab, StoreSettings, Review, AdminRole } from '../types';
 import { api } from '../services/api';
 
 const DEFAULT_SETTINGS: StoreSettings = {
@@ -49,14 +49,17 @@ interface StoreContextType {
   toastMessage: { text: string; type: 'success' | 'info' | 'error' } | null;
   isLoading: boolean;
   isAdmin: boolean;
+  adminRole: AdminRole;
   isAdminLoginModalOpen: boolean;
   isTrackingModalOpen: boolean;
   activeInvoiceOrder: Order | null;
+  deliveryOrders: Order[];
 
   setIsAdminLoginModalOpen: (open: boolean) => void;
   setIsTrackingModalOpen: (open: boolean) => void;
   setActiveInvoiceOrder: (order: Order | null) => void;
   adminLogin: (passcode: string, superAdmin?: { superAdminId: string; superAdminPassword: string }) => Promise<boolean>;
+  deliveryAgentLogin: (passcode: string) => Promise<boolean>;
   adminLogout: () => void;
 
   setViewMode: (mode: ViewMode) => void;
@@ -131,6 +134,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const [activePromo, setActivePromo] = useState<Offer | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [adminRole, setAdminRole] = useState<AdminRole>(null);
+  const [deliveryOrders, setDeliveryOrders] = useState<Order[]>([]);
   const [isAdminLoginModalOpen, setIsAdminLoginModalOpen] = useState(false);
   const [isTrackingModalOpen, setIsTrackingModalOpen] = useState(false);
   const [activeInvoiceOrder, setActiveInvoiceOrder] = useState<Order | null>(null);
@@ -174,12 +179,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   useEffect(() => {
-    // Initial data hydration is intentionally triggered here to seed store state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadData();
-    void api.verifyAdmin().then(valid => {
-      setIsAdmin(valid);
-      if (valid) void api.getOrders().then(setOrders).catch(() => setOrders([]));
+    void api.verifyAdmin().then(result => {
+      if (typeof result === 'object' && result !== null && 'role' in result) {
+        const r = (result as { valid: boolean; role: AdminRole }).role;
+        setAdminRole(r);
+        if (r === 'delivery_agent') {
+          setViewMode('delivery');
+          void api.getDeliveryOrders().then(setDeliveryOrders).catch(() => setDeliveryOrders([]));
+        } else if (r === 'superadmin' || r === 'admin') {
+          setIsAdmin(true);
+          void api.getOrders().then(setOrders).catch(() => setOrders([]));
+          setViewMode('dashboard');
+        }
+      } else if (result === true) {
+        setIsAdmin(true);
+        void api.getOrders().then(setOrders).catch(() => setOrders([]));
+      }
     });
   }, [loadData]);
 
@@ -198,6 +214,18 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const intervalId = window.setInterval(() => { void refreshManagerData(); }, 10000);
     return () => { active = false; window.clearInterval(intervalId); };
   }, [isAdmin]);
+
+  // Delivery agent auto-refresh
+  useEffect(() => {
+    if (adminRole !== 'delivery_agent') return;
+    let active = true;
+    const refresh = async () => {
+      const orders = await api.getDeliveryOrders().catch(() => null);
+      if (active && orders) setDeliveryOrders(orders);
+    };
+    const intervalId = window.setInterval(() => { void refresh(); }, 15000);
+    return () => { active = false; window.clearInterval(intervalId); };
+  }, [adminRole]);
 
   // Dynamically update theme color across the whole application
   useEffect(() => {
@@ -218,20 +246,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [cart]);
 
-  // Super Admin login / logout
+  // Super Admin / Studio Admin login
   const adminLogin = async (passcode: string, superAdmin?: { superAdminId: string; superAdminPassword: string }): Promise<boolean> => {
     try {
       let result;
       if (superAdmin) {
-        // Two-tier: use backend super-admin check
         result = await api.superAdminLogin(superAdmin.superAdminId, superAdmin.superAdminPassword);
       } else {
-        // Regular admin: passcode check
         result = await api.adminLogin(passcode);
       }
       if (result?.success) {
         const authenticatedOrders = await api.getOrders();
         setIsAdmin(true);
+        setAdminRole(result.role as AdminRole);
         setOrders(authenticatedOrders);
         setIsAdminLoginModalOpen(false);
         setViewMode('dashboard');
@@ -242,16 +269,40 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {
       api.adminLogout();
       setIsAdmin(false);
+      setAdminRole(null);
+      return false;
+    }
+  };
+
+  // Delivery Agent login
+  const deliveryAgentLogin = async (passcode: string): Promise<boolean> => {
+    try {
+      const result = await api.deliveryAgentLogin(passcode);
+      if (result?.success) {
+        const orders = await api.getDeliveryOrders();
+        setAdminRole('delivery_agent');
+        setDeliveryOrders(orders);
+        setIsAdminLoginModalOpen(false);
+        setViewMode('delivery');
+        showToast('🚚 Delivery Agent mode — ready for dispatch!');
+        return true;
+      }
+      return false;
+    } catch {
+      api.deliveryLogout();
+      setAdminRole(null);
       return false;
     }
   };
 
   const adminLogout = () => {
     setIsAdmin(false);
+    setAdminRole(null);
+    setDeliveryOrders([]);
     api.adminLogout();
     setOrders([]);
     setViewMode('store');
-    showToast('Signed out of Admin mode', 'info');
+    showToast('Signed out successfully', 'info');
   };
 
   // SETTINGS
@@ -576,14 +627,17 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         toastMessage,
         isLoading,
         isAdmin,
+        adminRole,
         isAdminLoginModalOpen,
         isTrackingModalOpen,
         activeInvoiceOrder,
+        deliveryOrders,
 
         setIsAdminLoginModalOpen,
         setIsTrackingModalOpen,
         setActiveInvoiceOrder,
         adminLogin,
+        deliveryAgentLogin,
         adminLogout,
         setViewMode,
         setDashboardTab,
