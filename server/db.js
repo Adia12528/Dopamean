@@ -566,12 +566,10 @@ const sqliteDb = {
     sqlite.prepare('UPDATE orders SET data = ? WHERE id = ?').run(JSON.stringify(updated), id);
     return updated;
   },
-  cancelOrder: (id) => {
+  cancelOrder: (id, cancelReason) => {
     const current = db.getOrderById(id);
     if (!current) return null;
     if (current.status === 'cancelled') return current;
-    if (['shipped', 'delivered'].includes(current.status)) throw new Error('ORDER_ALREADY_FULFILLED');
-    if (current.paymentStatus === 'paid') throw new Error('REFUND_REQUIRED_BEFORE_CANCELLATION');
     sqlite.exec('BEGIN IMMEDIATE');
     try {
       for (const item of current.items || []) {
@@ -581,11 +579,21 @@ const sqliteDb = {
         sqlite.prepare('UPDATE products SET stock = ?, data = ? WHERE id = ?')
           .run(restocked, JSON.stringify({ ...product, stock: restocked }), product.id);
       }
+      const reasonText = cancelReason ? `Reason: ${cancelReason}` : 'Cancelled by studio admin';
       const updated = {
         ...current,
         status: 'cancelled',
-        paymentStatus: current.paymentStatus === 'pending' ? 'failed' : current.paymentStatus,
-        timeline: [...(current.timeline || []), { status: 'Order Cancelled', timestamp: new Date().toISOString(), note: 'Inventory returned to stock.' }]
+        cancelReason: cancelReason || 'Cancelled by studio admin',
+        cancelledAt: new Date().toISOString(),
+        paymentStatus: current.paymentStatus === 'paid' ? 'refund_pending' : (current.paymentStatus === 'pending' ? 'failed' : current.paymentStatus),
+        timeline: [
+          ...(current.timeline || []),
+          { 
+            status: 'ORDER CANCELLED', 
+            timestamp: new Date().toISOString(), 
+            note: `${reasonText}. Reserved items returned to studio stock.` 
+          }
+        ]
       };
       sqlite.prepare('UPDATE orders SET status = ?, payment_status = ?, data = ? WHERE id = ?')
         .run(updated.status, updated.paymentStatus, JSON.stringify(updated), id);
@@ -598,22 +606,52 @@ const sqliteDb = {
     }
   },
   updateOrderStatus: (id, status, extraFields = {}) => {
-    if (status === 'cancelled') return db.cancelOrder(id);
+    if (status === 'cancelled') return db.cancelOrder(id, extraFields.cancelReason);
     const current = db.getOrderById(id);
     if (!current) return null;
+
+    let defaultNote = `Status updated to ${status.toUpperCase().replace(/_/g, ' ')}`;
+    if (status === 'confirmed') {
+      defaultNote = 'Order confirmed by studio. Reserved items queued for crafting & packaging.';
+    } else if (status === 'processing') {
+      defaultNote = 'Artisan is handcrafting loops & floral details at the workshop bench.';
+    } else if (status === 'shipped') {
+      const courier = extraFields.courierPartner || current.courierPartner || 'Courier';
+      const awb = extraFields.trackingNumber || current.trackingNumber;
+      defaultNote = awb ? `Parcel dispatched via ${courier}. AWB: ${awb}` : `Parcel handed over to ${courier}.`;
+    } else if (status === 'out_for_delivery') {
+      defaultNote = extraFields.deliveryNotes || 'Delivery partner has picked up parcel and is out for doorstep delivery.';
+    } else if (status === 'delivered') {
+      defaultNote = 'Parcel successfully delivered to recipient. Thank you for supporting handmade craftsmanship! 🌸';
+    }
+
     const timeline = current.timeline || [];
     timeline.push({
-      status: `Status changed to ${status.toUpperCase()}`,
+      status: status === 'out_for_delivery' ? 'OUT FOR DELIVERY' : (status === 'confirmed' ? 'ORDER CONFIRMED' : `STATUS: ${status.toUpperCase()}`),
       timestamp: new Date().toISOString(),
-      note: extraFields.trackingNumber ? `Tracking number assigned: ${extraFields.trackingNumber}` : `Status update`
+      note: defaultNote
     });
+
+    // If delivered and payment was pending COD, mark as paid
+    let nextPaymentStatus = extraFields.paymentStatus || current.paymentStatus;
+    if (status === 'delivered' && current.paymentMethod === 'cod' && nextPaymentStatus === 'pending') {
+      nextPaymentStatus = 'paid';
+    }
 
     const updated = {
       ...current,
       ...extraFields,
       status,
+      paymentStatus: nextPaymentStatus,
       timeline
     };
+
+    if (status === 'shipped' && !updated.shippedAt) {
+      updated.shippedAt = new Date().toISOString();
+    }
+    if (status === 'delivered' && !updated.deliveredAt) {
+      updated.deliveredAt = new Date().toISOString();
+    }
 
     sqlite.prepare(`
       UPDATE orders

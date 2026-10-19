@@ -19,6 +19,12 @@ const DEFAULT_SETTINGS: StoreSettings = {
   studioLocation: 'Handcrafted Studio, India',
   heroImage: '',
   adminPasscode: '',
+  artisanCommissionRate: 15,
+  commissionType: 'percentage',
+  defaultCourierPartner: 'India Post Speed Post',
+  estimatedCraftingDays: 3,
+  autoMarkCodPaidOnDelivered: true,
+  enableWhatsAppUpdates: true,
   paymentUpiEnabled: true,
   upiId: 'cozyloops@upi',
   upiPayeeName: 'Deepa Soni (Cozy Loops)',
@@ -89,7 +95,17 @@ interface StoreContextType {
     }
   ) => Promise<Order | null>;
   syncOrder: (order: Order) => void;
-  updateOrderStatus: (orderId: string, status: Order['status'], extras?: { trackingNumber?: string; paymentStatus?: Order['paymentStatus'] }) => Promise<void>;
+  updateOrderStatus: (
+    orderId: string, 
+    status: Order['status'], 
+    extras?: { 
+      trackingNumber?: string; 
+      paymentStatus?: Order['paymentStatus'];
+      courierPartner?: string;
+      cancelReason?: string;
+      deliveryNotes?: string;
+    }
+  ) => Promise<void>;
   submitReview: (productId: string, rating: number, comment: string, customerName?: string, customerEmail?: string) => Promise<Review>;
   refreshData: () => Promise<void>;
   resetDatabase: () => Promise<void>;
@@ -476,14 +492,36 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateOrderStatus = async (
     orderId: string, 
     status: Order['status'], 
-    extras?: { trackingNumber?: string; paymentStatus?: Order['paymentStatus'] }
+    extras?: { 
+      trackingNumber?: string; 
+      paymentStatus?: Order['paymentStatus'];
+      courierPartner?: string;
+      cancelReason?: string;
+      deliveryNotes?: string;
+    }
   ) => {
     try {
       const updated = await api.updateOrderStatus(orderId, status, extras);
       setOrders(prev => prev.map(o => (o.id === orderId ? updated : o)));
-      showToast(`Order #${orderId} updated to ${status}`);
-    } catch {
-      showToast('Failed to update status', 'error');
+      
+      // If cancelled, inventory was returned to stock, so refresh storefront product counts
+      if (status === 'cancelled') {
+        void api.getProducts().then(setProducts).catch(() => undefined);
+      }
+
+      const statusLabels: Record<string, string> = {
+        pending: 'Pending Review',
+        confirmed: 'Confirmed (Ready to Ship)',
+        processing: 'In Crafting',
+        shipped: 'Shipped',
+        out_for_delivery: 'Out for Delivery',
+        delivered: 'Delivered',
+        cancelled: 'Cancelled'
+      };
+      showToast(`Order #${orderId} marked as ${statusLabels[status] || status}`, status === 'cancelled' ? 'info' : 'success');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to update order status';
+      showToast(msg, 'error');
     }
   };
 

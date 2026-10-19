@@ -59,6 +59,14 @@ export interface StoreSettings {
   // Security
   adminPasscode?: string;
 
+  // Studio Orders & Commission Tracking Settings
+  artisanCommissionRate?: number;
+  commissionType?: 'percentage' | 'fixed';
+  defaultCourierPartner?: string;
+  estimatedCraftingDays?: number;
+  autoMarkCodPaidOnDelivered?: boolean;
+  enableWhatsAppUpdates?: boolean;
+
   // Payment Gateways & UPI
   paymentRazorpayEnabled?: boolean;
   razorpayKeyId?: string;
@@ -163,10 +171,16 @@ export interface Order {
   shippingAmount?: number;
   promoCodeApplied?: string;
   total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
   paymentMethod?: 'cod' | 'upi' | 'razorpay' | 'whatsapp';
-  paymentStatus?: 'pending' | 'paid' | 'failed';
+  paymentStatus?: 'pending' | 'paid' | 'failed' | 'refund_pending' | 'refunded';
   trackingNumber?: string;
+  courierPartner?: string;
+  cancelReason?: string;
+  cancelledAt?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
+  deliveryNotes?: string;
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   upiRefNumber?: string;

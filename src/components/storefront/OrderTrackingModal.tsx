@@ -10,7 +10,9 @@ import {
   Clock, 
   Scissors, 
   FileText, 
-  ExternalLink
+  ExternalLink,
+  MapPin,
+  AlertCircle
 } from 'lucide-react';
 
 interface OrderTrackingModalProps {
@@ -50,9 +52,10 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
   const getStepIndex = (status: Order['status']) => {
     const s = String(status).toLowerCase();
-    if (s.includes('deliver')) return 3;
+    if (s.includes('deliver') && !s.includes('out_for_delivery') && !s.includes('out for delivery')) return 4;
+    if (s.includes('out_for_delivery') || s.includes('out for delivery')) return 3;
     if (s.includes('ship')) return 2;
-    if (s.includes('craft') || s.includes('process')) return 1;
+    if (s.includes('confirm') || s.includes('craft') || s.includes('process')) return 1;
     return 0;
   };
 
@@ -287,75 +290,112 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                   </div>
                 </div>
 
-                {/* Stepper Progress Bar */}
-                <div style={{ margin: '24px 0 28px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-                    {/* Connecting line */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '16px',
-                      left: '24px',
-                      right: '24px',
-                      height: '3px',
-                      backgroundColor: '#E2E8F0',
-                      zIndex: 1
-                    }}>
-                      <div style={{
-                        height: '100%',
-                        backgroundColor: 'var(--accent-terracotta)',
-                        width: `${(step / 3) * 100}%`,
-                        transition: 'width 0.5s ease'
-                      }} />
+                {/* Cancelled Banner if Order is Cancelled */}
+                {order.status === 'cancelled' ? (
+                  <div style={{
+                    backgroundColor: '#FEF2F2',
+                    border: '1.5px solid #FECACA',
+                    borderRadius: '16px',
+                    padding: '16px 20px',
+                    margin: '18px 0 24px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '6px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#B91C1C', fontWeight: 700, fontSize: '0.94rem' }}>
+                      <AlertCircle size={18} />
+                      <span>Order Cancelled</span>
                     </div>
-
-                    {[
-                      { label: 'Placed', icon: Clock },
-                      { label: 'Crafting', icon: Scissors },
-                      { label: 'Shipped', icon: Truck },
-                      { label: 'Delivered', icon: CheckCircle2 }
-                    ].map((s, idx) => {
-                      const Icon = s.icon;
-                      const isComplete = idx <= step;
-                      const isCurrent = idx === step;
-                      return (
-                        <div
-                          key={s.label}
-                          style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            zIndex: 2,
-                            position: 'relative'
-                          }}
-                        >
-                          <div style={{
-                            width: '34px',
-                            height: '34px',
-                            borderRadius: '50%',
-                            backgroundColor: isComplete ? 'var(--accent-terracotta)' : '#FFFFFF',
-                            border: `2px solid ${isComplete ? 'var(--accent-terracotta)' : '#CBD5E1'}`,
-                            color: isComplete ? '#FFFFFF' : '#94A3B8',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            boxShadow: isCurrent ? '0 0 12px rgba(200, 90, 50, 0.4)' : 'none',
-                            transition: 'all 0.3s ease'
-                          }}>
-                            <Icon size={16} />
-                          </div>
-                          <span style={{
-                            fontSize: '0.74rem',
-                            fontWeight: isCurrent ? 700 : 500,
-                            color: isComplete ? 'var(--text-main)' : 'var(--text-subtle)',
-                            marginTop: '6px'
-                          }}>
-                            {s.label}
-                          </span>
-                        </div>
-                      );
-                    })}
+                    <div style={{ fontSize: '0.84rem', color: '#991B1B' }}>
+                      <strong>Cancellation Reason:</strong> {order.cancelReason || 'Cancelled by studio administration.'}
+                    </div>
+                    {order.cancelledAt && (
+                      <div style={{ fontSize: '0.74rem', color: '#7F1D1D' }}>
+                        Processed on {new Date(order.cancelledAt).toLocaleDateString('en-IN', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    )}
                   </div>
-                </div>
+                ) : (
+                  /* Stepper Progress Bar (5 Milestones) */
+                  <div style={{ margin: '24px 0 28px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+                      {/* Connecting line */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '16px',
+                        left: '20px',
+                        right: '20px',
+                        height: '3px',
+                        backgroundColor: '#E2E8F0',
+                        zIndex: 1
+                      }}>
+                        <div style={{
+                          height: '100%',
+                          backgroundColor: 'var(--accent-terracotta)',
+                          width: `${(step / 4) * 100}%`,
+                          transition: 'width 0.5s ease'
+                        }} />
+                      </div>
+
+                      {[
+                        { label: 'Placed', icon: Clock },
+                        { label: 'Crafting', icon: Scissors },
+                        { label: 'Shipped', icon: Truck },
+                        { label: 'Out for Delivery', icon: MapPin },
+                        { label: 'Delivered', icon: CheckCircle2 }
+                      ].map((s, idx) => {
+                        const Icon = s.icon;
+                        const isComplete = idx <= step;
+                        const isCurrent = idx === step;
+                        return (
+                          <div
+                            key={s.label}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              zIndex: 2,
+                              position: 'relative',
+                              textAlign: 'center'
+                            }}
+                          >
+                            <div style={{
+                              width: '34px',
+                              height: '34px',
+                              borderRadius: '50%',
+                              backgroundColor: isComplete ? 'var(--accent-terracotta)' : '#FFFFFF',
+                              border: `2px solid ${isComplete ? 'var(--accent-terracotta)' : '#CBD5E1'}`,
+                              color: isComplete ? '#FFFFFF' : '#94A3B8',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              boxShadow: isCurrent ? '0 0 12px rgba(200, 90, 50, 0.4)' : 'none',
+                              transition: 'all 0.3s ease'
+                            }}>
+                              <Icon size={15} />
+                            </div>
+                            <span style={{
+                              fontSize: '0.72rem',
+                              fontWeight: isCurrent ? 700 : 500,
+                              color: isComplete ? 'var(--text-main)' : 'var(--text-subtle)',
+                              marginTop: '6px',
+                              maxWidth: '64px',
+                              lineHeight: 1.2
+                            }}>
+                              {s.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Courier Tracking AWB (if dispatched) */}
                 {order.trackingNumber && (

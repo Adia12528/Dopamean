@@ -26,10 +26,16 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
   const { settings } = useStore();
   const cur = settings.currency || '₹';
   const statusColors: Record<string, string> = {
-    pending: '#F59E0B', processing: '#3B82F6', shipped: '#8B5CF6',
-    delivered: '#10B981', 'in crafting': '#EC4899'
+    pending: '#F59E0B', 
+    confirmed: '#2563EB',
+    processing: '#3B82F6', 
+    shipped: '#8B5CF6',
+    out_for_delivery: '#D97706',
+    delivered: '#10B981', 
+    cancelled: '#EF4444',
+    'in crafting': '#EC4899'
   };
-  const statusColor = statusColors[(order.status || '').toLowerCase()] || '#6B7280';
+  const statusColor = statusColors[(order.status || '').toLowerCase().replace(/_/g, ' ')] || statusColors[(order.status || '').toLowerCase()] || '#6B7280';
   return (
     <div style={{
       border: '1px solid var(--border-medium)', borderRadius: 12, padding: '12px 14px',

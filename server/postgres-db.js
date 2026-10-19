@@ -165,18 +165,35 @@ export const postgresDb = {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   },
   async linkRazorpayOrder(id, razorpayOrderId) { const current = await postgresDb.getOrderById(id); if (!current || current.paymentMethod !== 'razorpay' || current.paymentStatus !== 'pending' || current.razorpayOrderId) throw new Error('INVALID_PAYMENT_ORDER'); const updated = { ...current, razorpayOrderId }; await pool.query('UPDATE orders SET data=$2::jsonb WHERE id=$1', [id, JSON.stringify(updated)]); return updated; },
-  async cancelOrder(id) {
+  async cancelOrder(id, cancelReason) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN'); const { rows } = await client.query('SELECT data FROM orders WHERE id=$1 FOR UPDATE', [id]); if (!rows[0]) { await client.query('COMMIT'); return null; }
       const current = cleanOrder(rows[0].data); if (current.status === 'cancelled') { await client.query('COMMIT'); return current; }
-      if (['shipped','delivered'].includes(current.status)) throw new Error('ORDER_ALREADY_FULFILLED'); if (current.paymentStatus === 'paid') throw new Error('REFUND_REQUIRED_BEFORE_CANCELLATION');
       for (const item of current.items || []) { const { rows: productRows } = await client.query('SELECT data FROM products WHERE id=$1 FOR UPDATE', [item.productId]); if (!productRows[0]) continue; const product = parse(productRows[0].data); await saveProduct(client, { ...product, stock: product.stock + item.quantity }); }
-      const updated = { ...current, status: 'cancelled', paymentStatus: current.paymentStatus === 'pending' ? 'failed' : current.paymentStatus, timeline: [...(current.timeline || []), { status: 'Order Cancelled', timestamp: new Date().toISOString(), note: 'Inventory returned to stock.' }] };
+      const reasonText = cancelReason ? `Reason: ${cancelReason}` : 'Cancelled by studio admin';
+      const updated = { ...current, status: 'cancelled', cancelReason: cancelReason || 'Cancelled by studio admin', cancelledAt: new Date().toISOString(), paymentStatus: current.paymentStatus === 'paid' ? 'refund_pending' : (current.paymentStatus === 'pending' ? 'failed' : current.paymentStatus), timeline: [...(current.timeline || []), { status: 'ORDER CANCELLED', timestamp: new Date().toISOString(), note: `${reasonText}. Reserved items returned to studio stock.` }] };
       await client.query('UPDATE orders SET status=$2,payment_status=$3,data=$4::jsonb WHERE id=$1', [id, updated.status, updated.paymentStatus, JSON.stringify(updated)]); await client.query('COMMIT'); return updated;
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   },
-  async updateOrderStatus(id, status, extras = {}) { if (status === 'cancelled') return postgresDb.cancelOrder(id); const current = await postgresDb.getOrderById(id); if (!current) return null; const updated = { ...current, ...extras, status, timeline: [...(current.timeline || []), { status: `Status changed to ${status.toUpperCase()}`, timestamp: new Date().toISOString(), note: extras.trackingNumber ? `Tracking number assigned: ${extras.trackingNumber}` : 'Status update' }] }; await pool.query('UPDATE orders SET status=$2,payment_status=$3,tracking_number=$4,data=$5::jsonb WHERE id=$1', [id, status, updated.paymentStatus || current.paymentStatus, updated.trackingNumber || null, JSON.stringify(updated)]); return updated; },
+  async updateOrderStatus(id, status, extras = {}) {
+    if (status === 'cancelled') return postgresDb.cancelOrder(id, extras.cancelReason);
+    const current = await postgresDb.getOrderById(id);
+    if (!current) return null;
+    let defaultNote = `Status updated to ${status.toUpperCase().replace(/_/g, ' ')}`;
+    if (status === 'confirmed') defaultNote = 'Order confirmed by studio. Reserved items queued for crafting & packaging.';
+    else if (status === 'processing') defaultNote = 'Artisan is handcrafting loops & floral details at the workshop bench.';
+    else if (status === 'shipped') { const courier = extras.courierPartner || current.courierPartner || 'Courier'; const awb = extras.trackingNumber || current.trackingNumber; defaultNote = awb ? `Parcel dispatched via ${courier}. AWB: ${awb}` : `Parcel handed over to ${courier}.`; }
+    else if (status === 'out_for_delivery') defaultNote = extras.deliveryNotes || 'Delivery partner has picked up parcel and is out for doorstep delivery.';
+    else if (status === 'delivered') defaultNote = 'Parcel successfully delivered to recipient. Thank you for supporting handmade craftsmanship! 🌸';
+    let nextPaymentStatus = extras.paymentStatus || current.paymentStatus;
+    if (status === 'delivered' && current.paymentMethod === 'cod' && nextPaymentStatus === 'pending') nextPaymentStatus = 'paid';
+    const updated = { ...current, ...extras, status, paymentStatus: nextPaymentStatus, timeline: [...(current.timeline || []), { status: status === 'out_for_delivery' ? 'OUT FOR DELIVERY' : (status === 'confirmed' ? 'ORDER CONFIRMED' : `STATUS: ${status.toUpperCase()}`), timestamp: new Date().toISOString(), note: defaultNote }] };
+    if (status === 'shipped' && !updated.shippedAt) updated.shippedAt = new Date().toISOString();
+    if (status === 'delivered' && !updated.deliveredAt) updated.deliveredAt = new Date().toISOString();
+    await pool.query('UPDATE orders SET status=$2,payment_status=$3,tracking_number=$4,data=$5::jsonb WHERE id=$1', [id, status, updated.paymentStatus || current.paymentStatus, updated.trackingNumber || null, JSON.stringify(updated)]);
+    return updated;
+  },
   async deleteOrder(id) { await pool.query('DELETE FROM orders WHERE id=$1', [id]); return true; },
   async getReviews(productId) { const { rows } = productId ? await pool.query('SELECT * FROM reviews WHERE product_id=$1 ORDER BY created_at DESC', [productId]) : await pool.query('SELECT * FROM reviews ORDER BY created_at DESC'); return rows.map(r => ({ id:r.id, productId:r.product_id, customerName:r.customer_name, customerEmail:r.customer_email, rating:r.rating, comment:r.comment, verifiedPurchase:r.verified_purchase, createdAt:r.created_at })); },
   async addReview(input) { const id = `rev_${crypto.randomUUID()}`; const review = { id, productId:input.productId, customerName:input.customerName || 'Handcraft Lover', customerEmail:input.customerEmail || '', rating:Math.min(5,Math.max(1,Number(input.rating)||5)), comment:input.comment || '', verifiedPurchase:input.verifiedPurchase !== false, createdAt:new Date().toISOString() }; const client = await pool.connect(); try { await client.query('BEGIN'); await client.query('INSERT INTO reviews(id,product_id,customer_name,customer_email,rating,comment,verified_purchase,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)', [review.id,review.productId,review.customerName,review.customerEmail,review.rating,review.comment,review.verifiedPurchase,review.createdAt]); const { rows } = await client.query('SELECT avg(rating)::numeric(2,1) AS rating,count(*)::int AS count FROM reviews WHERE product_id=$1', [review.productId]); const product = await postgresDb.getProductById(review.productId); if (product) await saveProduct(client,{...product,rating:Number(rows[0].rating),reviewsCount:rows[0].count}); await client.query('COMMIT'); return review; } catch(error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); } },

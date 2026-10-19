@@ -150,14 +150,23 @@ export const api = {
   updateOrderStatus: async (
     orderId: string, 
     status: Order['status'], 
-    extras?: { trackingNumber?: string; paymentStatus?: Order['paymentStatus'] }
+    extras?: { 
+      trackingNumber?: string; 
+      paymentStatus?: Order['paymentStatus'];
+      courierPartner?: string;
+      cancelReason?: string;
+      deliveryNotes?: string;
+    }
   ): Promise<Order> => {
     const res = await adminFetch(`${BASE_URL}/api/orders/${orderId}/status`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, ...extras })
     });
-    if (!res.ok) throw new Error('Failed to update order status');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update order status');
+    }
     return res.json();
   },
 

@@ -661,15 +661,23 @@ app.post('/api/orders', orderLimit, async (req, res) => {
 
 app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
   try {
-    const { status, trackingNumber, paymentStatus } = req.body;
-    if (!['pending', 'processing', 'shipped', 'delivered'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid order status.' });
+    const { status, trackingNumber, paymentStatus, courierPartner, cancelReason, deliveryNotes } = req.body;
+    const allowedStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ error: `Invalid order status. Allowed: ${allowedStatuses.join(', ')}` });
     }
-    const updated = await db.updateOrderStatus(req.params.id, status, { trackingNumber, paymentStatus });
+    const updated = await db.updateOrderStatus(req.params.id, status, {
+      trackingNumber,
+      paymentStatus,
+      courierPartner,
+      cancelReason,
+      deliveryNotes
+    });
     if (!updated) return res.status(404).json({ error: 'Order not found' });
     res.json(updated);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to update order status' });
+    console.error('Failed to update order status:', err);
+    res.status(500).json({ error: err.message || 'Failed to update order status' });
   }
 });
 

@@ -351,10 +351,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
                   fontWeight: 700,
                   padding: '3px 8px',
                   borderRadius: '999px',
-                  backgroundColor: order.status === 'delivered' ? 'var(--accent-sage-light)' : '#FEF3C7',
-                  color: order.status === 'delivered' ? 'var(--accent-sage)' : '#B45309'
+                  backgroundColor: order.status === 'delivered' ? 'var(--accent-sage-light)' : (order.status === 'cancelled' ? '#FEE2E2' : (order.status === 'shipped' || order.status === 'out_for_delivery' ? '#E0F2FE' : '#FEF3C7')),
+                  color: order.status === 'delivered' ? 'var(--accent-sage)' : (order.status === 'cancelled' ? '#B91C1C' : (order.status === 'shipped' || order.status === 'out_for_delivery' ? '#0369A1' : '#B45309')),
+                  textTransform: 'capitalize'
                 }}>
-                  {order.status}
+                  {order.status.replace(/_/g, ' ')}
                 </span>
                 <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-terracotta)' }}>
                   {settings.currency}{order.total.toFixed(2)}
