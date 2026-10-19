@@ -77,9 +77,9 @@ export const postgresDb = {
         discount_value numeric(12,2) NOT NULL CHECK(discount_value>=0 AND (discount_type<>'percentage' OR discount_value<=100)), data jsonb NOT NULL);
       CREATE TABLE IF NOT EXISTS orders (
         id text PRIMARY KEY, customer_name text NOT NULL, customer_email text NOT NULL, customer_phone text,
-        status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','shipped','delivered','cancelled')),
+        status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled')),
         total numeric(12,2) NOT NULL CHECK(total>=0), payment_method text NOT NULL CHECK(payment_method IN ('cod','upi','razorpay','whatsapp')),
-        payment_status text NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed')), tracking_number text,
+        payment_status text NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','refund_pending','refunded')), tracking_number text,
         data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
       CREATE INDEX IF NOT EXISTS orders_created_idx ON orders(created_at DESC);
       CREATE INDEX IF NOT EXISTS orders_email_idx ON orders(lower(customer_email));
