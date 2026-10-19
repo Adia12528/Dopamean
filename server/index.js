@@ -93,18 +93,47 @@ const orderLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, keyPrefix: 'or
 const reviewLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'review-create' });
 const paymentLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'payment' });
 
-function getValidAdminPasscodes(settings) {
-  const list = [];
-  const envPass = process.env.ADMIN_PASSCODE?.trim();
-  if (envPass && envPass !== 'replace-with-a-unique-admin-passcode') {
-    list.push(envPass);
+function updateEnvFile(updates) {
+  try {
+    const envPath = path.join(__dirname, '..', '.env');
+    if (!fs.existsSync(envPath)) return;
+    let content = fs.readFileSync(envPath, 'utf8');
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined || value === null) continue;
+      const strVal = String(value).trim();
+      const regex = new RegExp(`^${key}=.*$`, 'm');
+      if (regex.test(content)) {
+        content = content.replace(regex, `${key}=${strVal}`);
+      } else {
+        content = content.trimEnd() + `\n${key}=${strVal}\n`;
+      }
+      process.env[key] = strVal;
+    }
+    fs.writeFileSync(envPath, content, 'utf8');
+    console.log('Synchronized credentials to .env file:', Object.keys(updates));
+  } catch (err) {
+    console.warn('Could not update .env file:', err);
   }
+}
+
+function getSuperAdminCredentials(settings) {
+  const id = (settings?.superAdminId?.trim() || process.env.SUPER_ADMIN_ID?.trim() || 'superadmin').trim();
+  const password = (settings?.superAdminPassword?.trim() || process.env.SUPER_ADMIN_PASSWORD?.trim() || 'superadmin12528').trim();
+  return { id, password };
+}
+
+function getValidAdminPasscodes(settings) {
+  // If passcode is explicitly configured in DB settings, ONLY that passcode is valid!
+  // No other passcode remains valid after the password is changed.
   const dbPass = settings?.adminPasscode?.trim();
   if (dbPass) {
-    list.push(dbPass);
+    return [dbPass];
   }
-  list.push('admin123'); // Standard fallback
-  return [...new Set(list)];
+  const envPass = process.env.ADMIN_PASSCODE?.trim();
+  if (envPass && envPass !== 'replace-with-a-unique-admin-passcode') {
+    return [envPass];
+  }
+  return ['admin123'];
 }
 
 function configuredAdminPasscode(settings) {
@@ -246,13 +275,15 @@ app.get('/api/health', (req, res) => {
 app.post('/api/admin/login', loginLimit, async (req, res) => {
   try {
     const { passcode, superAdminId, superAdminPassword } = req.body;
+    const settings = await db.getSettings();
 
-    // ── Tier 1: Super Admin (env-hardcoded, unchangeable) ────────────────────
+    // ── Tier 1: Super Admin (configurable from Super Admin Studio or .env) ──
     if (superAdminId !== undefined || superAdminPassword !== undefined) {
+      const superAdmin = getSuperAdminCredentials(settings);
       if (
-        SUPER_ADMIN_ID && SUPER_ADMIN_PASSWORD &&
-        superAdminId?.trim() === SUPER_ADMIN_ID &&
-        superAdminPassword?.trim() === SUPER_ADMIN_PASSWORD
+        superAdmin.id && superAdmin.password &&
+        superAdminId?.trim() === superAdmin.id &&
+        superAdminPassword?.trim() === superAdmin.password
       ) {
         const token = generateAdminToken('__SUPER_ADMIN__');
         return res.json({
@@ -266,7 +297,6 @@ app.post('/api/admin/login', loginLimit, async (req, res) => {
     }
 
     // ── Tier 2: Regular Admin (store passcode, changeable in settings) ───────
-    const settings = await db.getSettings();
     const validPasscodes = getValidAdminPasscodes(settings);
     const provided = passcode?.trim();
     const matchedPasscode = validPasscodes.find(p => p === provided);
@@ -471,6 +501,10 @@ app.get('/api/settings', async (req, res) => {
     // Do not leak secret key in public settings GET
     const sanitized = { ...settings };
     delete sanitized.adminPasscode;
+    delete sanitized.superAdminPassword;
+    sanitized.superAdminId = settings.superAdminId || process.env.SUPER_ADMIN_ID || 'superadmin';
+    sanitized.adminPasscodeConfigured = Boolean(settings.adminPasscode || process.env.ADMIN_PASSCODE);
+    sanitized.superAdminConfigured = Boolean(settings.superAdminPassword || process.env.SUPER_ADMIN_PASSWORD);
     sanitized.razorpayKeyId = (sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
     if (sanitized.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET) {
       sanitized.razorpayKeySecretConfigured = true;
@@ -494,12 +528,60 @@ app.get('/api/settings', async (req, res) => {
 
 app.put('/api/settings', requireAdmin, async (req, res) => {
   try {
-    if (req.body.adminPasscode !== undefined && String(req.body.adminPasscode).trim().length < 12) {
-      return res.status(400).json({ error: 'Admin passcodes must be at least 12 characters.' });
-    }
     const changes = { ...req.body };
     delete changes.razorpayKeySecretConfigured;
     delete changes.razorpayWebhookSecretConfigured;
+    delete changes.adminPasscodeConfigured;
+    delete changes.superAdminConfigured;
+
+    const envUpdates = {};
+
+    // 1. Studio Admin Passcode Update
+    let newToken = null;
+    if (changes.adminPasscode !== undefined) {
+      const newPass = String(changes.adminPasscode || '').trim();
+      if (newPass.length > 0) {
+        if (newPass.length < 6) {
+          return res.status(400).json({ error: 'Admin passcode must be at least 6 characters.' });
+        }
+        changes.adminPasscode = newPass;
+        envUpdates.ADMIN_PASSCODE = newPass;
+        newToken = generateAdminToken(newPass);
+      } else {
+        delete changes.adminPasscode;
+      }
+    }
+
+    // 2. Super Admin ID / Username Update
+    if (changes.superAdminId !== undefined) {
+      const newSuperId = String(changes.superAdminId || '').trim();
+      if (newSuperId.length > 0) {
+        changes.superAdminId = newSuperId;
+        envUpdates.SUPER_ADMIN_ID = newSuperId;
+      } else {
+        delete changes.superAdminId;
+      }
+    }
+
+    // 3. Super Admin Password Update
+    if (changes.superAdminPassword !== undefined) {
+      const newSuperPass = String(changes.superAdminPassword || '').trim();
+      if (newSuperPass.length > 0) {
+        if (newSuperPass.length < 6) {
+          return res.status(400).json({ error: 'Super Admin password must be at least 6 characters.' });
+        }
+        changes.superAdminPassword = newSuperPass;
+        envUpdates.SUPER_ADMIN_PASSWORD = newSuperPass;
+      } else {
+        delete changes.superAdminPassword;
+      }
+    }
+
+    // Write to codebase .env file and process.env immediately
+    if (Object.keys(envUpdates).length > 0) {
+      updateEnvFile(envUpdates);
+    }
+
     const current = await db.getSettings();
     const next = { ...current, ...changes };
     if (changes.paymentRazorpayEnabled && (!(next.razorpayKeyId || process.env.RAZORPAY_KEY_ID) || !(next.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET))) {
@@ -511,6 +593,12 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     const updated = await db.updateSettings(changes);
     const sanitized = { ...updated };
     delete sanitized.adminPasscode;
+    delete sanitized.superAdminPassword;
+    sanitized.superAdminId = updated.superAdminId || process.env.SUPER_ADMIN_ID || 'superadmin';
+    sanitized.adminPasscodeConfigured = Boolean(updated.adminPasscode || process.env.ADMIN_PASSCODE);
+    sanitized.superAdminConfigured = Boolean(updated.superAdminPassword || process.env.SUPER_ADMIN_PASSWORD);
+    if (newToken) sanitized.newToken = newToken;
+
     sanitized.razorpayKeyId = sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';
     if (sanitized.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET) {
       sanitized.razorpayKeySecretConfigured = true;
@@ -522,6 +610,7 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     delete sanitized.razorpayWebhookSecret;
     res.json(sanitized);
   } catch (err) {
+    console.error('Update settings error:', err);
     res.status(500).json({ error: 'Failed to update settings' });
   }
 });
@@ -696,10 +785,29 @@ app.post('/api/orders', orderLimit, async (req, res) => {
 
 app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
   try {
-    const { status, trackingNumber, paymentStatus, courierPartner, cancelReason, deliveryNotes } = req.body;
+    const { trackingNumber, paymentStatus, courierPartner, cancelReason, deliveryNotes } = req.body;
+    const rawStatus = String(req.body.status || '').trim().toLowerCase();
+    const statusMap = {
+      'cancel': 'cancelled',
+      'canceled': 'cancelled',
+      'cancelled': 'cancelled',
+      'confirm': 'confirmed',
+      'confirmed': 'confirmed',
+      'in crafting': 'processing',
+      'processing': 'processing',
+      'crafting': 'processing',
+      'ship': 'shipped',
+      'shipped': 'shipped',
+      'out for delivery': 'out_for_delivery',
+      'out_for_delivery': 'out_for_delivery',
+      'deliver': 'delivered',
+      'delivered': 'delivered',
+      'pending': 'pending'
+    };
+    const status = statusMap[rawStatus] || rawStatus;
     const allowedStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
     if (!allowedStatuses.includes(status)) {
-      return res.status(400).json({ error: `Invalid order status. Allowed: ${allowedStatuses.join(', ')}` });
+      return res.status(400).json({ error: `Invalid order status: "${req.body.status}". Allowed: ${allowedStatuses.join(', ')}` });
     }
     const updated = await db.updateOrderStatus(req.params.id, status, {
       trackingNumber,
@@ -713,6 +821,18 @@ app.patch('/api/orders/:id/status', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Failed to update order status:', err);
     res.status(500).json({ error: err.message || 'Failed to update order status' });
+  }
+});
+
+app.post('/api/orders/:id/cancel', requireAdmin, async (req, res) => {
+  try {
+    const { cancelReason } = req.body || {};
+    const updated = await db.cancelOrder(req.params.id, cancelReason);
+    if (!updated) return res.status(404).json({ error: 'Order not found' });
+    res.json(updated);
+  } catch (err) {
+    console.error('Failed to cancel order:', err);
+    res.status(500).json({ error: err.message || 'Failed to cancel order' });
   }
 });
 

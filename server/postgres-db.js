@@ -16,8 +16,15 @@ pool.on('error', (err) => {
 
 const parse = value => typeof value === 'string' ? JSON.parse(value) : value;
 const orderStatus = value => {
-  const status = String(value || 'pending').toLowerCase();
-  return status === 'in crafting' ? 'processing' : (['pending', 'processing', 'shipped', 'delivered', 'cancelled'].includes(status) ? status : 'pending');
+  const status = String(value || 'pending').toLowerCase().trim();
+  const map = {
+    'in crafting': 'processing',
+    'cancel': 'cancelled',
+    'canceled': 'cancelled',
+    'out for delivery': 'out_for_delivery'
+  };
+  const resolved = map[status] || status;
+  return ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'].includes(resolved) ? resolved : 'pending';
 };
 const cleanUser = row => row && ({
   id: row.id, name: row.name, email: row.email, phone: row.phone || '', address: row.address || '',

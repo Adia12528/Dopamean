@@ -23,8 +23,15 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings)
     });
-    if (!res.ok) throw new Error('Failed to update settings');
-    return res.json();
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to update settings');
+    }
+    const data = await res.json();
+    if (data.newToken) {
+      sessionStorage.setItem('dopamean_admin_token', data.newToken);
+    }
+    return data;
   },
 
   // PRODUCTS
@@ -168,6 +175,19 @@ export const api = {
       throw new Error(err.error || 'Failed to update order status');
     }
     return res.json();
+  },
+
+  cancelOrder: async (orderId: string, cancelReason?: string): Promise<Order> => {
+    try {
+      const res = await adminFetch(`${BASE_URL}/api/orders/${orderId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancelReason })
+      });
+      if (res.ok) return res.json();
+    } catch {}
+    // Fallback to updateOrderStatus
+    return api.updateOrderStatus(orderId, 'cancelled', { cancelReason });
   },
 
   // REVIEWS & RATINGS
