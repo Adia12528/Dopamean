@@ -25,6 +25,9 @@ import {
   ShieldAlert
 } from 'lucide-react';
 
+const isValidUpiVpa = (value: string) =>
+  /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim());
+
 // Recommended harmonious palettes for artisanal crochet
 const COLOR_PRESETS = [
   { name: 'Warm Terracotta (Default)', hex: '#C85A32', preview: '#C85A32' },
@@ -109,6 +112,18 @@ export const StudioSettings: React.FC = () => {
     delete payload.deliveryAgentPasscode;
     delete payload.razorpayKeySecret;
     delete payload.razorpayWebhookSecret;
+    if (payload.paymentUpiEnabled !== false) {
+      const upiId = String(payload.upiId || '').trim();
+      if (!isValidUpiVpa(upiId)) {
+        alert('Enter a valid UPI ID/VPA (for example, name@okaxis). A Razorpay payment link is not a UPI ID.');
+        return false;
+      }
+      if (!String(payload.upiPayeeName || '').trim()) {
+        alert('Enter the payee name shown to customers in their UPI app.');
+        return false;
+      }
+      payload.upiId = upiId;
+    }
     if (clearRazorpaySecret) payload.razorpayKeySecret = '';
     else if (form.razorpayKeySecret?.trim()) payload.razorpayKeySecret = form.razorpayKeySecret.trim();
     if (clearRazorpayWebhookSecret) payload.razorpayWebhookSecret = '';
@@ -1178,7 +1193,7 @@ export const StudioSettings: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                 <CreditCard size={20} color="var(--accent-terracotta)" />
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
-                  Payment Gateways & UPI QR Settings
+                  Payment Gateways & UPI Settlement Settings
                 </h3>
               </div>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
@@ -1220,13 +1235,14 @@ export const StudioSettings: React.FC = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
-                      Your UPI ID (VPA) *
+                      Settlement UPI ID (VPA) *
                     </label>
                     <input
                       type="text"
+                      required={form.paymentUpiEnabled !== false}
                       value={form.upiId || ''}
                       onChange={(e) => handleChange('upiId', e.target.value)}
-                      placeholder="e.g. dsoni7018@okhdfcbank or cozyloops@upi"
+                      placeholder="e.g. name@okaxis"
                       style={{
                         width: '100%',
                         padding: '10px 14px',
@@ -1236,6 +1252,9 @@ export const StudioSettings: React.FC = () => {
                         fontSize: '0.88rem'
                       }}
                     />
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '5px 0 0' }}>
+                      UPI payments and checkout QR codes are sent directly to this UPI account. Enter a UPI ID/VPA, not a Razorpay.me link.
+                    </p>
                   </div>
 
                   <div>

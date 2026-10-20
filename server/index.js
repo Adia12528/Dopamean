@@ -776,8 +776,17 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     if (changes.paymentRazorpayEnabled && (!(next.razorpayKeyId || process.env.RAZORPAY_KEY_ID) || !(next.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET))) {
       return res.status(400).json({ error: 'Add both Razorpay Key ID and Key Secret before enabling Razorpay.' });
     }
-    if (changes.paymentUpiEnabled && (!String(next.upiId || '').trim() || !String(next.upiPayeeName || '').trim())) {
-      return res.status(400).json({ error: 'Add a UPI ID and payee name before enabling UPI.' });
+    if (next.paymentUpiEnabled !== false && (
+      changes.paymentUpiEnabled === true ||
+      changes.upiId !== undefined ||
+      changes.upiPayeeName !== undefined
+    )) {
+      const upiId = String(next.upiId || '').trim();
+      const isValidUpiVpa = /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(upiId);
+      if (!isValidUpiVpa || !String(next.upiPayeeName || '').trim()) {
+        return res.status(400).json({ error: 'Add a valid UPI ID/VPA and payee name before enabling UPI. Razorpay payment links are not UPI IDs.' });
+      }
+      changes.upiId = upiId;
     }
     const updated = await db.updateSettings(changes);
     const sanitized = { ...updated };

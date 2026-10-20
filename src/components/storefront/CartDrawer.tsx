@@ -17,6 +17,20 @@ import {
 } from 'lucide-react';
 import { downloadInvoicePDF } from '../../utils/downloadInvoicePdf';
 
+const isValidUpiVpa = (value?: string) =>
+  Boolean(value && /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim()));
+
+const createUpiPaymentUri = (upiId: string, payeeName: string, amount: number) => {
+  const params = new URLSearchParams({
+    pa: upiId,
+    pn: payeeName,
+    am: amount.toFixed(2),
+    cu: 'INR',
+    tn: 'Cozy Loops Craft Order'
+  });
+  return `upi://pay?${params.toString()}`;
+};
+
 interface RazorpayOptions {
   key: string;
   amount: number;
@@ -73,12 +87,13 @@ export const CartDrawer: React.FC = () => {
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
 
   // Payment method selection
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod' | 'whatsapp'>(() =>
-    settings.paymentUpiEnabled !== false ? 'upi'
+  const [selectedPaymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod' | 'whatsapp'>(() =>
+    settings.paymentUpiEnabled !== false && isValidUpiVpa(settings.upiId) ? 'upi'
       : settings.paymentRazorpayEnabled ? 'razorpay'
         : settings.paymentCodEnabled !== false ? 'cod' : 'whatsapp'
   );
-  const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
+  const [upiQr, setUpiQr] = useState<{ uri: string; dataUrl: string } | null>(null);
+  const [upiQrError, setUpiQrError] = useState<{ uri: string; error: string } | null>(null);
   const [upiUtrNumber, setUpiUtrNumber] = useState('');
 
   const [formData, setFormData] = useState({
@@ -103,16 +118,21 @@ export const CartDrawer: React.FC = () => {
   const isFreeShipping = subtotal >= freeShippingThreshold;
   const shippingCost = isFreeShipping || subtotal === 0 ? 0 : (settings.shippingFee ?? 40);
   const total = Math.max(0, subtotal - discount + shippingCost);
+  const upiId = settings.upiId?.trim() || '';
+  const upiPayeeName = settings.upiPayeeName?.trim() || settings.storeName || '';
+  const hasValidUpiId = settings.paymentUpiEnabled !== false && isValidUpiVpa(upiId);
+  const paymentMethod = selectedPaymentMethod === 'upi' && !hasValidUpiId
+    ? settings.paymentRazorpayEnabled ? 'razorpay'
+      : settings.paymentCodEnabled !== false ? 'cod' : 'whatsapp'
+    : selectedPaymentMethod;
+  const upiPaymentUri = hasValidUpiId ? createUpiPaymentUri(upiId, upiPayeeName, total) : '';
 
   // Generate UPI QR Code URL dynamically whenever paymentMethod is 'upi' or total changes
   useEffect(() => {
-    if (paymentMethod === 'upi' && isCheckingOut) {
-      const upiId = settings.upiId || 'cozyloops@upi';
-      const payeeName = encodeURIComponent(settings.upiPayeeName || settings.storeName || 'Cozy Loops by Deepa');
-      const upiUrl = `upi://pay?pa=${upiId}&pn=${payeeName}&am=${total.toFixed(2)}&cu=INR&tn=Cozy%20Loops%20Craft%20Order`;
+    if (paymentMethod === 'upi' && isCheckingOut && upiPaymentUri) {
       let active = true;
       void import('qrcode')
-        .then(({ default: QRCode }) => QRCode.toDataURL(upiUrl, {
+        .then(({ default: QRCode }) => QRCode.toDataURL(upiPaymentUri, {
           width: 220,
           margin: 1,
           color: {
@@ -121,12 +141,15 @@ export const CartDrawer: React.FC = () => {
           }
         }))
         .then(url => {
-          if (active) setUpiQrDataUrl(url);
+          if (active) setUpiQr({ uri: upiPaymentUri, dataUrl: url });
         })
-        .catch(error => console.error('QR code generation failed:', error));
+        .catch(error => {
+          console.error('QR code generation failed:', error);
+          if (active) setUpiQrError({ uri: upiPaymentUri, error: 'Could not generate the UPI QR code. Please try again.' });
+        });
       return () => { active = false; };
     }
-  }, [paymentMethod, isCheckingOut, total, settings.upiId, settings.upiPayeeName, settings.storeName]);
+  }, [paymentMethod, isCheckingOut, upiPaymentUri]);
 
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
@@ -605,7 +628,7 @@ export const CartDrawer: React.FC = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {/* Option 1: Instant UPI QR & Apps */}
-                  {settings.paymentUpiEnabled !== false && <label style={{
+                  {hasValidUpiId && <label style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: '12px',
@@ -713,9 +736,13 @@ export const CartDrawer: React.FC = () => {
                     Scan to Pay {settings.currency}{total.toFixed(2)}
                   </div>
 
-                  {upiQrDataUrl ? (
+                  {upiQrError?.uri === upiPaymentUri ? (
+                    <div role="alert" style={{ width: '100%', color: '#B91C1C', fontSize: '0.8rem' }}>
+                      {upiQrError.error}
+                    </div>
+                  ) : upiQr?.uri === upiPaymentUri ? (
                     <img
-                      src={upiQrDataUrl}
+                      src={upiQr.dataUrl}
                       alt="UPI QR Code"
                       style={{
                         width: '180px',
@@ -733,10 +760,37 @@ export const CartDrawer: React.FC = () => {
                   )}
 
                   <div style={{ marginTop: '8px', fontSize: '0.76rem', color: '#475569' }}>
-                    UPI ID: <strong>{settings.upiId || 'cozyloops@upi'}</strong>
+                    UPI ID: <strong>{upiId}</strong>
                   </div>
                   <div style={{ fontSize: '0.72rem', color: '#64748B' }}>
-                    Payee: {settings.upiPayeeName || 'Deepa Soni'}
+                    Payee: {upiPayeeName}
+                  </div>
+
+                  <a
+                    href={upiPaymentUri || undefined}
+                    aria-disabled={!upiPaymentUri}
+                    onClick={event => {
+                      if (!upiPaymentUri) event.preventDefault();
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      justifyContent: 'center',
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      marginTop: '12px',
+                      padding: '11px 16px',
+                      borderRadius: '10px',
+                      backgroundColor: 'var(--accent-terracotta)',
+                      color: '#FFFFFF',
+                      fontWeight: 700,
+                      fontSize: '0.86rem',
+                      textDecoration: 'none'
+                    }}
+                  >
+                    Open UPI app and pay {settings.currency}{total.toFixed(2)}
+                  </a>
+                  <div style={{ marginTop: '6px', fontSize: '0.72rem', color: '#64748B' }}>
+                    On your phone, this opens an installed UPI app with the payee and amount filled in. After paying, return here and confirm your order; payment is not verified automatically.
                   </div>
 
                   <div style={{ width: '100%', marginTop: '12px' }}>
