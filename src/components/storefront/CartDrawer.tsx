@@ -144,6 +144,13 @@ export const CartDrawer: React.FC = () => {
     ...(settings.paymentPayuEnabled && settings.payuConfigured ? ['payu' as const] : []),
     ...(isCodAvailableForCart ? ['cod' as const] : [])
   ];
+  const nonCodPaymentLabels = availablePaymentMethods
+    .filter(method => method !== 'cod')
+    .map(method => ({
+      upi: 'UPI Direct',
+      razorpay: 'Razorpay',
+      payu: 'PayU'
+    })[method]);
   const paymentMethod = availablePaymentMethods.includes(selectedPaymentMethod)
     ? selectedPaymentMethod
     : availablePaymentMethods[0] || 'cod';
@@ -810,7 +817,7 @@ export const CartDrawer: React.FC = () => {
                   )}
 
                   {/* Option 3: Cash on Delivery (COD) */}
-                  {settings.paymentCodEnabled !== false && (
+                  {isCodAvailableForCart && (
                     <label style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -857,7 +864,10 @@ export const CartDrawer: React.FC = () => {
                     Cash on Delivery is unavailable for this entire cart
                   </div>
                   <div style={{ color: '#92400E', marginBottom: '10px' }}>
-                    COD is disabled for the product{codUnavailableProducts.length === 1 ? '' : 's'} below. Because your order contains {codUnavailableProducts.length === 1 ? 'this item' : 'these items'}, COD cannot be selected for any item in this cart. Choose UPI or Razorpay to continue.
+                    COD is disabled for the product{codUnavailableProducts.length === 1 ? '' : 's'} below. Because your order contains {codUnavailableProducts.length === 1 ? 'this item' : 'these items'}, COD cannot be selected for any item in this cart.
+                    {nonCodPaymentLabels.length > 0
+                      ? ` Choose ${nonCodPaymentLabels.join(', ')} to continue.`
+                      : ' No other payment methods are available right now; please contact the store for help.'}
                   </div>
                   <div style={{ display: 'grid', gap: '7px' }}>
                     {codUnavailableProducts.map(product => (
@@ -954,16 +964,17 @@ export const CartDrawer: React.FC = () => {
                       src={upiQr.dataUrl}
                       alt="UPI QR Code"
                       style={{
-                        width: '180px',
-                        height: '180px',
+                        width: 'min(180px, 100%)',
+                        aspectRatio: '1',
                         borderRadius: '12px',
                         border: '1px solid #E2E8F0',
                         backgroundColor: '#FFFFFF',
-                        padding: '6px'
+                        padding: '6px',
+                        boxSizing: 'border-box'
                       }}
                     />
                   ) : (
-                    <div style={{ width: '180px', height: '180px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ width: 'min(180px, 100%)', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       Generating QR...
                     </div>
                   )}

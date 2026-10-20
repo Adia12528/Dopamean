@@ -348,14 +348,20 @@ async function requireUser(req, res, next) {
 
 
 // Health check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'Cozy Loops E-Commerce Production Engine',
-    database: process.env.SUPABASE_DB_URL ? 'Supabase PostgreSQL' : 'SQLite 3 (WAL mode)',
-    customerAuth: supabaseAuth ? 'Supabase Auth' : 'Legacy app authentication',
-    time: new Date().toISOString()
-  });
+app.get('/api/health', async (_req, res) => {
+  try {
+    await db.getSettings();
+    res.json({
+      status: 'ok',
+      service: 'Cozy Loops E-Commerce Production Engine',
+      database: process.env.SUPABASE_DB_URL ? 'Supabase PostgreSQL' : 'SQLite 3 (WAL mode)',
+      customerAuth: supabaseAuth ? 'Supabase Auth' : 'Legacy app authentication',
+      time: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Health check database error:', err);
+    res.status(503).json({ status: 'error', error: 'Store database is unavailable.' });
+  }
 });
 
 // ==========================================

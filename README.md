@@ -24,7 +24,7 @@ Dopamean is a React storefront and studio dashboard backed by an Express API. Th
 
    ```bash
    npm ci
-   npm --prefix server install
+   npm --prefix server ci
    ```
 
 3. Start the API and frontend together:
@@ -123,14 +123,14 @@ CI validates syntax, lint, and the production frontend build. That build uses `h
 
 ### Render API
 
-1. Deploy the `server` directory as a Node web service. The included `render.yaml` uses `server` as the root, installs dependencies, starts `npm start`, and checks `/api/health`.
+1. Deploy the `server` directory as a Node web service. The included `render.yaml` uses `server` as the root, installs locked dependencies with `npm ci`, starts `npm start`, and checks `/api/health`. The configured Render `free` plan may spin down when idle and is not suitable for dependable production checkout; choose an always-on plan if reliable availability is required.
 2. Set the production API variables listed above in Render. Use unique random signing secrets of at least 32 bytes and an initial admin passcode of at least 12 characters.
 3. Set `CORS_ORIGIN` to the exact HTTPS origin of the storefront (for example, `https://your-site.vercel.app`), with no path. Add other HTTPS origins only when intentionally serving them.
 4. Create a **public** Supabase Storage bucket named `media`, or set `SUPABASE_STORAGE_BUCKET` to your chosen bucket. The API uses its server-only Supabase secret key to upload images and stores public CDN URLs. Production uploads require Storage; local disk is not a persistent production upload destination.
 5. Set `SUPABASE_PUBLISHABLE_KEY` on the API if customer Supabase Auth is enabled. Optionally configure `DELIVERY_AGENT_PASSCODE` and separate super-admin credentials.
 6. If enabling Razorpay, configure the API credentials and a webhook for `/api/webhooks/razorpay` with the `payment.captured` event. Set `RAZORPAY_WEBHOOK_SECRET` to the webhook's signing secret, never its URL. Checkout loads the payment SDK only when a customer selects Razorpay.
-7. If enabling PayU India, set `PAYU_CALLBACK_BASE_URL` to the API's public HTTPS origin and keep `PAYU_CREDENTIALS_ENCRYPTION_KEY` stable. Add the PayU Merchant Key and Salt in **Studio → Payment Gateways & UPI**, test first with PayU test credentials, then switch off test mode only when using live credentials. PayU callbacks are hash-checked and successful transactions are verified with PayU before an order is marked paid. The integration follows PayU's [hosted checkout](https://docs.payu.in/docs/prebuilt-checkout-page-integration), [hash generation](https://docs.payu.in/docs/hash-generation), and [Verify Payment API](https://docs.payu.in/reference/verify_payment_api) requirements.
-8. After deployment, verify the API health endpoint and test the storefront-to-API connection and critical user flows.
+7. If enabling PayU India, set `PAYU_CALLBACK_BASE_URL` to the same public HTTPS API origin configured as `VITE_API_BASE_URL` on Vercel, and keep `PAYU_CREDENTIALS_ENCRYPTION_KEY` stable. Add the PayU Merchant Key and Salt in **Studio → Payment Gateways & UPI**, test first with PayU test credentials, then switch off test mode only when using live credentials. PayU callbacks are hash-checked and successful transactions are verified with PayU before an order is marked paid. The integration follows PayU's [hosted checkout](https://docs.payu.in/docs/prebuilt-checkout-page-integration), [hash generation](https://docs.payu.in/docs/hash-generation), and [Verify Payment API](https://docs.payu.in/reference/verify_payment_api) requirements.
+8. After deployment, verify `/api/health` reports `status: ok` (it checks database access), confirm the storefront can reach the API without CORS errors, and test sign-in, product management, checkout, order tracking, image upload, and payment callbacks with provider test credentials before switching to live payments.
 
 Before launch, back up the database and confirm it contains no development/demo customer or order data. Move older uploads from `server/uploads` into Supabase Storage; relative `/uploads/...` paths must resolve against the API origin. Review backup and retention settings for both the database and Storage.
 
