@@ -72,7 +72,27 @@ export interface StoreSettings {
   defaultCourierPartner?: string;
   estimatedCraftingDays?: number;
   autoMarkCodPaidOnDelivered?: boolean;
-  enableWhatsAppUpdates?: boolean;
+  whatsappEnabled?: boolean;
+  whatsappBusinessPhone?: string;
+  whatsappCountryCode?: string;
+  whatsappOrderButtonEnabled?: boolean;
+  whatsappOrderReceivedEnabled?: boolean;
+  whatsappOrderConfirmedEnabled?: boolean;
+  whatsappOrderShippedEnabled?: boolean;
+  whatsappOutForDeliveryEnabled?: boolean;
+  whatsappOrderDeliveredEnabled?: boolean;
+  whatsappOrderCancelledEnabled?: boolean;
+  whatsappCodReminderEnabled?: boolean;
+  whatsappSupportEnabled?: boolean;
+  whatsappTemplateOrderInquiry?: string;
+  whatsappTemplateOrderReceived?: string;
+  whatsappTemplateConfirmed?: string;
+  whatsappTemplateShipped?: string;
+  whatsappTemplateOutForDelivery?: string;
+  whatsappTemplateDelivered?: string;
+  whatsappTemplateCancelled?: string;
+  whatsappTemplateCodReminder?: string;
+  whatsappTemplateSupport?: string;
 
   // Payment Gateways & UPI
   paymentRazorpayEnabled?: boolean;

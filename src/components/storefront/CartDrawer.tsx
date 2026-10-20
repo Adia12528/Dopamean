@@ -13,22 +13,27 @@ import {
   QrCode, 
   Truck, 
   ShieldCheck,
-  Download
+  Download,
+  Copy,
+  Check,
+  Smartphone,
+  Landmark
 } from 'lucide-react';
 import { downloadInvoicePDF } from '../../utils/downloadInvoicePdf';
+import { createWhatsAppUrl, getWhatsAppTemplate, isWhatsAppEnabled, renderWhatsAppTemplate } from '../../lib/whatsapp';
 
 const isValidUpiVpa = (value?: string) =>
   Boolean(value && /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim()));
 
-const createUpiPaymentUri = (upiId: string, payeeName: string, amount: number) => {
+const createUpiPaymentUri = (upiId: string, payeeName: string, amount: number, storeName: string) => {
   const params = new URLSearchParams({
     pa: upiId,
     pn: payeeName,
     am: amount.toFixed(2),
     cu: 'INR',
-    tn: 'Cozy Loops Craft Order'
+    tn: `${storeName} Order`
   });
-  return `upi://pay?${params.toString()}`;
+  return `upi://pay?${params.toString().replace(/\+/g, '%20')}`;
 };
 
 interface RazorpayOptions {
@@ -76,7 +81,8 @@ export const CartDrawer: React.FC = () => {
     syncOrder,
     clearCart,
     settings,
-    setIsTrackingModalOpen
+    setIsTrackingModalOpen,
+    showToast
   } = useStore();
 
   const [promoInput, setPromoInput] = useState('');
@@ -87,14 +93,15 @@ export const CartDrawer: React.FC = () => {
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
 
   // Payment method selection
-  const [selectedPaymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod' | 'whatsapp'>(() =>
+  const [selectedPaymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod'>(() =>
     settings.paymentUpiEnabled !== false && isValidUpiVpa(settings.upiId) ? 'upi'
       : settings.paymentRazorpayEnabled ? 'razorpay'
-        : settings.paymentCodEnabled !== false ? 'cod' : 'whatsapp'
+        : 'cod'
   );
   const [upiQr, setUpiQr] = useState<{ uri: string; dataUrl: string } | null>(null);
   const [upiQrError, setUpiQrError] = useState<{ uri: string; error: string } | null>(null);
   const [upiUtrNumber, setUpiUtrNumber] = useState('');
+  const [hasCopiedUpiId, setHasCopiedUpiId] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -121,11 +128,33 @@ export const CartDrawer: React.FC = () => {
   const upiId = settings.upiId?.trim() || '';
   const upiPayeeName = settings.upiPayeeName?.trim() || settings.storeName || '';
   const hasValidUpiId = settings.paymentUpiEnabled !== false && isValidUpiVpa(upiId);
-  const paymentMethod = selectedPaymentMethod === 'upi' && !hasValidUpiId
-    ? settings.paymentRazorpayEnabled ? 'razorpay'
-      : settings.paymentCodEnabled !== false ? 'cod' : 'whatsapp'
-    : selectedPaymentMethod;
-  const upiPaymentUri = hasValidUpiId ? createUpiPaymentUri(upiId, upiPayeeName, total) : '';
+  const availablePaymentMethods = [
+    ...(hasValidUpiId ? ['upi' as const] : []),
+    ...(settings.paymentRazorpayEnabled ? ['razorpay' as const] : []),
+    ...(settings.paymentCodEnabled !== false ? ['cod' as const] : [])
+  ];
+  const paymentMethod = availablePaymentMethods.includes(selectedPaymentMethod)
+    ? selectedPaymentMethod
+    : availablePaymentMethods[0] || 'cod';
+  const upiPaymentUri = hasValidUpiId
+    ? createUpiPaymentUri(upiId, upiPayeeName, total, settings.storeName || 'Store')
+    : '';
+  const whatsappOrderUrl = (() => {
+    if (!isWhatsAppEnabled(settings) || settings.whatsappOrderButtonEnabled === false) return null;
+    const phone = settings.whatsappBusinessPhone || settings.contactPhone || '';
+    const itemLines = cart.map(item =>
+      `• ${item.product.title} x${item.quantity} — ${settings.currency}${(item.product.price * item.quantity).toFixed(2)}`
+    ).join('\n');
+    const promo = activePromo ? `\nPromo Applied: ${activePromo.code} (-${settings.currency}${discount.toFixed(2)})\n` : '';
+    const message = renderWhatsAppTemplate(getWhatsAppTemplate(settings, 'orderInquiry'), {
+      store: settings.storeName || 'our store',
+      items: itemLines,
+      promo,
+      currency: settings.currency || '₹',
+      total: total.toFixed(2)
+    });
+    return createWhatsAppUrl(phone, message, settings.whatsappCountryCode || '91');
+  })();
 
   // Generate UPI QR Code URL dynamically whenever paymentMethod is 'upi' or total changes
   useEffect(() => {
@@ -163,6 +192,18 @@ export const CartDrawer: React.FC = () => {
     }
   };
 
+  const handleCopyUpiId = async () => {
+    try {
+      await navigator.clipboard.writeText(upiId);
+      setHasCopiedUpiId(true);
+      window.setTimeout(() => setHasCopiedUpiId(false), 1800);
+      showToast('UPI ID copied. Open your UPI app and enter the amount.', 'success');
+    } catch (error) {
+      console.error('Could not copy UPI ID:', error);
+      showToast('Copy was blocked by your browser. Select the UPI ID and copy it manually.', 'error');
+    }
+  };
+
   const triggerCelebration = async () => {
     try {
       const { default: confetti } = await import('canvas-confetti');
@@ -179,6 +220,10 @@ export const CartDrawer: React.FC = () => {
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.address) return;
+    if (availablePaymentMethods.length === 0) {
+      showToast('Online payment is not configured yet. Please contact the store or try again later.', 'error');
+      return;
+    }
 
     setIsSubmitting(true);
     let pendingRazorpayStoreOrderId: string | null = null;
@@ -626,7 +671,11 @@ export const CartDrawer: React.FC = () => {
                   Choose Payment Method:
                 </label>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))',
+                  gap: '10px'
+                }}>
                   {/* Option 1: Instant UPI QR & Apps */}
                   {hasValidUpiId && <label style={{
                     display: 'flex',
@@ -645,13 +694,13 @@ export const CartDrawer: React.FC = () => {
                       checked={paymentMethod === 'upi'}
                       onChange={() => setPaymentMethod('upi')}
                     />
-                    <QrCode size={18} color="var(--accent-terracotta)" />
+                    <QrCode size={20} color="var(--accent-terracotta)" />
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>
-                        Instant UPI QR (GPay / PhonePe / Paytm / BHIM)
+                        UPI Direct
                       </div>
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                        Scan & pay directly to store UPI ID without gateway fees
+                        Scan the QR, copy the UPI ID, or open a UPI app on your phone.
                       </div>
                     </div>
                   </label>}
@@ -675,13 +724,13 @@ export const CartDrawer: React.FC = () => {
                         checked={paymentMethod === 'razorpay'}
                         onChange={() => setPaymentMethod('razorpay')}
                       />
-                      <CreditCard size={18} color="#2563EB" />
+                      <CreditCard size={20} color="#2563EB" />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>
                           Razorpay Secure Gateway
                         </div>
                         <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                          Credit/Debit Cards, NetBanking, Wallets
+                          Cards, UPI, NetBanking and wallets via Razorpay
                         </div>
                       </div>
                     </label>
@@ -706,19 +755,34 @@ export const CartDrawer: React.FC = () => {
                         checked={paymentMethod === 'cod'}
                         onChange={() => setPaymentMethod('cod')}
                       />
-                      <Truck size={18} color="#16A34A" />
+                      <Truck size={20} color="#16A34A" />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>
                           Cash on Delivery (COD)
                         </div>
                         <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                          Pay with cash upon parcel delivery at your doorstep
+                          Pay the courier when your parcel is delivered
                         </div>
                       </div>
                     </label>
                   )}
                 </div>
               </div>
+
+              {availablePaymentMethods.length === 0 && (
+                <div role="alert" style={{
+                  marginTop: '10px',
+                  padding: '12px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid #FECACA',
+                  background: '#FEF2F2',
+                  color: '#991B1B',
+                  fontSize: '0.82rem',
+                  lineHeight: 1.45
+                }}>
+                  No payment methods are currently available. Please contact the store to complete your order.
+                </div>
+              )}
 
               {/* UPI QR Display Card */}
               {paymentMethod === 'upi' && (
@@ -732,10 +796,30 @@ export const CartDrawer: React.FC = () => {
                   alignItems: 'center',
                   textAlign: 'center'
                 }}>
-                  <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1E293B', marginBottom: '8px' }}>
-                    Scan to Pay {settings.currency}{total.toFixed(2)}
+                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1E293B', marginBottom: '4px' }}>
+                    Pay {settings.currency}{total.toFixed(2)} with UPI
+                  </div>
+                  <div style={{ fontSize: '0.76rem', color: '#64748B', marginBottom: '12px' }}>
+                    Choose the option that works for your device
                   </div>
 
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))',
+                    gap: '16px',
+                    alignItems: 'center',
+                    width: '100%'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '14px',
+                      background: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '14px'
+                    }}>
                   {upiQrError?.uri === upiPaymentUri ? (
                     <div role="alert" style={{ width: '100%', color: '#B91C1C', fontSize: '0.8rem' }}>
                       {upiQrError.error}
@@ -758,48 +842,135 @@ export const CartDrawer: React.FC = () => {
                       Generating QR...
                     </div>
                   )}
-
-                  <div style={{ marginTop: '8px', fontSize: '0.76rem', color: '#475569' }}>
-                    UPI ID: <strong>{upiId}</strong>
+                    {upiQr?.uri === upiPaymentUri && (
+                      <a
+                        href={upiQr.dataUrl}
+                        download="upi-payment.png"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          marginTop: '8px',
+                          color: '#334155',
+                          fontSize: '0.76rem',
+                          fontWeight: 700,
+                          textDecoration: 'none'
+                        }}
+                      >
+                        <Download size={14} /> Download QR
+                      </a>
+                    )}
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748B' }}>
-                    Payee: {upiPayeeName}
+
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '10px',
+                      padding: '14px',
+                      background: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '14px',
+                      textAlign: 'left'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 800, color: '#1E293B' }}>
+                        <Landmark size={17} color="var(--accent-terracotta)" />
+                        Pay manually from any UPI app
+                      </div>
+                      <div style={{ fontSize: '0.76rem', lineHeight: 1.45, color: '#64748B' }}>
+                        On desktop, open your UPI app on another device and enter these details. On mobile, use the app button below.
+                      </div>
+                      <label htmlFor="checkout-upi-id" style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
+                        Pay to (UPI ID)
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+                        <input
+                          id="checkout-upi-id"
+                          type="text"
+                          readOnly
+                          value={upiId}
+                          onFocus={event => event.currentTarget.select()}
+                          aria-label="UPI ID to pay"
+                          style={{
+                            minWidth: 0,
+                            flex: 1,
+                            padding: '10px 11px',
+                            border: '1px solid #CBD5E1',
+                            borderRadius: '9px',
+                            fontSize: '0.9rem',
+                            fontWeight: 700,
+                            color: '#1E293B',
+                            background: '#F8FAFC'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyUpiId()}
+                          aria-label={hasCopiedUpiId ? 'UPI ID copied' : 'Copy UPI ID'}
+                          style={{
+                            flexShrink: 0,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '6px',
+                            padding: '0 12px',
+                            border: '1px solid #CBD5E1',
+                            borderRadius: '9px',
+                            background: '#FFFFFF',
+                            color: '#334155',
+                            fontWeight: 700,
+                            cursor: 'pointer'
+                          }}
+                        >
+                          {hasCopiedUpiId ? <Check size={16} /> : <Copy size={16} />}
+                          <span>{hasCopiedUpiId ? 'Copied' : 'Copy'}</span>
+                        </button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', fontSize: '0.78rem' }}>
+                        <div><span style={{ color: '#64748B' }}>Payee</span><br /><strong>{upiPayeeName}</strong></div>
+                        <div><span style={{ color: '#64748B' }}>Amount</span><br /><strong>{settings.currency}{total.toFixed(2)}</strong></div>
+                      </div>
+                      <a
+                        href={upiPaymentUri || undefined}
+                        aria-disabled={!upiPaymentUri}
+                        onClick={event => {
+                          if (!upiPaymentUri) event.preventDefault();
+                        }}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '8px',
+                          width: '100%',
+                          boxSizing: 'border-box',
+                          padding: '12px 14px',
+                          borderRadius: '10px',
+                          backgroundColor: 'var(--accent-terracotta)',
+                          color: '#FFFFFF',
+                          fontWeight: 800,
+                          fontSize: '0.86rem',
+                          textDecoration: 'none'
+                        }}
+                      >
+                        <Smartphone size={17} />
+                        Open UPI app on this phone
+                      </a>
+                    </div>
                   </div>
 
-                  <a
-                    href={upiPaymentUri || undefined}
-                    aria-disabled={!upiPaymentUri}
-                    onClick={event => {
-                      if (!upiPaymentUri) event.preventDefault();
-                    }}
-                    style={{
-                      display: 'inline-flex',
-                      justifyContent: 'center',
-                      width: '100%',
-                      boxSizing: 'border-box',
-                      marginTop: '12px',
-                      padding: '11px 16px',
-                      borderRadius: '10px',
-                      backgroundColor: 'var(--accent-terracotta)',
-                      color: '#FFFFFF',
-                      fontWeight: 700,
-                      fontSize: '0.86rem',
-                      textDecoration: 'none'
-                    }}
-                  >
-                    Open UPI app and pay {settings.currency}{total.toFixed(2)}
-                  </a>
-                  <div style={{ marginTop: '6px', fontSize: '0.72rem', color: '#64748B' }}>
-                    On your phone, this opens an installed UPI app with the payee and amount filled in. After paying, return here and confirm your order; payment is not verified automatically.
+                  <div style={{ width: '100%', marginTop: '12px', padding: '11px 12px', borderRadius: '10px', background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontSize: '0.76rem', lineHeight: 1.45 }}>
+                    After paying, enter the UPI reference number below and confirm your order. UPI payment is not automatically verified; the store will verify it before marking the order paid.
                   </div>
 
                   <div style={{ width: '100%', marginTop: '12px' }}>
                     <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 600, color: '#334155', textAlign: 'left', marginBottom: '4px' }}>
-                      12-Digit UPI Ref / UTR No. (Optional for faster verification)
+                      UPI reference / UTR number (optional)
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. 429182749102"
+                      placeholder="Enter the reference shown in your UPI app"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      maxLength={24}
                       value={upiUtrNumber}
                       onChange={(e) => setUpiUtrNumber(e.target.value)}
                       style={{
@@ -829,7 +1000,7 @@ export const CartDrawer: React.FC = () => {
 
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || availablePaymentMethods.length === 0}
                   className="btn-primary"
                   style={{ width: '100%', padding: '14px', fontSize: '0.96rem' }}
                 >
@@ -840,10 +1011,20 @@ export const CartDrawer: React.FC = () => {
                       : paymentMethod === 'razorpay'
                       ? 'Pay with Razorpay'
                       : paymentMethod === 'upi'
-                      ? 'Confirm UPI Order'
+                      ? 'I have paid — place order'
                       : 'Confirm Cash on Delivery Order'}
                   </span>
                 </button>
+                {paymentMethod === 'cod' && (
+                  <div style={{ marginTop: '10px', padding: '12px', borderRadius: '10px', background: '#F0FDF4', color: '#166534', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                    Pay {settings.currency}{total.toFixed(2)} to the courier when your order arrives. You will not be charged online now.
+                  </div>
+                )}
+                {paymentMethod === 'razorpay' && (
+                  <div style={{ marginTop: '10px', padding: '12px', borderRadius: '10px', background: '#EFF6FF', color: '#1E40AF', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                    Your payment will be processed securely by Razorpay. The order is confirmed only after Razorpay verifies the payment.
+                  </div>
+                )}
               </div>
             </form>
           ) : cart.length === 0 ? (
@@ -1088,15 +1269,9 @@ export const CartDrawer: React.FC = () => {
             </button>
 
             {/* WhatsApp Order Button */}
-            {settings.contactPhone && (
+            {whatsappOrderUrl && (
               <a
-                href={(() => {
-                  const phone = settings.contactPhone.replace(/\D/g, '');
-                  const itemLines = cart.map(i => `• ${i.product.title} x${i.quantity} — ${settings.currency}${(i.product.price * i.quantity).toFixed(2)}`).join('\n');
-                  const promoLine = activePromo ? `\nPromo Applied: ${activePromo.code} (-${settings.currency}${discount.toFixed(2)})` : '';
-                  const msg = `Hi Deepa! 🌸 I'd like to order handcrafted pieces from *${settings.storeName}*:\n\n${itemLines}${promoLine}\n\n*Total: ${settings.currency}${total.toFixed(2)}*\n\nPlease confirm availability and payment details. Thank you! 🧶`;
-                  return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
-                })()}
+                href={whatsappOrderUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

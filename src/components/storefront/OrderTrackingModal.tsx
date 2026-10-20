@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Order } from '../../types';
 import { api, getAssetUrl } from '../../services/api';
 import { useStore } from '../../context/StoreContext';
+import { createWhatsAppSupportUrl } from '../../lib/whatsapp';
 import { 
   Search, 
   X, 
@@ -238,6 +239,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
           {orders.map((order) => {
             const step = getStepIndex(order.status);
+            const whatsappSupportUrl = createWhatsAppSupportUrl(order, settings);
             return (
               <div
                 key={order.id}
@@ -479,8 +481,9 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                     <span>View / Print Invoice</span>
                   </button>
 
+                  {whatsappSupportUrl && (
                   <a
-                    href={`https://wa.me/${settings.contactPhone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hi Deepa, I have a query regarding my order #${order.id}.`)}`}
+                    href={whatsappSupportUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{
@@ -499,6 +502,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                     <span>Help on WhatsApp</span>
                     <ExternalLink size={12} />
                   </a>
+                  )}
                 </div>
               </div>
             );

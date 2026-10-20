@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { Order, StoreSettings } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
+import { createOrderWhatsAppMessage, createWhatsAppUrl, isWhatsAppEnabled, isWhatsAppStageEnabled, normalizeWhatsAppPhone } from '../../lib/whatsapp';
 import { 
   Package, 
   Clock, 
@@ -37,8 +38,7 @@ export const OrdersManager: React.FC = () => {
     commissionType: settings.commissionType ?? 'percentage',
     defaultCourierPartner: settings.defaultCourierPartner || 'India Post Speed Post',
     estimatedCraftingDays: settings.estimatedCraftingDays ?? 3,
-    autoMarkCodPaidOnDelivered: settings.autoMarkCodPaidOnDelivered ?? true,
-    enableWhatsAppUpdates: settings.enableWhatsAppUpdates ?? true
+    autoMarkCodPaidOnDelivered: settings.autoMarkCodPaidOnDelivered ?? true
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
@@ -350,29 +350,10 @@ export const OrdersManager: React.FC = () => {
     }
   };
 
-  // WhatsApp helper
-  const getWhatsAppLink = (order: Order, stage: string) => {
-    const phone = (order.customer.phone || '').replace(/\D/g, '');
-    if (!phone) return null;
-    
-    let text = '';
-    const store = settings.storeName || 'Cozy Loops';
-    const cur = settings.currency || '₹';
-
-    if (stage === 'confirmed') {
-      text = `Hello ${order.customer.name}! 🌸 Your order #${order.id} at ${store} has been confirmed. Our artisan has queued your items for handcrafting & packaging. Estimated dispatch in ${settings.estimatedCraftingDays || 3} days. Thank you!`;
-    } else if (stage === 'shipped') {
-      text = `Hello ${order.customer.name}! 📦 Great news! Your handcrafted parcel for order #${order.id} has been dispatched via ${order.courierPartner || 'Courier'}. Tracking AWB: ${order.trackingNumber || 'Available shortly'}. Track anytime on our store.`;
-    } else if (stage === 'out_for_delivery') {
-      text = `Hello ${order.customer.name}! 🛵 Your ${store} parcel (Order #${order.id}) is Out for Delivery with our courier partner today! Please be available for handover. Total due: ${order.paymentStatus === 'paid' ? 'PAID ONLINE' : `${cur}${order.total} (Cash on Delivery)`}.`;
-    } else if (stage === 'delivered') {
-      text = `Hello ${order.customer.name}! 🌸 Your ${store} order #${order.id} was delivered! We hope you love your handcrafted creation. Leave us a review on our website anytime!`;
-    } else if (stage === 'cancelled') {
-      text = `Hello ${order.customer.name}. Your order #${order.id} at ${store} has been cancelled. Reason: ${order.cancelReason || 'Cancelled by studio'}. For questions, contact us directly.`;
-    }
-
-    const intlPhone = phone.length === 10 ? `91${phone}` : phone;
-    return `https://wa.me/${intlPhone}?text=${encodeURIComponent(text)}`;
+  const getWhatsAppLink = (order: Order, stage: 'orderReceived' | 'confirmed' | 'shipped' | 'outForDelivery' | 'delivered' | 'cancelled') => {
+    if (!isWhatsAppStageEnabled(settings, stage) || !order.customer.phone) return null;
+    const message = createOrderWhatsAppMessage({ order, settings }, stage);
+    return createWhatsAppUrl(order.customer.phone, message, settings.whatsappCountryCode || '91');
   };
 
   return (
@@ -573,7 +554,7 @@ export const OrdersManager: React.FC = () => {
               </div>
             </div>
 
-            {/* Checkbox Automations */}
+            {/* Order settings */}
             <div style={{
               display: 'flex',
               flexWrap: 'wrap',
@@ -591,15 +572,6 @@ export const OrdersManager: React.FC = () => {
                 <span>Automatically mark COD as PAID upon final delivery</span>
               </label>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-main)', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={settingsForm.enableWhatsAppUpdates}
-                  onChange={(e) => setSettingsForm({ ...settingsForm, enableWhatsAppUpdates: e.target.checked })}
-                  style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
-                />
-                <span>Enable 1-Click WhatsApp milestone notifications to customer</span>
-              </label>
             </div>
 
             {/* Actions */}
@@ -925,7 +897,11 @@ export const OrdersManager: React.FC = () => {
           {filteredOrders.map(order => {
             const statusConfig = getStatusBadge(order.status);
             const { commission, payout } = calculateOrderCommission(order.total);
-            const whatsappAvailable = Boolean(order.customer.phone && settings.enableWhatsAppUpdates !== false);
+            const whatsappAvailable = Boolean(
+              isWhatsAppEnabled(settings) &&
+              order.customer.phone &&
+              normalizeWhatsAppPhone(order.customer.phone, settings.whatsappCountryCode || '91')
+            );
 
             return (
               <div
@@ -1182,9 +1158,9 @@ export const OrdersManager: React.FC = () => {
                         {order.cancelReason || 'Cancelled by studio admin. Items returned to stock.'}
                       </div>
                     </div>
-                    {whatsappAvailable && (
+                    {whatsappAvailable && isWhatsAppStageEnabled(settings, 'cancelled') && (
                       <a
-                        href={getWhatsAppLink(order, 'cancelled') || '#'}
+                        href={getWhatsAppLink(order, 'cancelled') || undefined}
                         target="_blank"
                         rel="noopener noreferrer"
                         style={{
@@ -1314,6 +1290,28 @@ export const OrdersManager: React.FC = () => {
                     {/* STAGE 1: PENDING ORDERS (Cancel Option with Reason + Confirm Button) */}
                     {order.status === 'pending' && (
                       <>
+                        {whatsappAvailable && isWhatsAppStageEnabled(settings, 'orderReceived') && (
+                          <a
+                            href={getWhatsAppLink(order, 'orderReceived') || undefined}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              padding: '8px 14px',
+                              borderRadius: '10px',
+                              backgroundColor: '#DCFCE7',
+                              color: '#16A34A',
+                              fontSize: '0.8rem',
+                              fontWeight: 700,
+                              textDecoration: 'none'
+                            }}
+                          >
+                            <MessageCircle size={14} />
+                            <span>Order received</span>
+                          </a>
+                        )}
                         <button
                           onClick={() => handleOpenCancelModal(order)}
                           style={{
@@ -1381,9 +1379,9 @@ export const OrdersManager: React.FC = () => {
                           <span>Cancel Order</span>
                         </button>
 
-                        {whatsappAvailable && (
+                        {whatsappAvailable && isWhatsAppStageEnabled(settings, 'confirmed') && (
                           <a
-                            href={getWhatsAppLink(order, 'confirmed') || '#'}
+                            href={getWhatsAppLink(order, 'confirmed') || undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{
@@ -1431,9 +1429,9 @@ export const OrdersManager: React.FC = () => {
                     {/* STAGE 3: SHIPPED ORDERS (In Transit -> Out for Delivery Button) */}
                     {order.status === 'shipped' && (
                       <>
-                        {whatsappAvailable && (
+                        {whatsappAvailable && isWhatsAppStageEnabled(settings, 'shipped') && (
                           <a
-                            href={getWhatsAppLink(order, 'shipped') || '#'}
+                            href={getWhatsAppLink(order, 'shipped') || undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{
@@ -1481,9 +1479,9 @@ export const OrdersManager: React.FC = () => {
                     {/* STAGE 4: OUT FOR DELIVERY (Rider with Product -> Delivered Button) */}
                     {order.status === 'out_for_delivery' && (
                       <>
-                        {whatsappAvailable && (
+                        {whatsappAvailable && isWhatsAppStageEnabled(settings, 'outForDelivery') && (
                           <a
-                            href={getWhatsAppLink(order, 'out_for_delivery') || '#'}
+                            href={getWhatsAppLink(order, 'outForDelivery') || undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{
@@ -1531,9 +1529,9 @@ export const OrdersManager: React.FC = () => {
                     {/* STAGE 5: DELIVERED (Completed Order) */}
                     {order.status === 'delivered' && (
                       <>
-                        {whatsappAvailable && (
+                        {whatsappAvailable && isWhatsAppStageEnabled(settings, 'delivered') && (
                           <a
-                            href={getWhatsAppLink(order, 'delivered') || '#'}
+                            href={getWhatsAppLink(order, 'delivered') || undefined}
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{

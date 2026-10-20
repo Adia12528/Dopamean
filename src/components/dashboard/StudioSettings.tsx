@@ -47,7 +47,7 @@ export const StudioSettings: React.FC = () => {
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'perks' | 'shipping' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'perks' | 'shipping' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -123,6 +123,20 @@ export const StudioSettings: React.FC = () => {
         return false;
       }
       payload.upiId = upiId;
+    }
+    if (payload.whatsappEnabled !== false) {
+      const whatsappPhone = String(payload.whatsappBusinessPhone || payload.contactPhone || '');
+      const phoneDigits = whatsappPhone.replace(/\D/g, '');
+      const countryCode = String(payload.whatsappCountryCode || '91').replace(/\D/g, '');
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+        alert('Enter a valid WhatsApp business number, or add one under Contact & Socials.');
+        return false;
+      }
+      if (countryCode.length < 1 || countryCode.length > 4) {
+        alert('Enter a valid default country calling code using 1 to 4 digits.');
+        return false;
+      }
+      payload.whatsappCountryCode = countryCode;
     }
     if (clearRazorpaySecret) payload.razorpayKeySecret = '';
     else if (form.razorpayKeySecret?.trim()) payload.razorpayKeySecret = form.razorpayKeySecret.trim();
@@ -210,6 +224,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
     { id: 'perks' as const, label: 'Trust Badges & Perks', icon: <ShieldCheck size={16} /> },
     { id: 'shipping' as const, label: 'Shipping & Inventory', icon: <Truck size={16} /> },
+    { id: 'whatsapp' as const, label: 'WhatsApp Messages', icon: <MessageCircle size={16} /> },
     { id: 'payments' as const, label: 'Payment Gateways & UPI', icon: <CreditCard size={16} /> },
     { id: 'contact' as const, label: 'Contact & Socials', icon: <MessageCircle size={16} /> },
     { id: 'footer' as const, label: 'Footer & Copyright', icon: <Sliders size={16} /> },
@@ -1176,6 +1191,139 @@ export const StudioSettings: React.FC = () => {
                       fontSize: '0.88rem'
                     }}
                   />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* WHATSAPP SETTINGS */}
+          {activeSection === 'whatsapp' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <MessageCircle size={20} color="#25D366" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  WhatsApp Click-to-Chat
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                Customize store contact details, checkout, support and order milestone messages. These settings open WhatsApp with a prefilled message; a person must press Send. Automatic message delivery requires a separate WhatsApp Business API integration.
+              </p>
+
+              <div style={{ display: 'grid', gap: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.86rem', fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.whatsappEnabled !== false}
+                    onChange={(e) => handleChange('whatsappEnabled', e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: '#25D366' }}
+                  />
+                  Enable WhatsApp links throughout the store and dashboard
+                </label>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      WhatsApp business number
+                    </label>
+                    <input
+                      type="tel"
+                      value={form.whatsappBusinessPhone || ''}
+                      onChange={(e) => handleChange('whatsappBusinessPhone', e.target.value)}
+                      placeholder={form.contactPhone || '+91 98765 43210'}
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.88rem' }}
+                    />
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '5px 0 0' }}>
+                      Used for checkout orders and customer support. Leave blank to use Contact & Socials phone.
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Default country calling code
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.whatsappCountryCode || '91'}
+                      onChange={(e) => handleChange('whatsappCountryCode', e.target.value.replace(/\D/g, ''))}
+                      placeholder="91"
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.88rem' }}
+                    />
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '5px 0 0' }}>
+                      Used when a customer number is entered without a country code.
+                    </p>
+                  </div>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.whatsappOrderButtonEnabled !== false}
+                    onChange={(e) => handleChange('whatsappOrderButtonEnabled', e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: '#25D366' }}
+                  />
+                  Show “Order via WhatsApp” in the cart
+                </label>
+
+                <div style={{ borderTop: '1px dashed var(--border-medium)', paddingTop: '14px' }}>
+                  <h4 style={{ fontSize: '0.92rem', fontWeight: 700, margin: '0 0 10px' }}>Order milestone message links</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                    {([
+                      ['whatsappOrderReceivedEnabled', 'Order received'],
+                      ['whatsappOrderConfirmedEnabled', 'Order confirmed'],
+                      ['whatsappOrderShippedEnabled', 'Order shipped'],
+                      ['whatsappOutForDeliveryEnabled', 'Out for delivery'],
+                      ['whatsappOrderDeliveredEnabled', 'Order delivered'],
+                      ['whatsappOrderCancelledEnabled', 'Order cancelled'],
+                      ['whatsappCodReminderEnabled', 'COD reminder'],
+                      ['whatsappSupportEnabled', 'Customer support link']
+                    ] as const).map(([field, label]) => (
+                      <label key={field} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.82rem', fontWeight: 600 }}>
+                        <input
+                          type="checkbox"
+                          checked={form[field] !== false}
+                          onChange={(e) => handleChange(field, e.target.checked)}
+                          style={{ width: '16px', height: '16px', accentColor: '#25D366' }}
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ borderTop: '1px dashed var(--border-medium)', paddingTop: '14px' }}>
+                  <h4 style={{ fontSize: '0.92rem', fontWeight: 700, margin: '0 0 4px' }}>Message templates</h4>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '0 0 12px' }}>
+                    Available placeholders: {'{customer}'}, {'{orderId}'}, {'{store}'}, {'{currency}'}, {'{total}'}, {'{craftingDays}'}, {'{courier}'}, {'{trackingNumber}'}, {'{amountDue}'}, {'{cancelReason}'}. For order requests, also use {'{items}'} and {'{promo}'}.
+                  </p>
+                  {([
+                    ['whatsappTemplateOrderInquiry', 'Cart order request', 'Hi! I would like to order from {store}:\n{items}\n{promo}Total: {currency}{total}\nPlease confirm availability.'],
+                    ['whatsappTemplateOrderReceived', 'Order received', 'Hello {customer}! We received order #{orderId} at {store}. Total: {currency}{total}.'],
+                    ['whatsappTemplateConfirmed', 'Order confirmed', 'Hello {customer}! Order #{orderId} at {store} is confirmed. Estimated dispatch in {craftingDays} days.'],
+                    ['whatsappTemplateShipped', 'Order shipped', 'Hello {customer}! Order #{orderId} from {store} shipped via {courier}. Tracking AWB: {trackingNumber}.'],
+                    ['whatsappTemplateOutForDelivery', 'Out for delivery', 'Hello {customer}! Order #{orderId} from {store} is out for delivery. Amount due: {amountDue}.'],
+                    ['whatsappTemplateDelivered', 'Order delivered', 'Hello {customer}! Order #{orderId} from {store} was delivered. We hope you love it!'],
+                    ['whatsappTemplateCancelled', 'Order cancelled', 'Hello {customer}, order #{orderId} at {store} was cancelled. Reason: {cancelReason}.'],
+                    ['whatsappTemplateCodReminder', 'COD reminder', 'Hello {customer}! Order #{orderId} is out for delivery. Please keep {currency}{total} ready for COD.'],
+                    ['whatsappTemplateSupport', 'Customer support', 'Hi, I have a question about order #{orderId}.']
+                  ] as const).map(([field, label, placeholder]) => (
+                    <div key={field} style={{ marginBottom: '12px' }}>
+                      <label htmlFor={field} style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '5px' }}>{label}</label>
+                      <textarea
+                        id={field}
+                        rows={field === 'whatsappTemplateOrderInquiry' ? 4 : 3}
+                        value={form[field] || ''}
+                        onChange={(e) => handleChange(field, e.target.value)}
+                        placeholder={placeholder}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-medium)', fontFamily: 'inherit', fontSize: '0.82rem', resize: 'vertical' }}
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

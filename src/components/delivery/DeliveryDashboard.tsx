@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { createOrderWhatsAppMessage, createWhatsAppUrl, isWhatsAppStageEnabled } from '../../lib/whatsapp';
 import { api } from '../../services/api';
 import type { Order } from '../../types';
 import {
@@ -69,12 +70,11 @@ export const DeliveryDashboard: React.FC = () => {
   };
 
   const openWhatsApp = (order: Order) => {
-    const phone = order.customer.phone?.replace(/\D/g, '');
-    if (!phone) return;
-    const msg = encodeURIComponent(
-      `Hello ${order.customer.name}, your order #${order.id.slice(-6)} from ${settings.storeName} is out for delivery! Please keep \u20b9${order.total} ready for COD. Thank you! \uD83C\uDF38`
-    );
-    window.open(`https://wa.me/91${phone}?text=${msg}`, '_blank');
+    const stage = order.paymentMethod === 'cod' ? 'codReminder' : 'outForDelivery';
+    if (!order.customer.phone || !isWhatsAppStageEnabled(settings, stage)) return;
+    const message = createOrderWhatsAppMessage({ order, settings }, stage);
+    const url = createWhatsAppUrl(order.customer.phone, message, settings.whatsappCountryCode || '91');
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   return (
@@ -247,7 +247,7 @@ export const DeliveryDashboard: React.FC = () => {
                           <p style={{ fontSize: '0.85rem', color: '#0F172A', margin: 0, fontWeight: 600, lineHeight: 1.4 }}>{order.customer.address}</p>
                         </div>
                       </div>
-                      {order.customer.phone && (
+                      {order.customer.phone && isWhatsAppStageEnabled(settings, order.paymentMethod === 'cod' ? 'codReminder' : 'outForDelivery') && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <Phone size={14} color="#2563EB" style={{ flexShrink: 0 }} />
                           <a href={`tel:${order.customer.phone}`} style={{ fontSize: '0.85rem', color: '#2563EB', fontWeight: 700, textDecoration: 'none' }}>
@@ -312,7 +312,7 @@ export const DeliveryDashboard: React.FC = () => {
                             display: 'flex', alignItems: 'center', gap: 5
                           }}
                         >
-                          <MessageCircle size={14} /> Notify
+                          <MessageCircle size={14} /> {order.paymentMethod === 'cod' ? 'COD Reminder' : 'Notify'}
                         </button>
                       )}
                       {order.status === 'shipped' && (
