@@ -26,6 +26,10 @@ const orderStatus = value => {
   const resolved = map[status] || status;
   return ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'].includes(resolved) ? resolved : 'pending';
 };
+const paymentStatus = value => {
+  const status = String(value || 'pending').toLowerCase().trim();
+  return ['pending', 'paid', 'failed', 'refund_pending', 'refunded'].includes(status) ? status : 'pending';
+};
 const cleanUser = row => row && ({
   id: row.id, name: row.name, email: row.email, phone: row.phone || '', address: row.address || '',
   city: row.city || '', pincode: row.pincode || '', createdAt: row.created_at, updatedAt: row.updated_at
@@ -36,6 +40,7 @@ const cleanOrder = value => {
   const result = {
     ...order,
     status: orderStatus(order.status),
+    paymentStatus: paymentStatus(order.paymentStatus),
     customer: {
       ...order.customer,
       name: order.customer?.name || order.customerName || 'Customer',
@@ -238,4 +243,3 @@ export const postgresDb = {
 };
 
 await postgresDb.initialize();
-
