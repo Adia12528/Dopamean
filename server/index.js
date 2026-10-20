@@ -8,6 +8,14 @@ import multer from 'multer';
 import Razorpay from 'razorpay';
 import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
+import {
+  createPayuRequestHash,
+  createPayuVerifyHash,
+  decryptPayuSecret,
+  encryptPayuSecret,
+  formatPayuAmount,
+  verifyPayuResponseHash
+} from './payu.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -21,6 +29,13 @@ const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_ID || '';
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || '';
 const USER_JWT_SECRET = process.env.USER_JWT_SECRET || crypto.randomBytes(32).toString('hex');
 const isProduction = process.env.NODE_ENV === 'production';
+const getPayuCredentials = settings => {
+  if (settings.payuCredentialsCleared) return { key: '', salt: '' };
+  return {
+    key: decryptPayuSecret(settings.payuMerchantKeyEncrypted || settings.payuMerchantKey || process.env.PAYU_MERCHANT_KEY || '').trim(),
+    salt: decryptPayuSecret(settings.payuMerchantSaltEncrypted || settings.payuMerchantSalt || process.env.PAYU_MERCHANT_SALT || '').trim()
+  };
+};
 if (isProduction && /^https?:\/\//i.test(process.env.RAZORPAY_WEBHOOK_SECRET || '')) {
   throw new Error('RAZORPAY_WEBHOOK_SECRET must be the signing secret, not the webhook URL.');
 }
@@ -93,6 +108,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '15mb', verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
+app.use(express.urlencoded({ extended: false, limit: '20kb' }));
 app.get('/uploads/hero_landing.png', (_req, res) => res.redirect(301, '/uploads/hero_landing.webp'));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
@@ -671,12 +687,17 @@ app.get('/api/settings', async (req, res) => {
     delete sanitized.deliveryAgentPasscode;
     delete sanitized.payuMerchantKey;
     delete sanitized.payuMerchantSalt;
+    delete sanitized.payuMerchantKeyEncrypted;
+    delete sanitized.payuMerchantSaltEncrypted;
+    delete sanitized.payuCredentialsCleared;
     sanitized.superAdminId = settings.superAdminId || process.env.SUPER_ADMIN_ID || '';
     sanitized.adminPasscodeConfigured = getValidAdminPasscodes(settings).length > 0;
     const superAdmin = getSuperAdminCredentials(settings);
     sanitized.superAdminConfigured = Boolean(superAdmin.id && superAdmin.password);
     sanitized.deliveryAgentPasscodeConfigured = Boolean(getDeliveryAgentPasscode(settings));
-    sanitized.payuConfigured = Boolean(settings.payuMerchantKey && settings.payuMerchantSalt);
+    const { key: payuKey, salt: payuSalt } = getPayuCredentials(settings);
+    sanitized.payuConfigured = Boolean(payuKey && payuSalt);
+    sanitized.paymentPayuEnabled = sanitized.payuConfigured && settings.paymentPayuEnabled === true;
     sanitized.razorpayKeyId = (sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
     if (sanitized.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET) {
       sanitized.razorpayKeySecretConfigured = true;
@@ -705,8 +726,28 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     delete changes.razorpayWebhookSecretConfigured;
     delete changes.adminPasscodeConfigured;
     delete changes.superAdminConfigured;
+    delete changes.payuConfigured;
 
     const envUpdates = {};
+    const clearPayuCredentials = changes.clearPayuCredentials === true;
+    delete changes.clearPayuCredentials;
+    const newPayuKey = String(changes.payuMerchantKey || '').trim();
+    const newPayuSalt = String(changes.payuMerchantSalt || '').trim();
+    if (newPayuKey.length > 256 || newPayuSalt.length > 256 || /[\r\n]/.test(newPayuKey) || /[\r\n]/.test(newPayuSalt)) {
+      return res.status(400).json({ error: 'PayU Merchant Key and Salt must be valid values no longer than 256 characters.' });
+    }
+    delete changes.payuMerchantKey;
+    delete changes.payuMerchantSalt;
+    if (newPayuKey) changes.payuMerchantKeyEncrypted = encryptPayuSecret(newPayuKey);
+    if (newPayuSalt) changes.payuMerchantSaltEncrypted = encryptPayuSecret(newPayuSalt);
+    if (newPayuKey || newPayuSalt) changes.payuCredentialsCleared = false;
+    if (clearPayuCredentials) {
+      changes.payuMerchantKeyEncrypted = '';
+      changes.payuMerchantSaltEncrypted = '';
+      changes.payuMerchantKey = '';
+      changes.payuMerchantSalt = '';
+      changes.payuCredentialsCleared = true;
+    }
 
     // 1. Studio Admin Passcode Update
     let newToken = null;
@@ -773,6 +814,26 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
 
     const current = await db.getSettings();
     const next = { ...current, ...changes };
+    const payuCredentials = getPayuCredentials(next);
+    const payuKey = payuCredentials.key.trim();
+    const payuSalt = payuCredentials.salt.trim();
+    if (changes.paymentPayuEnabled === true && (!payuKey || !payuSalt)) {
+      return res.status(400).json({ error: 'Add both PayU Merchant Key and Salt before enabling PayU.' });
+    }
+    if (changes.paymentPayuEnabled !== undefined && typeof changes.paymentPayuEnabled !== 'boolean') {
+      return res.status(400).json({ error: 'PayU must be enabled or disabled using a boolean setting.' });
+    }
+    if (changes.payuTestMode !== undefined && typeof changes.payuTestMode !== 'boolean') {
+      return res.status(400).json({ error: 'PayU mode must be either test or live.' });
+    }
+    if (!clearPayuCredentials && next.payuMerchantKey) {
+      if (!next.payuMerchantKeyEncrypted) changes.payuMerchantKeyEncrypted = encryptPayuSecret(next.payuMerchantKey);
+      changes.payuMerchantKey = '';
+    }
+    if (!clearPayuCredentials && next.payuMerchantSalt) {
+      if (!next.payuMerchantSaltEncrypted) changes.payuMerchantSaltEncrypted = encryptPayuSecret(next.payuMerchantSalt);
+      changes.payuMerchantSalt = '';
+    }
     if (changes.paymentRazorpayEnabled && (!(next.razorpayKeyId || process.env.RAZORPAY_KEY_ID) || !(next.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET))) {
       return res.status(400).json({ error: 'Add both Razorpay Key ID and Key Secret before enabling Razorpay.' });
     }
@@ -824,12 +885,19 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     delete sanitized.deliveryAgentPasscode;
     delete sanitized.payuMerchantKey;
     delete sanitized.payuMerchantSalt;
+    delete sanitized.payuMerchantKeyEncrypted;
+    delete sanitized.payuMerchantSaltEncrypted;
+    delete sanitized.payuCredentialsCleared;
     sanitized.superAdminId = updated.superAdminId || process.env.SUPER_ADMIN_ID || '';
     sanitized.adminPasscodeConfigured = getValidAdminPasscodes(updated).length > 0;
     const superAdmin = getSuperAdminCredentials(updated);
     sanitized.superAdminConfigured = Boolean(superAdmin.id && superAdmin.password);
     sanitized.deliveryAgentPasscodeConfigured = Boolean(getDeliveryAgentPasscode(updated));
-    sanitized.payuConfigured = Boolean(updated.payuMerchantKey && updated.payuMerchantSalt);
+    const updatedPayuCredentials = getPayuCredentials(updated);
+    const updatedPayuKey = updatedPayuCredentials.key.trim();
+    const updatedPayuSalt = updatedPayuCredentials.salt.trim();
+    sanitized.payuConfigured = Boolean(updatedPayuKey && updatedPayuSalt);
+    sanitized.paymentPayuEnabled = sanitized.payuConfigured && updated.paymentPayuEnabled === true;
     if (newToken) sanitized.newToken = newToken;
 
     sanitized.razorpayKeyId = sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';
@@ -844,6 +912,9 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     res.json(sanitized);
   } catch (err) {
     console.error('Update settings error:', err);
+    if (err.message?.startsWith('Set PAYU_CREDENTIALS_ENCRYPTION_KEY') || err.message?.startsWith('PAYU_CREDENTIALS_ENCRYPTION_KEY or JWT_SECRET')) {
+      return res.status(400).json({ error: err.message });
+    }
     res.status(500).json({ error: 'Failed to update settings' });
   }
 });
@@ -998,6 +1069,7 @@ app.post('/api/orders', orderLimit, async (req, res) => {
     const method = req.body?.paymentMethod || 'cod';
     if (method === 'upi' && settings.paymentUpiEnabled === false) return res.status(400).json({ error: 'UPI payments are currently unavailable.' });
     if (method === 'cod' && settings.paymentCodEnabled === false) return res.status(400).json({ error: 'Cash on Delivery is currently unavailable.' });
+    if (method === 'payu') return res.status(400).json({ error: 'Use the PayU checkout endpoint to start a PayU payment.' });
     const rzpKeyId = (settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
     const rzpKeySecret = (settings.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET || '').trim();
     const isRazorpayConfigured = Boolean(rzpKeyId && rzpKeySecret);
@@ -1111,8 +1183,184 @@ app.delete('/api/reviews/:id', requireAdmin, async (req, res) => {
 });
 
 // ==========================================
-// PAYMENT GATEWAYS API: RAZORPAY & UPI
+// PAYMENT GATEWAYS API: PAYU, RAZORPAY & UPI
 // ==========================================
+app.post('/api/payments/payu/create-order', paymentLimit, async (req, res) => {
+  let storeOrder;
+  try {
+    const settings = await db.getSettings();
+    const { key, salt } = getPayuCredentials(settings);
+    if (!key || !salt || settings.paymentPayuEnabled !== true) {
+      return res.status(400).json({ error: 'PayU is not configured and enabled in Studio Settings.' });
+    }
+    const phoneDigits = String(req.body?.customer?.phone || '').replace(/\D/g, '');
+    if (phoneDigits.length < 10 || phoneDigits.length > 15) {
+      return res.status(400).json({ error: 'Enter a valid mobile number with 10 to 15 digits for PayU checkout.' });
+    }
+
+    const callbackBase = process.env.PAYU_CALLBACK_BASE_URL || process.env.PUBLIC_API_URL ||
+      process.env.RENDER_EXTERNAL_URL || (!isProduction ? `${req.protocol}://${req.get('host')}` : '');
+    if (!callbackBase) {
+      return res.status(503).json({ error: 'Configure PAYU_CALLBACK_BASE_URL with this backend’s public HTTPS URL before accepting PayU payments.' });
+    }
+    let callbackOrigin;
+    try {
+      const parsedBase = new URL(callbackBase);
+      if (isProduction && parsedBase.protocol !== 'https:') throw new Error('HTTPS required');
+      if (parsedBase.username || parsedBase.password) throw new Error('Credentials are not allowed');
+      callbackOrigin = parsedBase.origin;
+    } catch {
+      return res.status(503).json({ error: 'PAYU_CALLBACK_BASE_URL must be a valid public HTTPS URL.' });
+    }
+
+    storeOrder = await db.createOrder({ ...req.body, paymentMethod: 'payu', status: 'pending' });
+    const transactionId = `D${crypto.randomBytes(12).toString('hex')}`;
+    await db.linkPayuTransaction(storeOrder.id, transactionId);
+    const amount = formatPayuAmount(storeOrder.total);
+    const productinfo = `Store order ${storeOrder.id}`.slice(0, 100);
+    const firstname = String(storeOrder.customer.name).trim().slice(0, 60);
+    const email = String(storeOrder.customer.email).trim().slice(0, 255);
+    const udf1 = storeOrder.id;
+    const fields = {
+      key,
+      txnid: transactionId,
+      amount,
+      productinfo,
+      firstname,
+      email,
+      phone: String(storeOrder.customer.phone || '').replace(/\D/g, '').slice(0, 15),
+      udf1,
+      surl: `${callbackOrigin}/api/payments/payu/callback`,
+      furl: `${callbackOrigin}/api/payments/payu/callback`
+    };
+    fields.hash = createPayuRequestHash({ ...fields, salt });
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(201).json({
+      success: true,
+      orderId: storeOrder.id,
+      checkoutUrl: settings.payuTestMode === false
+        ? 'https://secure.payu.in/_payment'
+        : 'https://test.payu.in/_payment',
+      fields
+    });
+  } catch (err) {
+    if (storeOrder) {
+      try {
+        await db.cancelOrder(storeOrder.id, 'PayU checkout could not be initialized');
+      } catch (cancelError) {
+        console.error('PayU checkout order cleanup failed:', cancelError);
+      }
+    }
+    const clientErrors = ['INVALID_CUSTOMER', 'EMPTY_ORDER', 'INVALID_QUANTITY', 'PRODUCT_NOT_FOUND', 'INSUFFICIENT_STOCK', 'INVALID_PROMO', 'INVALID_PAYMENT_METHOD'];
+    if (clientErrors.includes(err.message)) return res.status(400).json({ error: err.message });
+    console.error('PayU order creation error:', err);
+    res.status(500).json({ error: 'Failed to initialize PayU checkout.' });
+  }
+});
+
+app.post('/api/payments/payu/callback', async (req, res) => {
+  const renderResult = (success, title, message, orderId = '') => {
+    const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[character]);
+    const storeUrl = allowedOrigins[0] || process.env.PUBLIC_APP_URL || (!isProduction ? 'http://localhost:5173' : '/');
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).type('html').send(`<!doctype html>
+      <html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <title>${escapeHtml(title)}</title>
+      <body style="margin:0;background:#faf7f2;font:16px system-ui,sans-serif;color:#29231f;display:grid;min-height:100vh;place-items:center">
+        <main style="box-sizing:border-box;width:min(92vw,480px);padding:32px 24px;text-align:center;background:white;border:1px solid #eee4dc;border-radius:20px">
+          <div style="font-size:48px;color:${success ? '#16803c' : '#b45309'}">${success ? '✓' : '!'}</div>
+          <h1 style="font-size:24px">${escapeHtml(title)}</h1>
+          <p style="color:#665d57;line-height:1.6">${escapeHtml(message)}</p>
+          ${orderId ? `<p>Order reference: <strong>${escapeHtml(orderId)}</strong></p>` : ''}
+          <a href="${escapeHtml(storeUrl)}" style="display:inline-block;margin-top:12px;padding:12px 20px;border-radius:999px;background:#c85a32;color:#fff;text-decoration:none;font-weight:700">Return to store</a>
+        </main>
+      </body></html>`);
+  };
+
+  try {
+    const response = req.body || {};
+    const settings = await db.getSettings();
+    const { key, salt } = getPayuCredentials(settings);
+    if (!key || !salt || String(response.key || '') !== key || !verifyPayuResponseHash(response, salt)) {
+      return res.status(401).send('Invalid PayU payment response.');
+    }
+
+    const order = await db.getOrderByPayuTransactionId(String(response.txnid || ''));
+    if (!order || order.id !== String(response.udf1 || '') || order.paymentMethod !== 'payu') {
+      return res.status(400).send('Payment response does not match an order.');
+    }
+    if (order.paymentStatus === 'paid') {
+      return renderResult(true, 'Payment received', 'Your payment is verified and your order is being prepared.', order.id);
+    }
+    if (order.status !== 'pending' || order.paymentStatus !== 'pending') {
+      return renderResult(false, 'Payment not completed', 'This order is no longer awaiting payment.', order.id);
+    }
+    const expectedAmount = formatPayuAmount(order.total);
+    if (formatPayuAmount(response.amount) !== expectedAmount) {
+      return res.status(400).send('Payment amount does not match the order.');
+    }
+
+    const callbackStatus = String(response.status || '').toLowerCase();
+    if (callbackStatus !== 'success') {
+      if (['failure', 'failed'].includes(callbackStatus)) {
+        await db.cancelOrder(order.id, 'PayU payment failed');
+        return renderResult(false, 'Payment was not completed', 'No payment was confirmed. The reserved items have been released; you can place the order again.', order.id);
+      }
+      return renderResult(false, 'Payment is being checked', 'PayU has not confirmed this payment yet. Please contact the store with your order reference.', order.id);
+    }
+
+    const verifyUrl = settings.payuTestMode === false
+      ? 'https://info.payu.in/merchant/postservice.php?form=2'
+      : 'https://test.payu.in/merchant/postservice.php?form=2';
+    const verifyBody = new URLSearchParams({
+      key,
+      command: 'verify_payment',
+      var1: String(response.txnid),
+      hash: createPayuVerifyHash({ key, salt, txnid: String(response.txnid) })
+    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 12000);
+    let verification;
+    try {
+      const verifyResponse = await fetch(verifyUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: verifyBody,
+        signal: controller.signal
+      });
+      if (!verifyResponse.ok) throw new Error(`PayU verification returned HTTP ${verifyResponse.status}`);
+      verification = await verifyResponse.json();
+    } catch (err) {
+      console.error('PayU transaction lookup failed:', err);
+      return renderResult(false, 'Payment verification pending', 'We could not confirm the payment with PayU yet. Please contact the store with your order reference before trying again.', order.id);
+    } finally {
+      clearTimeout(timeout);
+    }
+    const transaction = Object.values(verification?.transaction_details || {})
+      .find(detail => String(detail?.txnid || '') === String(response.txnid));
+    const verifiedAmount = transaction?.amt ?? transaction?.transaction_amount;
+    if (
+      Number(verification?.status) !== 1 ||
+      String(transaction?.status || '').toLowerCase() !== 'success' ||
+      formatPayuAmount(verifiedAmount) !== expectedAmount
+    ) {
+      return renderResult(false, 'Payment verification pending', 'PayU has not confirmed the payment with the expected amount yet. Please contact the store with your order reference.', order.id);
+    }
+
+    await db.updateOrderStatus(order.id, 'processing', {
+      paymentStatus: 'paid',
+      payuTransactionId: String(response.txnid),
+      payuPaymentId: String(transaction.mihpayid || '')
+    });
+    return renderResult(true, 'Payment received', 'Your payment is verified and your order is being prepared.', order.id);
+  } catch (err) {
+    console.error('PayU callback verification error:', err);
+    res.status(500).send('Unable to verify this payment right now. Please contact the store with your order reference.');
+  }
+});
+
 app.post('/api/payments/razorpay/test', requireAdmin, paymentLimit, async (req, res) => {
   const settings = await db.getSettings();
   const keyId = (settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();

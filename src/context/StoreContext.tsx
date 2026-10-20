@@ -42,6 +42,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   upiPayeeName: 'Deepa Soni (Cozy Loops)',
   paymentCodEnabled: true,
   paymentRazorpayEnabled: true,
+  paymentPayuEnabled: false,
+  payuTestMode: true,
   razorpayKeyId: ''
 };
 
@@ -103,7 +105,7 @@ interface StoreContextType {
   createOrder: (
     customer: { name: string; email: string; phone?: string; address: string },
     paymentInfo?: {
-      method?: 'cod' | 'upi' | 'razorpay' | 'whatsapp';
+      method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
       status?: 'pending' | 'paid';
       upiRefNumber?: string;
       razorpayOrderId?: string;
@@ -328,9 +330,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updated = await api.updateSettings(newSettings);
       setSettings(updated);
       showToast('Store settings updated successfully! ✨');
-    } catch {
-      showToast('Failed to update settings', 'error');
-      throw new Error('Failed to update settings');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update settings';
+      showToast(message, 'error');
+      throw error;
     }
   };
 
@@ -491,7 +494,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const createOrder = async (
     customer: { name: string; email: string; phone?: string; address: string },
     paymentInfo?: {
-      method?: 'cod' | 'upi' | 'razorpay' | 'whatsapp';
+      method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
       status?: 'pending' | 'paid';
       upiRefNumber?: string;
       razorpayOrderId?: string;

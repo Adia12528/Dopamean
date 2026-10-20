@@ -94,10 +94,11 @@ export const CartDrawer: React.FC = () => {
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
 
   // Payment method selection
-  const [selectedPaymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'cod'>(() =>
+  const [selectedPaymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'payu' | 'cod'>(() =>
     settings.paymentUpiEnabled !== false && isValidUpiVpa(settings.upiId) ? 'upi'
       : settings.paymentRazorpayEnabled ? 'razorpay'
-        : 'cod'
+        : settings.paymentPayuEnabled && settings.payuConfigured ? 'payu'
+          : 'cod'
   );
   const [upiQr, setUpiQr] = useState<{ uri: string; dataUrl: string } | null>(null);
   const [upiQrError, setUpiQrError] = useState<{ uri: string; error: string } | null>(null);
@@ -140,6 +141,7 @@ export const CartDrawer: React.FC = () => {
   const availablePaymentMethods = [
     ...(hasValidUpiId ? ['upi' as const] : []),
     ...(settings.paymentRazorpayEnabled ? ['razorpay' as const] : []),
+    ...(settings.paymentPayuEnabled && settings.payuConfigured ? ['payu' as const] : []),
     ...(isCodAvailableForCart ? ['cod' as const] : [])
   ];
   const paymentMethod = availablePaymentMethods.includes(selectedPaymentMethod)
@@ -239,6 +241,37 @@ export const CartDrawer: React.FC = () => {
     let razorpayCheckoutOpened = false;
 
     try {
+      if (paymentMethod === 'payu') {
+        const checkout = await api.createPayuCheckout({
+          customer: { ...formData },
+          items: cart.map(item => ({
+            productId: item.product.id,
+            productTitle: item.product.title,
+            price: item.product.price,
+            quantity: item.quantity,
+            image: item.product.image,
+            color: item.selectedColor
+          })),
+          subtotal,
+          discountAmount: discount,
+          promoCodeApplied: activePromo?.code
+        });
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = checkout.checkoutUrl;
+        form.style.display = 'none';
+        for (const [name, value] of Object.entries(checkout.fields)) {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = value;
+          form.appendChild(input);
+        }
+        document.body.appendChild(form);
+        form.submit();
+        return;
+      }
+
       // 1. RAZORPAY ONLINE GATEWAY FLOW
       if (paymentMethod === 'razorpay') {
         if (!window.Razorpay) {
@@ -745,6 +778,37 @@ export const CartDrawer: React.FC = () => {
                     </label>
                   )}
 
+                  {/* Option 3: PayU Hosted Checkout */}
+                  {settings.paymentPayuEnabled && settings.payuConfigured && (
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      border: paymentMethod === 'payu' ? '2px solid var(--accent-terracotta)' : '1px solid var(--border-medium)',
+                      backgroundColor: paymentMethod === 'payu' ? 'var(--accent-terracotta-light)' : '#FFFFFF',
+                      cursor: 'pointer'
+                    }}>
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="payu"
+                        checked={paymentMethod === 'payu'}
+                        onChange={() => setPaymentMethod('payu')}
+                      />
+                      <CreditCard size={20} color="#7E22CE" />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: 'var(--text-main)' }}>
+                          PayU Secure Checkout
+                        </div>
+                        <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                          Pay securely using the payment methods available through PayU.
+                        </div>
+                      </div>
+                    </label>
+                  )}
+
                   {/* Option 3: Cash on Delivery (COD) */}
                   {settings.paymentCodEnabled !== false && (
                     <label style={{
@@ -1071,6 +1135,8 @@ export const CartDrawer: React.FC = () => {
                       ? 'Processing Order...'
                       : paymentMethod === 'razorpay'
                       ? 'Pay with Razorpay'
+                      : paymentMethod === 'payu'
+                      ? 'Continue to PayU'
                       : paymentMethod === 'upi'
                       ? 'I have paid — place order'
                       : 'Confirm Cash on Delivery Order'}
@@ -1084,6 +1150,11 @@ export const CartDrawer: React.FC = () => {
                 {paymentMethod === 'razorpay' && (
                   <div style={{ marginTop: '10px', padding: '12px', borderRadius: '10px', background: '#EFF6FF', color: '#1E40AF', fontSize: '0.8rem', lineHeight: 1.45 }}>
                     Your payment will be processed securely by Razorpay. The order is confirmed only after Razorpay verifies the payment.
+                  </div>
+                )}
+                {paymentMethod === 'payu' && (
+                  <div style={{ marginTop: '10px', padding: '12px', borderRadius: '10px', background: '#F5F3FF', color: '#5B21B6', fontSize: '0.8rem', lineHeight: 1.45 }}>
+                    You’ll continue to PayU to complete payment. The order is marked paid only after the server verifies the transaction.
                   </div>
                 )}
               </div>

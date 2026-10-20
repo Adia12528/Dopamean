@@ -69,6 +69,7 @@ export const StudioSettings: React.FC = () => {
 
   const [clearRazorpaySecret, setClearRazorpaySecret] = useState(false);
   const [clearRazorpayWebhookSecret, setClearRazorpayWebhookSecret] = useState(false);
+  const [clearPayuCredentials, setClearPayuCredentials] = useState(false);
   const [isTestingRazorpay, setIsTestingRazorpay] = useState(false);
   const [razorpayTestMessage, setRazorpayTestMessage] = useState('');
 
@@ -126,12 +127,16 @@ export const StudioSettings: React.FC = () => {
   const handleSave = async (e?: React.FormEvent): Promise<boolean> => {
     if (e) e.preventDefault();
     
-    const payload = { ...form };
+    const payload: Partial<typeof form> & { clearPayuCredentials?: boolean } = { ...form };
     delete payload.adminPasscode;
     delete payload.superAdminPassword;
     delete payload.deliveryAgentPasscode;
     delete payload.razorpayKeySecret;
     delete payload.razorpayWebhookSecret;
+    delete payload.payuMerchantKey;
+    delete payload.payuMerchantSalt;
+    delete payload.payuConfigured;
+    delete payload.clearPayuCredentials;
     for (const rule of payload.codRules || []) {
       const hasPriceCondition = rule.minPrice !== undefined || rule.maxPrice !== undefined;
       if (!rule.category && !hasPriceCondition) {
@@ -177,6 +182,21 @@ export const StudioSettings: React.FC = () => {
     else if (form.razorpayKeySecret?.trim()) payload.razorpayKeySecret = form.razorpayKeySecret.trim();
     if (clearRazorpayWebhookSecret) payload.razorpayWebhookSecret = '';
     else if (form.razorpayWebhookSecret?.trim()) payload.razorpayWebhookSecret = form.razorpayWebhookSecret.trim();
+    if (clearPayuCredentials) {
+      payload.clearPayuCredentials = true;
+      payload.paymentPayuEnabled = false;
+    } else {
+      if (form.payuMerchantKey?.trim()) payload.payuMerchantKey = form.payuMerchantKey.trim();
+      if (form.payuMerchantSalt?.trim()) payload.payuMerchantSalt = form.payuMerchantSalt.trim();
+    }
+    if (
+      payload.paymentPayuEnabled &&
+      !form.payuConfigured &&
+      (!form.payuMerchantKey?.trim() || !form.payuMerchantSalt?.trim())
+    ) {
+      alert('Enter both the PayU Merchant Key and Salt before enabling PayU.');
+      return false;
+    }
 
     // 1. Super Admin ID change
     if (superAdminIdInput.trim() && superAdminIdInput.trim() !== (settings.superAdminId || 'superadmin')) {
@@ -233,10 +253,14 @@ export const StudioSettings: React.FC = () => {
         razorpayKeySecret: '',
         razorpayKeySecretConfigured: clearRazorpaySecret ? false : Boolean(prev.razorpayKeySecretConfigured || form.razorpayKeySecret?.trim()),
         razorpayWebhookSecret: '',
-        razorpayWebhookSecretConfigured: clearRazorpayWebhookSecret ? false : Boolean(prev.razorpayWebhookSecretConfigured || form.razorpayWebhookSecret?.trim())
+        razorpayWebhookSecretConfigured: clearRazorpayWebhookSecret ? false : Boolean(prev.razorpayWebhookSecretConfigured || form.razorpayWebhookSecret?.trim()),
+        payuMerchantKey: '',
+        payuMerchantSalt: '',
+        payuConfigured: clearPayuCredentials ? false : Boolean(prev.payuConfigured || form.payuMerchantKey?.trim() || form.payuMerchantSalt?.trim())
       }));
       setClearRazorpaySecret(false);
       setClearRazorpayWebhookSecret(false);
+      setClearPayuCredentials(false);
       setSavedSuccess(true);
       setNewSuperAdminPassword('');
       setConfirmSuperAdminPassword('');
@@ -246,8 +270,9 @@ export const StudioSettings: React.FC = () => {
       setConfirmPasscode('');
       setTimeout(() => setSavedSuccess(false), 2500);
       return true;
-    } catch {
-      alert('Could not save settings. Check the required details and try again.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not save settings. Check the required details and try again.';
+      alert(message);
       return false;
     }
   };
@@ -1723,7 +1748,97 @@ export const StudioSettings: React.FC = () => {
                 </div>
               </div>
 
-              {/* CARD 3: CASH ON DELIVERY (COD) */}
+              {/* CARD 3: PAYU CHECKOUT */}
+              <div style={{
+                backgroundColor: 'var(--bg-surface-soft)',
+                border: '1.5px solid var(--border-medium)',
+                borderRadius: '16px',
+                padding: '20px',
+                marginBottom: '20px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <CreditCard size={20} color="#7E22CE" />
+                    <div>
+                      <h4 style={{ fontSize: '0.98rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
+                        PayU Hosted Checkout
+                      </h4>
+                      <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
+                        Redirect customers to PayU and verify successful payments on the server.
+                      </p>
+                    </div>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(form.paymentPayuEnabled)}
+                      onChange={(e) => handleChange('paymentPayuEnabled', e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
+                    />
+                    <span>{form.paymentPayuEnabled ? 'Enabled' : 'Disabled'}</span>
+                  </label>
+                </div>
+
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px', fontSize: '0.82rem', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.payuTestMode !== false}
+                    onChange={(e) => handleChange('payuTestMode', e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
+                  />
+                  Use PayU test environment
+                </label>
+                {form.payuTestMode === false && (
+                  <p role="alert" style={{ margin: '0 0 14px', padding: '10px 12px', borderRadius: '10px', background: '#FFF7ED', color: '#9A3412', fontSize: '0.78rem' }}>
+                    Live payments are enabled for checkout. Confirm your live merchant credentials before saving.
+                  </p>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>PayU Merchant Key</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={form.payuMerchantKey || ''}
+                      onChange={(e) => { setClearPayuCredentials(false); handleChange('payuMerchantKey', e.target.value); }}
+                      placeholder={form.payuConfigured ? 'Saved securely — enter a new value to replace' : 'Enter PayU Merchant Key'}
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.88rem' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>PayU Merchant Salt</label>
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      value={form.payuMerchantSalt || ''}
+                      onChange={(e) => { setClearPayuCredentials(false); handleChange('payuMerchantSalt', e.target.value); }}
+                      placeholder={form.payuConfigured ? 'Saved securely — enter a new value to replace' : 'Enter PayU Merchant Salt'}
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.88rem' }}
+                    />
+                  </div>
+                </div>
+                {form.payuConfigured && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const removeCredentials = !clearPayuCredentials;
+                      setClearPayuCredentials(removeCredentials);
+                      if (removeCredentials) handleChange('paymentPayuEnabled', false);
+                      handleChange('payuMerchantKey', '');
+                      handleChange('payuMerchantSalt', '');
+                    }}
+                    style={{ marginTop: '8px', border: 0, background: 'transparent', color: '#B91C1C', cursor: 'pointer', fontSize: '0.78rem' }}
+                  >
+                    {clearPayuCredentials ? 'Keep saved PayU credentials' : 'Remove saved PayU credentials'}
+                  </button>
+                )}
+                <p style={{ margin: '12px 0 0', fontSize: '0.76rem', lineHeight: 1.5, color: 'var(--text-muted)' }}>
+                  Credentials are encrypted before being saved and never returned to the browser. Set a stable server-only <code>PAYU_CREDENTIALS_ENCRYPTION_KEY</code> (at least 32 bytes) or <code>JWT_SECRET</code>. Configure <code>PAYU_CALLBACK_BASE_URL</code> as the backend’s public HTTPS URL so PayU can return payment results.
+                </p>
+              </div>
+
+              {/* CARD 4: CASH ON DELIVERY (COD) */}
               <div style={{
                 backgroundColor: 'var(--bg-surface-soft)',
                 border: '1.5px solid var(--border-medium)',

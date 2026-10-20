@@ -31,7 +31,7 @@ export const api = {
     return res.json();
   },
 
-  updateSettings: async (settings: Partial<StoreSettings>): Promise<StoreSettings> => {
+  updateSettings: async (settings: Partial<StoreSettings> & { clearPayuCredentials?: boolean }): Promise<StoreSettings> => {
     const res = await adminFetch(`${BASE_URL}/api/settings`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -236,7 +236,26 @@ export const api = {
     return true;
   },
 
-  // PAYMENTS (RAZORPAY)
+  // PAYMENTS (PAYU & RAZORPAY)
+  createPayuCheckout: async (data: {
+    customer: Order['customer'];
+    items: Order['items'];
+    subtotal: number;
+    discountAmount?: number;
+    promoCodeApplied?: string;
+  }): Promise<{ success: boolean; orderId: string; checkoutUrl: string; fields: Record<string, string> }> => {
+    const res = await fetch(`${BASE_URL}/api/payments/payu/create-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to initiate PayU payment');
+    }
+    return res.json();
+  },
+
   createRazorpayOrder: async (data: {
     orderId: string;
   }): Promise<{ success: boolean; orderId: string; storeOrderId: string; amount: number; currency: string; keyId: string }> => {

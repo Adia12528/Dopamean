@@ -63,6 +63,7 @@
   upiPayeeName: 'Deepa Soni (Cozy Loops)',
   paymentCodEnabled: true,
   paymentPayuEnabled: false,
+  payuTestMode: true,
   payuMerchantKey: '',
   payuMerchantSalt: ''
 };

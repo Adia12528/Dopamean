@@ -91,7 +91,7 @@ export const postgresDb = {
       CREATE TABLE IF NOT EXISTS orders (
         id text PRIMARY KEY, customer_name text NOT NULL, customer_email text NOT NULL, customer_phone text,
         status text NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled')),
-        total numeric(12,2) NOT NULL CHECK(total>=0), payment_method text NOT NULL CHECK(payment_method IN ('cod','upi','razorpay','whatsapp')),
+        total numeric(12,2) NOT NULL CHECK(total>=0), payment_method text NOT NULL CHECK(payment_method IN ('cod','upi','razorpay','payu','whatsapp')),
         payment_status text NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','refund_pending','refunded')), tracking_number text,
         data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
       CREATE INDEX IF NOT EXISTS orders_created_idx ON orders(created_at DESC);
@@ -115,6 +115,8 @@ export const postgresDb = {
     await pool.query(`
       ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
       ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK(status IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled'));
+      ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_method_check;
+      ALTER TABLE orders ADD CONSTRAINT orders_payment_method_check CHECK(payment_method IN ('cod','upi','razorpay','payu','whatsapp'));
       ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_payment_status_check;
       ALTER TABLE orders ADD CONSTRAINT orders_payment_status_check CHECK(payment_status IN ('pending','paid','failed','refund_pending','refunded'));
     `);
@@ -149,6 +151,7 @@ export const postgresDb = {
   async getOrders() { const { rows } = await pool.query('SELECT data FROM orders ORDER BY created_at DESC'); return rows.map(row => cleanOrder(row.data)); },
   async getOrderById(id) { const { rows } = await pool.query('SELECT data FROM orders WHERE id=$1', [id]); return rows[0] ? cleanOrder(rows[0].data) : null; },
   async getOrderByRazorpayOrderId(id) { const { rows } = await pool.query("SELECT data FROM orders WHERE data->>'razorpayOrderId'=$1", [id]); return rows[0] ? cleanOrder(rows[0].data) : null; },
+  async getOrderByPayuTransactionId(id) { const { rows } = await pool.query("SELECT data FROM orders WHERE data->>'payuTransactionId'=$1", [id]); return rows[0] ? cleanOrder(rows[0].data) : null; },
   async getOrdersByQuery(q) { const { rows } = await pool.query('SELECT data FROM orders WHERE lower(id)=lower($1)', [q.trim()]); return rows.map(row => cleanOrder(row.data)); },
   async createOrder(orderData) {
     const client = await pool.connect();
@@ -158,7 +161,7 @@ export const postgresDb = {
       const customer = { name: String(customerInput.name || '').trim(), email: String(customerInput.email || '').trim().toLowerCase(), phone: String(customerInput.phone || '').trim(), address: String(customerInput.address || '').trim(), city: String(customerInput.city || '').trim(), pincode: String(customerInput.pincode || '').trim() };
       if (!customer.name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email) || !customer.address) throw new Error('INVALID_CUSTOMER');
       const paymentMethod = orderData.paymentMethod || 'cod';
-      if (!['cod','upi','razorpay','whatsapp'].includes(paymentMethod)) throw new Error('INVALID_PAYMENT_METHOD');
+      if (!['cod','upi','razorpay','payu','whatsapp'].includes(paymentMethod)) throw new Error('INVALID_PAYMENT_METHOD');
       if (!Array.isArray(orderData.items) || !orderData.items.length) throw new Error('EMPTY_ORDER');
       const quantities = new Map();
       for (const item of orderData.items) { const qty = Number(item.quantity); if (!item.productId || !Number.isSafeInteger(qty) || qty < 1) throw new Error('INVALID_QUANTITY'); quantities.set(item.productId, (quantities.get(item.productId) || 0) + qty); }
@@ -187,6 +190,7 @@ export const postgresDb = {
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
   },
   async linkRazorpayOrder(id, razorpayOrderId) { const current = await postgresDb.getOrderById(id); if (!current || current.paymentMethod !== 'razorpay' || current.paymentStatus !== 'pending' || current.razorpayOrderId) throw new Error('INVALID_PAYMENT_ORDER'); const updated = { ...current, razorpayOrderId }; await pool.query('UPDATE orders SET data=$2::jsonb WHERE id=$1', [id, JSON.stringify(updated)]); return updated; },
+  async linkPayuTransaction(id, payuTransactionId) { const current = await postgresDb.getOrderById(id); if (!current || current.paymentMethod !== 'payu' || current.paymentStatus !== 'pending' || current.payuTransactionId) throw new Error('INVALID_PAYMENT_ORDER'); const updated = { ...current, payuTransactionId }; await pool.query('UPDATE orders SET data=$2::jsonb WHERE id=$1', [id, JSON.stringify(updated)]); return updated; },
   async cancelOrder(id, cancelReason) {
     const client = await pool.connect();
     try {

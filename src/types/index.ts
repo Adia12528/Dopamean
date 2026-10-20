@@ -107,6 +107,7 @@ export interface StoreSettings {
   upiPayeeName?: string;
   paymentCodEnabled?: boolean;
   paymentPayuEnabled?: boolean;
+  payuTestMode?: boolean;
   payuMerchantKey?: string;
   payuMerchantSalt?: string;
   payuConfigured?: boolean;
@@ -210,7 +211,7 @@ export interface Order {
   promoCodeApplied?: string;
   total: number;
   status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled';
-  paymentMethod?: 'cod' | 'upi' | 'razorpay' | 'whatsapp';
+  paymentMethod?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
   paymentStatus?: 'pending' | 'paid' | 'failed' | 'refund_pending' | 'refunded';
   trackingNumber?: string;
   courierPartner?: string;

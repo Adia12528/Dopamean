@@ -61,6 +61,9 @@ Use `.env.example` as the local template. Never commit `.env` or put server-only
 | `SUPER_ADMIN_ID`, `SUPER_ADMIN_PASSWORD` | No | Optional separate super-admin credentials. Keep the password server-side. |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | If using Razorpay | Razorpay API credentials. |
 | `RAZORPAY_WEBHOOK_SECRET` | If verifying Razorpay webhooks | Webhook signing secret, not the webhook URL. |
+| `PAYU_MERCHANT_KEY`, `PAYU_MERCHANT_SALT` | If configuring PayU by environment | PayU India merchant credentials; alternatively, enter them in Studio. |
+| `PAYU_CALLBACK_BASE_URL` | If using PayU | Public HTTPS origin of the API, used for PayU success/failure callbacks. |
+| `PAYU_CREDENTIALS_ENCRYPTION_KEY` | If saving PayU credentials in Studio | Stable server-only key of at least 32 bytes used to encrypt saved credentials. `JWT_SECRET` is the fallback; rotating the encryption key makes saved PayU credentials unreadable. |
 
 ### Frontend
 
@@ -126,7 +129,8 @@ CI validates syntax, lint, and the production frontend build. That build uses `h
 4. Create a **public** Supabase Storage bucket named `media`, or set `SUPABASE_STORAGE_BUCKET` to your chosen bucket. The API uses its server-only Supabase secret key to upload images and stores public CDN URLs. Production uploads require Storage; local disk is not a persistent production upload destination.
 5. Set `SUPABASE_PUBLISHABLE_KEY` on the API if customer Supabase Auth is enabled. Optionally configure `DELIVERY_AGENT_PASSCODE` and separate super-admin credentials.
 6. If enabling Razorpay, configure the API credentials and a webhook for `/api/webhooks/razorpay` with the `payment.captured` event. Set `RAZORPAY_WEBHOOK_SECRET` to the webhook's signing secret, never its URL. Checkout loads the payment SDK only when a customer selects Razorpay.
-7. After deployment, verify the API health endpoint and test the storefront-to-API connection and critical user flows.
+7. If enabling PayU India, set `PAYU_CALLBACK_BASE_URL` to the API's public HTTPS origin and keep `PAYU_CREDENTIALS_ENCRYPTION_KEY` stable. Add the PayU Merchant Key and Salt in **Studio → Payment Gateways & UPI**, test first with PayU test credentials, then switch off test mode only when using live credentials. PayU callbacks are hash-checked and successful transactions are verified with PayU before an order is marked paid. The integration follows PayU's [hosted checkout](https://docs.payu.in/docs/prebuilt-checkout-page-integration), [hash generation](https://docs.payu.in/docs/hash-generation), and [Verify Payment API](https://docs.payu.in/reference/verify_payment_api) requirements.
+8. After deployment, verify the API health endpoint and test the storefront-to-API connection and critical user flows.
 
 Before launch, back up the database and confirm it contains no development/demo customer or order data. Move older uploads from `server/uploads` into Supabase Storage; relative `/uploads/...` paths must resolve against the API origin. Review backup and retention settings for both the database and Storage.
 

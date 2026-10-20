@@ -67,7 +67,7 @@ sqlite.exec(`
     customer_phone TEXT,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled')),
     total REAL NOT NULL CHECK (total >= 0),
-    payment_method TEXT NOT NULL DEFAULT 'cod' CHECK (payment_method IN ('cod', 'upi', 'razorpay', 'whatsapp')),
+    payment_method TEXT NOT NULL DEFAULT 'cod' CHECK (payment_method IN ('cod', 'upi', 'razorpay', 'payu', 'whatsapp')),
     payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refund_pending', 'refunded')),
     tracking_number TEXT,
     data TEXT NOT NULL,
@@ -103,7 +103,7 @@ sqlite.exec(`
 // Migrate pre-existing SQLite orders table if it was created with restrictive check constraints
 try {
   const ordersTableInfo = sqlite.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'").get();
-  if (ordersTableInfo?.sql && !ordersTableInfo.sql.includes('confirmed')) {
+  if (ordersTableInfo?.sql && (!ordersTableInfo.sql.includes('confirmed') || !ordersTableInfo.sql.includes('payu'))) {
     sqlite.exec(`
       CREATE TABLE orders_v2 (
         id TEXT PRIMARY KEY,
@@ -112,7 +112,7 @@ try {
         customer_phone TEXT,
         status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled')),
         total REAL NOT NULL CHECK (total >= 0),
-        payment_method TEXT NOT NULL DEFAULT 'cod' CHECK (payment_method IN ('cod', 'upi', 'razorpay', 'whatsapp')),
+        payment_method TEXT NOT NULL DEFAULT 'cod' CHECK (payment_method IN ('cod', 'upi', 'razorpay', 'payu', 'whatsapp')),
         payment_status TEXT NOT NULL DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refund_pending', 'refunded')),
         tracking_number TEXT,
         data TEXT NOT NULL,
@@ -157,11 +157,11 @@ sqlite.exec(`
     BEGIN SELECT RAISE(ABORT, 'invalid product'); END;
   CREATE TRIGGER IF NOT EXISTS orders_validate_insert BEFORE INSERT ON orders WHEN
     NEW.status NOT IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled') OR NEW.total < 0 OR
-    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed','refund_pending','refunded')
+    NEW.payment_method NOT IN ('cod','upi','razorpay','payu','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed','refund_pending','refunded')
     BEGIN SELECT RAISE(ABORT, 'invalid order'); END;
   CREATE TRIGGER IF NOT EXISTS orders_validate_update BEFORE UPDATE ON orders WHEN
     NEW.status NOT IN ('pending','confirmed','processing','shipped','out_for_delivery','delivered','cancelled') OR NEW.total < 0 OR
-    NEW.payment_method NOT IN ('cod','upi','razorpay','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed','refund_pending','refunded')
+    NEW.payment_method NOT IN ('cod','upi','razorpay','payu','whatsapp') OR NEW.payment_status NOT IN ('pending','paid','failed','refund_pending','refunded')
     BEGIN SELECT RAISE(ABORT, 'invalid order'); END;
   CREATE TRIGGER IF NOT EXISTS reviews_validate_insert BEFORE INSERT ON reviews WHEN
     NEW.rating NOT BETWEEN 1 AND 5 OR NOT EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id)
@@ -478,6 +478,10 @@ const sqliteDb = {
     const row = sqlite.prepare("SELECT data FROM orders WHERE json_extract(data, '$.razorpayOrderId') = ?").get(razorpayOrderId);
     return row ? normalizeOrder(JSON.parse(row.data)) : null;
   },
+  getOrderByPayuTransactionId: (payuTransactionId) => {
+    const row = sqlite.prepare("SELECT data FROM orders WHERE json_extract(data, '$.payuTransactionId') = ?").get(payuTransactionId);
+    return row ? normalizeOrder(JSON.parse(row.data)) : null;
+  },
   getOrdersByQuery: (q) => {
     const row = sqlite.prepare('SELECT data FROM orders WHERE LOWER(id) = LOWER(?)').get(q.trim());
     return row ? [normalizeOrder(JSON.parse(row.data))] : [];
@@ -496,7 +500,7 @@ const sqliteDb = {
       throw new Error('INVALID_CUSTOMER');
     }
     const paymentMethod = orderData.paymentMethod || 'cod';
-    if (!['cod', 'upi', 'razorpay', 'whatsapp'].includes(paymentMethod)) throw new Error('INVALID_PAYMENT_METHOD');
+    if (!['cod', 'upi', 'razorpay', 'payu', 'whatsapp'].includes(paymentMethod)) throw new Error('INVALID_PAYMENT_METHOD');
     if (!Array.isArray(orderData.items) || orderData.items.length === 0) throw new Error('EMPTY_ORDER');
 
     sqlite.exec('BEGIN IMMEDIATE');
@@ -594,6 +598,15 @@ const sqliteDb = {
       throw new Error('INVALID_PAYMENT_ORDER');
     }
     const updated = { ...current, razorpayOrderId };
+    sqlite.prepare('UPDATE orders SET data = ? WHERE id = ?').run(JSON.stringify(updated), id);
+    return updated;
+  },
+  linkPayuTransaction: (id, payuTransactionId) => {
+    const current = db.getOrderById(id);
+    if (!current || current.paymentMethod !== 'payu' || current.paymentStatus !== 'pending' || current.payuTransactionId) {
+      throw new Error('INVALID_PAYMENT_ORDER');
+    }
+    const updated = { ...current, payuTransactionId };
     sqlite.prepare('UPDATE orders SET data = ? WHERE id = ?').run(JSON.stringify(updated), id);
     return updated;
   },
