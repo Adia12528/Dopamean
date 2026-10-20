@@ -16,10 +16,11 @@ interface InputFieldProps {
   required?: boolean;
   error?: string;
   autoFocus?: boolean;
+  onBlur?: (value: string) => void;
 }
 
 const InputField: React.FC<InputFieldProps> = ({
-  label, type = 'text', placeholder, value, onChange, icon, rightAddon, required, error, autoFocus
+  label, type = 'text', placeholder, value, onChange, icon, rightAddon, required, error, autoFocus, onBlur
 }) => (
   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
@@ -42,6 +43,7 @@ const InputField: React.FC<InputFieldProps> = ({
         type={type}
         autoFocus={autoFocus}
         required={required}
+        aria-invalid={Boolean(error)}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -59,7 +61,10 @@ const InputField: React.FC<InputFieldProps> = ({
           transition: 'border-color 0.15s ease'
         }}
         onFocus={e => e.target.style.borderColor = error ? '#DC2626' : 'var(--accent-terracotta)'}
-        onBlur={e => e.target.style.borderColor = error ? '#DC2626' : 'var(--border-medium)'}
+        onBlur={e => {
+          e.target.style.borderColor = error ? '#DC2626' : 'var(--border-medium)';
+          onBlur?.(e.target.value);
+        }}
       />
       {rightAddon && (
         <span style={{
@@ -85,15 +90,26 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!email || !password) { setError('Please fill in all fields.'); return; }
+    const normalizedEmail = email.trim();
+    const nextEmailError = !normalizedEmail
+      ? 'Email address is required.'
+      : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+        ? 'Enter a valid email address.'
+        : '';
+    const nextPasswordError = password ? '' : 'Password is required.';
+    setEmailError(nextEmailError);
+    setPasswordError(nextPasswordError);
+    if (nextEmailError || nextPasswordError) return;
     setLoading(true);
     try {
-      await userLogin(email.trim(), password);
+      await userLogin(normalizedEmail, password);
     } catch (err: unknown) {
       setError((err as Error).message || 'Invalid email or password.');
     } finally {
@@ -102,15 +118,22 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+    <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <InputField
         label="Email Address"
         type="email"
         placeholder="you@example.com"
         value={email}
-        onChange={v => { setEmail(v); setError(''); }}
+        onChange={v => { setEmail(v); setError(''); setEmailError(''); }}
         icon={<Mail size={16} />}
         required
+        error={emailError}
+        onBlur={value => {
+          const normalizedEmail = value.trim();
+          setEmailError(normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+            ? 'Enter a valid email address.'
+            : '');
+        }}
         autoFocus
       />
       <InputField
@@ -118,9 +141,11 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
         type={showPw ? 'text' : 'password'}
         placeholder="Your password"
         value={password}
-        onChange={v => { setPassword(v); setError(''); }}
+        onChange={v => { setPassword(v); setError(''); setPasswordError(''); }}
         icon={<Lock size={16} />}
         required
+        error={passwordError}
+        onBlur={value => setPasswordError(value ? '' : 'Password is required.')}
         rightAddon={
           <button
             type="button"
@@ -194,6 +219,10 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
   const [confirm, setConfirm] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [confirmError, setConfirmError] = useState('');
   const [confirmationMessage, setConfirmationMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -201,12 +230,31 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
     e.preventDefault();
     setError('');
     setConfirmationMessage('');
-    if (!name || !email || !password) { setError('Name, email, and password are required.'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
-    if (password !== confirm) { setError('Passwords do not match.'); return; }
+    const normalizedEmail = email.trim();
+    const nextNameError = name.trim() ? '' : 'Name is required.';
+    const nextEmailError = !normalizedEmail
+      ? 'Email address is required.'
+      : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+        ? 'Enter a valid email address.'
+        : '';
+    const nextPasswordError = !password
+      ? 'Password is required.'
+      : password.length < 6
+        ? 'Password must be at least 6 characters.'
+        : '';
+    const nextConfirmError = !confirm
+      ? 'Please confirm your password.'
+      : password !== confirm
+        ? 'Passwords do not match.'
+        : '';
+    setNameError(nextNameError);
+    setEmailError(nextEmailError);
+    setPasswordError(nextPasswordError);
+    setConfirmError(nextConfirmError);
+    if (nextNameError || nextEmailError || nextPasswordError || nextConfirmError) return;
     setLoading(true);
     try {
-      const result = await userRegister({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
+      const result = await userRegister({ name: name.trim(), email: normalizedEmail, password, phone: phone.trim() });
       if (result === 'confirmation-required') {
         setConfirmationMessage('Account created. Check your email for a confirmation link before signing in.');
       }
@@ -218,14 +266,16 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <InputField
         label="Full Name"
         placeholder="Priya Sharma"
         value={name}
-        onChange={v => { setName(v); setError(''); }}
+        onChange={v => { setName(v); setError(''); setNameError(''); }}
         icon={<User size={16} />}
         required
+        error={nameError}
+        onBlur={value => setNameError(value.trim() ? '' : 'Name is required.')}
         autoFocus
       />
       <InputField
@@ -233,9 +283,18 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
         type="email"
         placeholder="you@example.com"
         value={email}
-        onChange={v => { setEmail(v); setError(''); }}
+        onChange={v => { setEmail(v); setError(''); setEmailError(''); }}
         icon={<Mail size={16} />}
         required
+        error={emailError}
+        onBlur={value => {
+          const normalizedEmail = value.trim();
+          setEmailError(!normalizedEmail
+            ? 'Email address is required.'
+            : !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+              ? 'Enter a valid email address.'
+              : '');
+        }}
       />
       <InputField
         label="Phone Number (optional)"
@@ -250,9 +309,15 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
         type={showPw ? 'text' : 'password'}
         placeholder="Min. 6 characters"
         value={password}
-        onChange={v => { setPassword(v); setError(''); }}
+        onChange={v => { setPassword(v); setError(''); setPasswordError(''); setConfirmError(''); }}
         icon={<Lock size={16} />}
         required
+        error={passwordError}
+        onBlur={value => setPasswordError(!value
+          ? 'Password is required.'
+          : value.length < 6
+            ? 'Password must be at least 6 characters.'
+            : '')}
         rightAddon={
           <button
             type="button"
@@ -278,9 +343,15 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
         type={showPw ? 'text' : 'password'}
         placeholder="Re-enter password"
         value={confirm}
-        onChange={v => { setConfirm(v); setError(''); }}
+        onChange={v => { setConfirm(v); setError(''); setConfirmError(''); }}
         icon={<Lock size={16} />}
         required
+        error={confirmError}
+        onBlur={value => setConfirmError(!value
+          ? 'Please confirm your password.'
+          : value !== password
+            ? 'Passwords do not match.'
+            : '')}
       />
 
       {confirmationMessage && <p role="status" style={{ fontSize: '0.78rem', color: '#15803D', fontWeight: 600, margin: 0 }}>{confirmationMessage}</p>}

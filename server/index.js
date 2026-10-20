@@ -1334,7 +1334,7 @@ app.post('/api/payments/payu/callback', async (req, res) => {
         await db.cancelOrder(order.id, 'PayU payment failed');
         return renderResult(false, 'Payment was not completed', 'No payment was confirmed. The reserved items have been released; you can place the order again.', order.id);
       }
-      return renderResult(false, 'Payment is being checked', 'PayU has not confirmed this payment yet. Please contact the store with your order reference.', order.id);
+      return renderResult(false, 'Payment is being checked', 'PayU has not confirmed this payment yet. Return to the store to check the latest order status. Please wait a few minutes before trying payment again; if it is still pending after 3 minutes, contact the store with your order reference.', order.id);
     }
 
     const verifyUrl = settings.payuTestMode === false
@@ -1360,7 +1360,7 @@ app.post('/api/payments/payu/callback', async (req, res) => {
       verification = await verifyResponse.json();
     } catch (err) {
       console.error('PayU transaction lookup failed:', err);
-      return renderResult(false, 'Payment verification pending', 'We could not confirm the payment with PayU yet. Please contact the store with your order reference before trying again.', order.id);
+      return renderResult(false, 'Payment verification pending', 'We could not confirm the payment with PayU yet. Return to the store to check the latest order status. Please wait a few minutes before trying payment again; if it is still pending after 3 minutes, contact the store with your order reference.', order.id);
     } finally {
       clearTimeout(timeout);
     }
@@ -1372,7 +1372,7 @@ app.post('/api/payments/payu/callback', async (req, res) => {
       String(transaction?.status || '').toLowerCase() !== 'success' ||
       formatPayuAmount(verifiedAmount) !== expectedAmount
     ) {
-      return renderResult(false, 'Payment verification pending', 'PayU has not confirmed the payment with the expected amount yet. Please contact the store with your order reference.', order.id);
+      return renderResult(false, 'Payment verification pending', 'PayU has not confirmed the payment with the expected amount yet. Return to the store to check the latest order status. Please wait a few minutes before trying payment again; if it is still pending after 3 minutes, contact the store with your order reference.', order.id);
     }
 
     await db.updateOrderStatus(order.id, 'processing', {

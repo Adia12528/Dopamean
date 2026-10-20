@@ -3,12 +3,14 @@ import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
 import { HeroBanner } from './HeroBanner';
 import { OffersShowcase } from './OffersShowcase';
+import { TestimonialsSection } from './TestimonialsSection';
+import { PendingPaymentRecoveryBanner } from './PendingPaymentRecoveryBanner';
 import { CategoryFilter } from './CategoryFilter';
 import { ProductCard } from './ProductCard';
 import { Sparkles } from 'lucide-react';
 
 export const StorefrontView: React.FC = () => {
-  const { products, selectedCategory, searchQuery, setViewMode, setDashboardTab, settings, loadSampleTemplate, isAdmin } = useStore();
+  const { products, selectedCategory, searchQuery, setViewMode, setDashboardTab, settings, loadSampleTemplate, isAdmin, isLoading } = useStore();
 
   const filteredProducts = useMemo(() => {
     return products.filter(product => {
@@ -27,8 +29,13 @@ export const StorefrontView: React.FC = () => {
       {/* Hero Section */}
       <HeroBanner />
 
+      <PendingPaymentRecoveryBanner />
+
       {/* Offers Showcase Section */}
       <OffersShowcase />
+
+      {/* Optional, real customer reviews */}
+      <TestimonialsSection />
 
       {/* Main Catalog Section */}
       <section id="catalog" style={{ padding: '30px 0 60px' }}>
@@ -94,10 +101,49 @@ export const StorefrontView: React.FC = () => {
           </div>
 
           {/* Category Filter Pills */}
-          <CategoryFilter />
+          {isLoading ? (
+            <div aria-hidden="true" style={{ display: 'flex', gap: '8px', overflow: 'hidden', paddingBottom: '8px', marginBottom: '28px' }}>
+              {[72, 104, 88, 96].map((width, index) => (
+                <div key={index} className="catalog-skeleton" style={{ width, height: '36px', borderRadius: '999px', flexShrink: 0 }} />
+              ))}
+            </div>
+          ) : (
+            <CategoryFilter />
+          )}
 
           {/* Product Grid */}
-          {filteredProducts.length === 0 ? (
+          {isLoading ? (
+            <div
+              role="status"
+              aria-label="Loading products"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
+                gap: 'clamp(14px, 3vw, 24px)'
+              }}
+            >
+              {Array.from({ length: 8 }, (_, index) => (
+                <div
+                  key={index}
+                  aria-hidden="true"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: '22px',
+                    border: '1px solid var(--border-medium)',
+                    overflow: 'hidden',
+                    boxShadow: 'var(--shadow-sm)'
+                  }}
+                >
+                  <div className="catalog-skeleton" style={{ aspectRatio: '1 / 0.9' }} />
+                  <div style={{ padding: '16px', display: 'grid', gap: '10px' }}>
+                    <div className="catalog-skeleton" style={{ width: '72%', height: '18px', borderRadius: '6px' }} />
+                    <div className="catalog-skeleton" style={{ width: '46%', height: '14px', borderRadius: '6px' }} />
+                    <div className="catalog-skeleton" style={{ width: '58%', height: '20px', borderRadius: '6px', marginTop: '4px' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div style={{
               textAlign: 'center',
               padding: '60px 20px',
@@ -230,6 +276,8 @@ export const StorefrontView: React.FC = () => {
                     <img
                       src={getAssetUrl(settings.aboutImage)}
                       alt={settings.aboutTitle || 'Artisan Workshop'}
+                      loading="lazy"
+                      decoding="async"
                       style={{
                         width: '100%',
                         height: '100%',

@@ -24,7 +24,11 @@ import {
   KeyRound,
   ShieldAlert
 } from 'lucide-react';
-import type { CodRule } from '../../types';
+import type { CodRule, ProductCardBadge } from '../../types';
+import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
+
+type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials';
+type ScopedSettingSaveState = { isSaving: boolean; error: string };
 
 const isValidUpiVpa = (value: string) =>
   /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim());
@@ -48,10 +52,165 @@ export const StudioSettings: React.FC = () => {
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'perks' | 'shipping' | 'cod' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'cod' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [scopedSaveStates, setScopedSaveStates] = useState<Record<ScopedSettingSection, ScopedSettingSaveState>>({
+    productCards: { isSaving: false, error: '' },
+    lowStock: { isSaving: false, error: '' },
+    trustCards: { isSaving: false, error: '' },
+    testimonials: { isSaving: false, error: '' }
+  });
+  const [validationErrors, setValidationErrors] = useState<Partial<Record<'storeName' | 'heroTitle' | 'currency' | 'upiId', string>>>({});
+  const [codRuleErrors, setCodRuleErrors] = useState<Record<string, string>>({});
+  const normalizedFormBadgePriority = normalizeProductCardBadgePriority(form.productCardBadgePriority);
+  const normalizedSavedBadgePriority = normalizeProductCardBadgePriority(settings.productCardBadgePriority);
+  const isBadgePriorityDirty = JSON.stringify(normalizedFormBadgePriority) !== JSON.stringify(normalizedSavedBadgePriority);
+  const isLowStockThresholdDirty = Number(form.lowStockThreshold ?? 5) !== Number(settings.lowStockThreshold ?? 5);
+  const trustCardFormValues = {
+    trustBadge1Icon: form.trustBadge1Icon,
+    trustBadge1Title: form.trustBadge1Title,
+    trustBadge1Desc: form.trustBadge1Desc,
+    trustBadge2Icon: form.trustBadge2Icon,
+    trustBadge2Title: form.trustBadge2Title,
+    trustBadge2Desc: form.trustBadge2Desc,
+    trustBadge3Icon: form.trustBadge3Icon,
+    trustBadge3Title: form.trustBadge3Title,
+    trustBadge3Desc: form.trustBadge3Desc,
+    trustBadge4Icon: form.trustBadge4Icon,
+    trustBadge4Title: form.trustBadge4Title,
+    trustBadge4Desc: form.trustBadge4Desc
+  };
+  const trustCardSavedValues = {
+    trustBadge1Icon: settings.trustBadge1Icon,
+    trustBadge1Title: settings.trustBadge1Title,
+    trustBadge1Desc: settings.trustBadge1Desc,
+    trustBadge2Icon: settings.trustBadge2Icon,
+    trustBadge2Title: settings.trustBadge2Title,
+    trustBadge2Desc: settings.trustBadge2Desc,
+    trustBadge3Icon: settings.trustBadge3Icon,
+    trustBadge3Title: settings.trustBadge3Title,
+    trustBadge3Desc: settings.trustBadge3Desc,
+    trustBadge4Icon: settings.trustBadge4Icon,
+    trustBadge4Title: settings.trustBadge4Title,
+    trustBadge4Desc: settings.trustBadge4Desc
+  };
+  const isTrustCardsDirty = JSON.stringify(trustCardFormValues) !== JSON.stringify(trustCardSavedValues);
+  const isTestimonialsDirty = (form.showTestimonialsSection === true) !== (settings.showTestimonialsSection === true);
+
+  const getUnsavedScopedSections = (): { id: ScopedSettingSection; label: string }[] => [
+    ...(isBadgePriorityDirty ? [{ id: 'productCards' as const, label: 'Product Card Badge Rules' }] : []),
+    ...(isLowStockThresholdDirty ? [{ id: 'lowStock' as const, label: 'Low Stock Threshold' }] : []),
+    ...(isTrustCardsDirty ? [{ id: 'trustCards' as const, label: 'Trust Cards' }] : []),
+    ...(isTestimonialsDirty ? [{ id: 'testimonials' as const, label: 'Testimonials' }] : [])
+  ];
+
+  const confirmLeavingUnsavedScopedSections = () => {
+    const unsavedSections = getUnsavedScopedSections();
+    if (unsavedSections.length === 0) return true;
+    const sectionNames = unsavedSections.map(item => item.label).join(' and ');
+    return window.confirm(
+      `You have unsaved changes in ${sectionNames}. Leave without saving those changes?`
+    );
+  };
+
+  const navigateToSection = (section: typeof activeSection) => {
+    if (section === activeSection) return;
+    if (!confirmLeavingUnsavedScopedSections()) return;
+    setActiveSection(section);
+  };
+
+  const saveScopedSection = async (section: ScopedSettingSection) => {
+    if (scopedSaveStates[section].isSaving) return;
+    const sectionLabel = section === 'productCards'
+      ? 'Product Card Badge Rules'
+      : section === 'lowStock'
+        ? 'Low Stock Threshold'
+        : section === 'trustCards'
+          ? 'Trust Cards'
+          : 'Testimonials';
+    const otherUnsavedSections = getUnsavedScopedSections().filter(item => item.id !== section);
+    if (otherUnsavedSections.length > 0) {
+      const otherSectionNames = otherUnsavedSections.map(item => item.label).join(' and ');
+      const shouldContinue = window.confirm(
+        `You have unsaved changes in ${otherSectionNames}. Save ${sectionLabel} without including those changes?`
+      );
+      if (!shouldContinue) return;
+    }
+
+    const payload = section === 'productCards'
+      ? { productCardBadgePriority: normalizedFormBadgePriority }
+      : section === 'lowStock'
+        ? { lowStockThreshold: Math.max(0, Math.floor(Number(form.lowStockThreshold) || 0)) }
+        : section === 'trustCards'
+          ? trustCardFormValues
+          : { showTestimonialsSection: form.showTestimonialsSection === true };
+
+    setScopedSaveStates(prev => ({
+      ...prev,
+      [section]: { isSaving: true, error: '' }
+    }));
+    try {
+      await updateSettings(payload);
+      setScopedSaveStates(prev => ({
+        ...prev,
+        [section]: { isSaving: false, error: '' }
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Could not save ${sectionLabel}.`;
+      setScopedSaveStates(prev => ({
+        ...prev,
+        [section]: { isSaving: false, error: message }
+      }));
+    }
+  };
+
+  const renderScopedSaveControls = (section: ScopedSettingSection, isDirty: boolean) => {
+    const saveState = scopedSaveStates[section];
+    const status = saveState.isSaving ? 'Saving…' : isDirty ? 'Unsaved changes' : 'Saved';
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px',
+        flexWrap: 'wrap',
+        marginTop: '20px',
+        paddingTop: '16px',
+        borderTop: '1px solid var(--border-light)'
+      }}>
+        <div>
+          <p role="status" aria-live="polite" style={{
+            fontSize: '0.82rem',
+            fontWeight: 700,
+            color: isDirty ? 'var(--accent-terracotta)' : 'var(--accent-sage)'
+          }}>
+            {status}
+          </p>
+          {saveState.error && (
+            <p role="alert" style={{ marginTop: '4px', fontSize: '0.78rem', color: '#B91C1C' }}>
+              {saveState.error}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => void saveScopedSection(section)}
+          disabled={!isDirty || saveState.isSaving}
+          className="btn-primary"
+          style={{
+            padding: '10px 20px',
+            fontSize: '0.86rem',
+            opacity: !isDirty || saveState.isSaving ? 0.55 : 1,
+            cursor: !isDirty || saveState.isSaving ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {saveState.isSaving ? <span>Saving…</span> : <><Save size={16} /><span>Save section</span></>}
+        </button>
+      </div>
+    );
+  };
 
   // Security Credentials state
   const [superAdminIdInput, setSuperAdminIdInput] = useState(() => settings.superAdminId || 'superadmin');
@@ -75,6 +234,18 @@ export const StudioSettings: React.FC = () => {
 
   const handleChange = <K extends keyof typeof form>(field: K, val: (typeof form)[K]) => {
     setForm(prev => ({ ...prev, [field]: val }));
+    if (field in validationErrors) {
+      setValidationErrors(prev => ({ ...prev, [field]: '' }));
+    }
+  };
+
+  const moveBadgePriority = (badge: ProductCardBadge, direction: -1 | 1) => {
+    const priority = normalizeProductCardBadgePriority(form.productCardBadgePriority);
+    const currentIndex = priority.indexOf(badge);
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= priority.length) return;
+    [priority[currentIndex], priority[nextIndex]] = [priority[nextIndex], priority[currentIndex]];
+    handleChange('productCardBadgePriority', priority);
   };
 
   const addCodRule = () => {
@@ -90,10 +261,16 @@ export const StudioSettings: React.FC = () => {
       ...prev,
       codRules: (prev.codRules || []).map(rule => rule.id === id ? { ...rule, ...changes } : rule)
     }));
+    setCodRuleErrors(prev => ({ ...prev, [id]: '' }));
   };
 
   const removeCodRule = (id: string) => {
     setForm(prev => ({ ...prev, codRules: (prev.codRules || []).filter(rule => rule.id !== id) }));
+    setCodRuleErrors(prev => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
   const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,8 +303,39 @@ export const StudioSettings: React.FC = () => {
 
   const handleSave = async (e?: React.FormEvent): Promise<boolean> => {
     if (e) e.preventDefault();
+
+    const unsavedScopedSections = getUnsavedScopedSections();
+    if (unsavedScopedSections.length > 0) {
+      const sectionNames = unsavedScopedSections.map(item => item.label).join(' and ');
+      const shouldContinue = window.confirm(
+        `You have unsaved changes in ${sectionNames}. The current section save will not include them. Continue?`
+      );
+      if (!shouldContinue) return false;
+    }
     
     const payload: Partial<typeof form> & { clearPayuCredentials?: boolean } = { ...form };
+    delete payload.productCardBadgePriority;
+    delete payload.lowStockThreshold;
+    delete payload.trustBadge1Icon;
+    delete payload.trustBadge1Title;
+    delete payload.trustBadge1Desc;
+    delete payload.trustBadge2Icon;
+    delete payload.trustBadge2Title;
+    delete payload.trustBadge2Desc;
+    delete payload.trustBadge3Icon;
+    delete payload.trustBadge3Title;
+    delete payload.trustBadge3Desc;
+    delete payload.trustBadge4Icon;
+    delete payload.trustBadge4Title;
+    delete payload.trustBadge4Desc;
+    delete payload.showTestimonialsSection;
+    const requiredFieldErrors: typeof validationErrors = {};
+    if (!String(form.storeName || '').trim()) requiredFieldErrors.storeName = 'Enter the store or studio name.';
+    if (!String(form.heroTitle || '').trim()) requiredFieldErrors.heroTitle = 'Enter the hero headline.';
+    if (!String(form.currency || '').trim()) requiredFieldErrors.currency = 'Enter the currency symbol.';
+    setValidationErrors(prev => ({ ...prev, ...requiredFieldErrors }));
+    if (Object.values(requiredFieldErrors).some(Boolean)) return false;
+
     delete payload.adminPasscode;
     delete payload.superAdminPassword;
     delete payload.deliveryAgentPasscode;
@@ -137,21 +345,23 @@ export const StudioSettings: React.FC = () => {
     delete payload.payuMerchantSalt;
     delete payload.payuConfigured;
     delete payload.clearPayuCredentials;
+    const nextCodRuleErrors: Record<string, string> = {};
     for (const rule of payload.codRules || []) {
       const hasPriceCondition = rule.minPrice !== undefined || rule.maxPrice !== undefined;
       if (!rule.category && !hasPriceCondition) {
-        alert('Each Cash on Delivery rule must target a category, a price range, or both.');
-        return false;
-      }
-      if (
+        nextCodRuleErrors[rule.id] = 'Choose a category or enter a minimum/maximum price for this rule.';
+      } else if (
         (rule.minPrice !== undefined && (!Number.isFinite(rule.minPrice) || rule.minPrice < 0)) ||
         (rule.maxPrice !== undefined && (!Number.isFinite(rule.maxPrice) || rule.maxPrice < 0)) ||
         (rule.minPrice !== undefined && rule.maxPrice !== undefined && rule.minPrice > rule.maxPrice)
       ) {
-        alert('Check the minimum and maximum prices in your Cash on Delivery rules.');
-        return false;
+        nextCodRuleErrors[rule.id] = rule.minPrice !== undefined && rule.maxPrice !== undefined && rule.minPrice > rule.maxPrice
+          ? 'Minimum price cannot be greater than maximum price.'
+          : 'Enter valid minimum and maximum prices of 0 or more.';
       }
     }
+    setCodRuleErrors(nextCodRuleErrors);
+    if (Object.keys(nextCodRuleErrors).length > 0) return false;
     if (payload.paymentUpiEnabled !== false) {
       const upiId = String(payload.upiId || '').trim();
       if (!isValidUpiVpa(upiId)) {
@@ -282,8 +492,11 @@ export const StudioSettings: React.FC = () => {
     { id: 'header' as const, label: 'Brand & Announcement', icon: <Sparkles size={16} /> },
     { id: 'hero' as const, label: 'Hero Banner', icon: <ImageIcon size={16} /> },
     { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
-    { id: 'perks' as const, label: 'Trust Badges & Perks', icon: <ShieldCheck size={16} /> },
+    { id: 'trustCards' as const, label: 'Trust Cards', icon: <ShieldCheck size={16} /> },
+    { id: 'testimonials' as const, label: 'Testimonials', icon: <Sparkles size={16} /> },
     { id: 'shipping' as const, label: 'Shipping & Inventory', icon: <Truck size={16} /> },
+    { id: 'productCards' as const, label: 'Product Cards', icon: <Sliders size={16} /> },
+    { id: 'lowStock' as const, label: 'Low Stock Threshold', icon: <Info size={16} /> },
     { id: 'cod' as const, label: 'COD Eligibility Rules', icon: <Truck size={16} /> },
     { id: 'whatsapp' as const, label: 'WhatsApp Messages', icon: <MessageCircle size={16} /> },
     { id: 'payments' as const, label: 'Payment Gateways & UPI', icon: <CreditCard size={16} /> },
@@ -336,7 +549,9 @@ export const StudioSettings: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button
             type="button"
-            onClick={() => setViewMode('store')}
+            onClick={() => {
+              if (confirmLeavingUnsavedScopedSections()) setViewMode('store');
+            }}
             className="btn-secondary"
             style={{ padding: '9px 16px', fontSize: '0.84rem' }}
           >
@@ -344,15 +559,17 @@ export const StudioSettings: React.FC = () => {
             <span>Live Store Preview</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => handleSave()}
-            className="btn-primary"
-            style={{ padding: '10px 22px', fontSize: '0.88rem' }}
-          >
-            {savedSuccess ? <Check size={16} /> : <Save size={16} />}
-            <span>{savedSuccess ? 'Changes Saved!' : 'Save All Changes'}</span>
-          </button>
+          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && (
+            <button
+              type="button"
+              onClick={() => handleSave()}
+              className="btn-primary"
+              style={{ padding: '10px 22px', fontSize: '0.88rem' }}
+            >
+              {savedSuccess ? <Check size={16} /> : <Save size={16} />}
+              <span>{savedSuccess ? 'Changes Saved!' : 'Save All Changes'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -385,7 +602,7 @@ export const StudioSettings: React.FC = () => {
               <button
                 key={item.id}
                 type="button"
-                onClick={() => setActiveSection(item.id)}
+                onClick={() => navigateToSection(item.id)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -410,7 +627,17 @@ export const StudioSettings: React.FC = () => {
         </div>
 
         {/* Dynamic Section Editor */}
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <form
+          onSubmit={(e) => {
+            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials') {
+              e.preventDefault();
+              void saveScopedSection(activeSection);
+              return;
+            }
+            void handleSave(e);
+          }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
+        >
           
           {/* 1. THEME & COLORS */}
           {activeSection === 'theme' && (
@@ -548,15 +775,17 @@ export const StudioSettings: React.FC = () => {
                     required
                     value={form.storeName}
                     onChange={(e) => handleChange('storeName', e.target.value)}
+                    aria-invalid={Boolean(validationErrors.storeName)}
                     placeholder="e.g. Cozy Loops by Deepa"
                     style={{
                       width: '100%',
                       padding: '10px 14px',
                       borderRadius: '10px',
-                      border: '1px solid var(--border-medium)',
+                      border: `1px solid ${validationErrors.storeName ? '#DC2626' : 'var(--border-medium)'}`,
                       fontSize: '0.9rem'
                     }}
                   />
+                  {validationErrors.storeName && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.storeName}</p>}
                 </div>
 
                 <div>
@@ -670,15 +899,17 @@ export const StudioSettings: React.FC = () => {
                       required
                       value={form.heroTitle}
                       onChange={(e) => handleChange('heroTitle', e.target.value)}
+                      aria-invalid={Boolean(validationErrors.heroTitle)}
                       placeholder="e.g. Cozy Loops by Deepa"
                       style={{
                         width: '100%',
                         padding: '10px 14px',
                         borderRadius: '10px',
-                        border: '1px solid var(--border-medium)',
+                        border: `1px solid ${validationErrors.heroTitle ? '#DC2626' : 'var(--border-medium)'}`,
                         fontSize: '0.9rem'
                       }}
                     />
+                    {validationErrors.heroTitle && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.heroTitle}</p>}
                   </div>
                 </div>
 
@@ -1004,8 +1235,8 @@ export const StudioSettings: React.FC = () => {
             </div>
           )}
 
-          {/* 5. 4 VALUE BADGES & TRUST PERKS */}
-          {activeSection === 'perks' && (
+          {/* TRUST CARDS */}
+          {activeSection === 'trustCards' && (
             <div style={{
               backgroundColor: '#FFFFFF',
               borderRadius: '20px',
@@ -1144,6 +1375,54 @@ export const StudioSettings: React.FC = () => {
                   />
                 </div>
               </div>
+              {renderScopedSaveControls('trustCards', isTrustCardsDirty)}
+            </div>
+          )}
+
+          {/* TESTIMONIALS VISIBILITY */}
+          {activeSection === 'testimonials' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Sparkles size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Testimonials Section
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Control whether real customer reviews appear on the storefront. Reviews are not fabricated, and this section is off by default.
+              </p>
+              <label style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '14px 16px',
+                borderRadius: '12px',
+                border: '1px solid var(--border-light)',
+                backgroundColor: 'var(--bg-surface-soft)',
+                cursor: 'pointer'
+              }}>
+                <input
+                  type="checkbox"
+                  checked={form.showTestimonialsSection === true}
+                  onChange={(e) => handleChange('showTestimonialsSection', e.target.checked)}
+                  style={{ width: '18px', height: '18px', marginTop: '2px', accentColor: 'var(--accent-terracotta)' }}
+                />
+                <span>
+                  <span style={{ display: 'block', fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    Show customer reviews on the storefront
+                  </span>
+                  <span style={{ display: 'block', marginTop: '3px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                    Displays up to three recent reviews from products that have review data. This is off by default.
+                  </span>
+                </span>
+              </label>
+              {renderScopedSaveControls('testimonials', isTestimonialsDirty)}
             </div>
           )}
 
@@ -1176,15 +1455,17 @@ export const StudioSettings: React.FC = () => {
                     required
                     value={form.currency}
                     onChange={(e) => handleChange('currency', e.target.value)}
+                    aria-invalid={Boolean(validationErrors.currency)}
                     placeholder="e.g. ₹ or $ or €"
                     style={{
                       width: '100%',
                       padding: '10px 14px',
                       borderRadius: '10px',
-                      border: '1px solid var(--border-medium)',
+                      border: `1px solid ${validationErrors.currency ? '#DC2626' : 'var(--border-medium)'}`,
                       fontSize: '0.9rem'
                     }}
                   />
+                  {validationErrors.currency && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.currency}</p>}
                 </div>
 
                 <div>
@@ -1221,20 +1502,6 @@ export const StudioSettings: React.FC = () => {
                   />
                 </div>
 
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
-                    Low Stock Alert At (units)
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={form.lowStockThreshold ?? 5}
-                    onChange={(e) => handleChange('lowStockThreshold', Math.max(0, parseInt(e.target.value, 10) || 0))}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', fontSize: '0.9rem' }}
-                  />
-                </div>
-
                 <div style={{ gridColumn: '1 / -1' }}>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
                     Shipping & Delivery Notice
@@ -1254,6 +1521,155 @@ export const StudioSettings: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* PRODUCT CARD BADGE PRIORITY */}
+          {activeSection === 'productCards' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Sliders size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Product Card Badges
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '18px', lineHeight: 1.5 }}>
+                Product cards show no more than two qualifying badges. Set their priority below; the highest-priority badges appear first.
+              </p>
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {normalizeProductCardBadgePriority(form.productCardBadgePriority).map((badge, index, priority) => {
+                  const label = PRODUCT_CARD_BADGES.find(option => option.id === badge)?.label || badge;
+                  return (
+                    <div
+                      key={badge}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                        padding: '12px 14px',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: '12px',
+                        background: 'var(--bg-surface-soft)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: 'var(--accent-terracotta-light)',
+                          color: 'var(--accent-terracotta)',
+                          fontWeight: 800,
+                          fontSize: '0.8rem'
+                        }}>
+                          {index + 1}
+                        </span>
+                        <span style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                          {label}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          type="button"
+                          onClick={() => moveBadgePriority(badge, -1)}
+                          disabled={index === 0}
+                          aria-label={`Move ${label} higher`}
+                          style={{
+                            minHeight: '40px',
+                            padding: '7px 12px',
+                            borderRadius: '9px',
+                            border: '1px solid var(--border-medium)',
+                            background: '#FFFFFF',
+                            color: 'var(--text-main)',
+                            fontWeight: 600,
+                            cursor: index === 0 ? 'not-allowed' : 'pointer',
+                            opacity: index === 0 ? 0.45 : 1
+                          }}
+                        >
+                          Move up
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveBadgePriority(badge, 1)}
+                          disabled={index === priority.length - 1}
+                          aria-label={`Move ${label} lower`}
+                          style={{
+                            minHeight: '40px',
+                            padding: '7px 12px',
+                            borderRadius: '9px',
+                            border: '1px solid var(--border-medium)',
+                            background: '#FFFFFF',
+                            color: 'var(--text-main)',
+                            fontWeight: 600,
+                            cursor: index === priority.length - 1 ? 'not-allowed' : 'pointer',
+                            opacity: index === priority.length - 1 ? 0.45 : 1
+                          }}
+                        >
+                          Move down
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {renderScopedSaveControls('productCards', isBadgePriorityDirty)}
+            </div>
+          )}
+
+          {/* LOW STOCK THRESHOLD */}
+          {activeSection === 'lowStock' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Info size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Low Stock Threshold
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '18px', lineHeight: 1.5 }}>
+                Set the stock quantity at or below which products are treated as low stock. This setting is saved independently from shipping rates and other Studio sections.
+              </p>
+              <label htmlFor="low-stock-threshold" style={{
+                display: 'block',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                marginBottom: '6px'
+              }}>
+                Show low-stock badge at (units)
+              </label>
+              <input
+                id="low-stock-threshold"
+                type="number"
+                min="0"
+                step="1"
+                value={form.lowStockThreshold ?? 5}
+                onChange={(e) => handleChange('lowStockThreshold', Math.max(0, parseInt(e.target.value, 10) || 0))}
+                style={{
+                  width: '100%',
+                  maxWidth: '320px',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  border: '1px solid var(--border-medium)',
+                  fontSize: '0.9rem'
+                }}
+              />
+              {renderScopedSaveControls('lowStock', isLowStockThresholdDirty)}
             </div>
           )}
 
@@ -1314,7 +1730,7 @@ export const StudioSettings: React.FC = () => {
                       gap: '12px',
                       alignItems: 'end',
                       padding: '15px',
-                      border: '1px solid var(--border-medium)',
+                      border: codRuleErrors[rule.id] ? '1px solid #DC2626' : '1px solid var(--border-medium)',
                       borderRadius: '14px',
                       background: 'var(--bg-surface-soft)'
                     }}>
@@ -1387,8 +1803,13 @@ export const StudioSettings: React.FC = () => {
                         Remove rule
                       </button>
                       <div style={{ gridColumn: '1 / -1', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                        Leave category and both prices blank to match all products. For a price band, enter one or both limits. Matching rules that deny COD take precedence over other rules.
+                        Choose a category and/or enter one or both price limits to target products. Matching rules that deny COD take precedence over other rules.
                       </div>
+                      {codRuleErrors[rule.id] && (
+                        <p role="alert" style={{ gridColumn: '1 / -1', color: '#DC2626', fontSize: '0.76rem', margin: 0 }}>
+                          {codRuleErrors[rule.id]}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2463,22 +2884,24 @@ export const StudioSettings: React.FC = () => {
             </div>
           )}
 
-          {/* Bottom Save Button Bar */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            paddingTop: '8px'
-          }}>
-            <button
-              type="button"
-              onClick={() => handleSave()}
-              className="btn-primary"
-              style={{ padding: '12px 32px', fontSize: '0.92rem' }}
-            >
-              {savedSuccess ? <Check size={18} /> : <Save size={18} />}
-              <span>{savedSuccess ? 'All Changes Saved!' : 'Save All Changes'}</span>
-            </button>
-          </div>
+          {/* Legacy sections retain their existing save flow until individually migrated. */}
+          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && (
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              paddingTop: '8px'
+            }}>
+              <button
+                type="button"
+                onClick={() => handleSave()}
+                className="btn-primary"
+                style={{ padding: '12px 32px', fontSize: '0.92rem' }}
+              >
+                {savedSuccess ? <Check size={18} /> : <Save size={18} />}
+                <span>{savedSuccess ? 'All Changes Saved!' : 'Save All Changes'}</span>
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

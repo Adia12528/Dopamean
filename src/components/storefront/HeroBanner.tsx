@@ -253,12 +253,7 @@ export const HeroBanner: React.FC = () => {
         </div>
 
         {/* Feature Pillars */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '16px',
-          marginTop: '24px'
-        }}>
+        <div className="hero-trust-grid">
           {[
             { 
               icon: settings.trustBadge1Icon || '🌸', 
@@ -283,24 +278,14 @@ export const HeroBanner: React.FC = () => {
           ].map((pillar, i) => (
             <div 
               key={i}
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: '16px',
-                padding: '16px 20px',
-                border: '1px solid var(--border-light)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                boxShadow: 'var(--shadow-sm)'
-              }}
-              className="hero-glass-card"
+              className="hero-glass-card hero-trust-card"
             >
-              <div style={{ fontSize: '1.6rem' }}>{pillar.icon}</div>
-              <div>
-                <h5 style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--text-main)' }}>
+              <div className="hero-trust-icon" aria-hidden="true">{pillar.icon}</div>
+              <div className="hero-trust-copy">
+                <h5 className="hero-trust-title">
                   {pillar.title}
                 </h5>
-                <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
+                <p className="hero-trust-description">
                   {pillar.desc}
                 </p>
               </div>

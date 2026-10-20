@@ -13,6 +13,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   freeShippingThreshold: 299,
   shippingFee: 40,
   lowStockThreshold: 5,
+  productCardBadgePriority: ['bestseller', 'discount', 'lowStock', 'craftTime'],
+  showTestimonialsSection: false,
   contactEmail: 'dsoni7018@gmail.com',
   contactPhone: '+91 98765 43210',
   instagramHandle: '@cozyloopsbydeepa',

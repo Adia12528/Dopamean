@@ -43,6 +43,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
   const [image, setImage] = useState(editOffer?.image || OFFER_BANNER_PRESETS[0].url);
   const [endDate, setEndDate] = useState(editOffer?.endDate || '2026-11-30');
   const [isActive, setIsActive] = useState(editOffer ? editOffer.isActive : true);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   if (!isOpen) return null;
 
@@ -66,7 +67,25 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !code.trim() || !image.trim()) return;
+    const parsedDiscountValue = Number(discountValue);
+    const parsedMinOrderValue = minOrderValue.trim() ? Number(minOrderValue) : undefined;
+    const errors: Record<string, string> = {};
+    if (!title.trim()) errors.title = 'Enter an offer title.';
+    if (!code.trim()) errors.code = 'Enter a promo code.';
+    if (!image.trim()) errors.image = 'Choose a banner image or enter an image URL.';
+    if (!discountValue.trim() || !Number.isFinite(parsedDiscountValue) || parsedDiscountValue <= 0) {
+      errors.discountValue = 'Enter a discount value greater than 0.';
+    } else if (discountType === 'percentage' && parsedDiscountValue > 100) {
+      errors.discountValue = 'Percentage discounts cannot exceed 100%.';
+    }
+    if (parsedMinOrderValue !== undefined && (!Number.isFinite(parsedMinOrderValue) || parsedMinOrderValue < 0)) {
+      errors.minOrderValue = 'Enter a valid minimum order value of 0 or more, or leave this blank.';
+    }
+    if (!endDate || Number.isNaN(new Date(`${endDate}T00:00:00`).getTime())) {
+      errors.endDate = 'Choose a valid expiration date.';
+    }
+    setValidationErrors(errors);
+    if (Object.values(errors).some(Boolean)) return;
 
     const offerPayload = {
       title: title.trim(),
@@ -74,8 +93,8 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
       badge: badge.trim().toUpperCase(),
       code: code.trim().toUpperCase(),
       discountType,
-      discountValue: parseFloat(discountValue) || 10,
-      minOrderValue: minOrderValue ? parseFloat(minOrderValue) : undefined,
+      discountValue: parsedDiscountValue,
+      minOrderValue: parsedMinOrderValue,
       image,
       endDate,
       isActive
@@ -163,7 +182,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
           {/* BANNER IMAGE UPLOAD & LIVE PREVIEW */}
           <div style={{
             backgroundColor: 'var(--bg-surface-soft)',
@@ -252,18 +271,23 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                 type="text"
                 placeholder="Or paste banner image URL..."
                 value={image}
-                onChange={(e) => setImage(e.target.value)}
+                aria-invalid={Boolean(validationErrors.image)}
+                onChange={(e) => {
+                  setImage(e.target.value);
+                  setValidationErrors(prev => ({ ...prev, image: '' }));
+                }}
                 style={{
                   flex: 1,
                   minWidth: '220px',
                   padding: '8px 12px',
                   borderRadius: '8px',
-                  border: '1px solid var(--border-medium)',
+                  border: `1px solid ${validationErrors.image ? '#DC2626' : 'var(--border-medium)'}`,
                   fontSize: '0.82rem',
                   backgroundColor: '#FFFFFF'
                 }}
               />
             </div>
+            {validationErrors.image && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '6px 0 0' }}>{validationErrors.image}</p>}
 
             {/* Presets */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
@@ -299,15 +323,20 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                 required
                 placeholder="e.g. Spring Blossom 25% Off Totes"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                aria-invalid={Boolean(validationErrors.title)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  setValidationErrors(prev => ({ ...prev, title: '' }));
+                }}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
                   borderRadius: '10px',
-                  border: '1px solid var(--border-medium)',
+                  border: `1px solid ${validationErrors.title ? '#DC2626' : 'var(--border-medium)'}`,
                   fontSize: '0.9rem'
                 }}
               />
+              {validationErrors.title && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.title}</p>}
             </div>
 
             <div>
@@ -361,18 +390,23 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                 required
                 placeholder="BLOOM25"
                 value={code}
-                onChange={(e) => setCode(e.target.value.toUpperCase())}
+                aria-invalid={Boolean(validationErrors.code)}
+                onChange={(e) => {
+                  setCode(e.target.value.toUpperCase());
+                  setValidationErrors(prev => ({ ...prev, code: '' }));
+                }}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
                   borderRadius: '10px',
-                  border: '1px solid var(--border-medium)',
+                  border: `1px solid ${validationErrors.code ? '#DC2626' : 'var(--border-medium)'}`,
                   fontSize: '0.9rem',
                   textTransform: 'uppercase',
                   fontWeight: 700,
                   color: 'var(--accent-terracotta)'
                 }}
               />
+              {validationErrors.code && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.code}</p>}
             </div>
 
             <div>
@@ -404,15 +438,20 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                 type="number"
                 required
                 value={discountValue}
-                onChange={(e) => setDiscountValue(e.target.value)}
+                aria-invalid={Boolean(validationErrors.discountValue)}
+                onChange={(e) => {
+                  setDiscountValue(e.target.value);
+                  setValidationErrors(prev => ({ ...prev, discountValue: '' }));
+                }}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
                   borderRadius: '10px',
-                  border: '1px solid var(--border-medium)',
+                  border: `1px solid ${validationErrors.discountValue ? '#DC2626' : 'var(--border-medium)'}`,
                   fontSize: '0.9rem'
                 }}
               />
+              {validationErrors.discountValue && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.discountValue}</p>}
             </div>
 
             <div>
@@ -423,15 +462,20 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                 type="number"
                 placeholder="40"
                 value={minOrderValue}
-                onChange={(e) => setMinOrderValue(e.target.value)}
+                aria-invalid={Boolean(validationErrors.minOrderValue)}
+                onChange={(e) => {
+                  setMinOrderValue(e.target.value);
+                  setValidationErrors(prev => ({ ...prev, minOrderValue: '' }));
+                }}
                 style={{
                   width: '100%',
                   padding: '10px 14px',
                   borderRadius: '10px',
-                  border: '1px solid var(--border-medium)',
+                  border: `1px solid ${validationErrors.minOrderValue ? '#DC2626' : 'var(--border-medium)'}`,
                   fontSize: '0.9rem'
                 }}
               />
+              {validationErrors.minOrderValue && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.minOrderValue}</p>}
             </div>
           </div>
 
@@ -444,15 +488,20 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                 type="date"
                 required
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                aria-invalid={Boolean(validationErrors.endDate)}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  setValidationErrors(prev => ({ ...prev, endDate: '' }));
+                }}
                 style={{
                   width: '100%',
                   padding: '9px 14px',
                   borderRadius: '10px',
-                  border: '1px solid var(--border-medium)',
+                  border: `1px solid ${validationErrors.endDate ? '#DC2626' : 'var(--border-medium)'}`,
                   fontSize: '0.88rem'
                 }}
               />
+              {validationErrors.endDate && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.endDate}</p>}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '22px' }}>

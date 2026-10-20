@@ -83,8 +83,8 @@ export const DeliveryDashboard: React.FC = () => {
         background: 'linear-gradient(135deg, #1E3A5F 0%, #2563EB 100%)',
         padding: '20px 16px 60px',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 480, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: 480, margin: '0 auto', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
             <div style={{
               width: 40, height: 40, borderRadius: 12,
               backgroundColor: 'rgba(255,255,255,0.2)',
@@ -96,7 +96,7 @@ export const DeliveryDashboard: React.FC = () => {
               <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '0.72rem', fontWeight: 600, margin: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
                 Delivery Agent
               </p>
-              <h1 style={{ color: '#FFFFFF', fontSize: '1.1rem', fontWeight: 800, margin: 0 }}>
+              <h1 style={{ color: '#FFFFFF', fontSize: '1.1rem', fontWeight: 800, margin: 0, overflowWrap: 'anywhere' }}>
                 {settings.storeName}
               </h1>
             </div>
@@ -107,7 +107,7 @@ export const DeliveryDashboard: React.FC = () => {
               disabled={isRefreshing}
               aria-label="Refresh orders"
               style={{
-                width: 36, height: 36, borderRadius: 10,
+                width: 44, height: 44, borderRadius: 10,
                 backgroundColor: 'rgba(255,255,255,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: 'none', cursor: 'pointer', color: '#FFFFFF'
@@ -119,7 +119,7 @@ export const DeliveryDashboard: React.FC = () => {
               onClick={adminLogout}
               aria-label="Logout"
               style={{
-                width: 36, height: 36, borderRadius: 10,
+                width: 44, height: 44, borderRadius: 10,
                 backgroundColor: 'rgba(255,255,255,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 border: 'none', cursor: 'pointer', color: '#FFFFFF'
@@ -161,7 +161,7 @@ export const DeliveryDashboard: React.FC = () => {
               key={tab.id}
               onClick={() => setActiveTab(tab.id as DeliveryTab)}
               style={{
-                flex: 1, padding: '10px 8px', borderRadius: 12,
+                flex: 1, minHeight: 44, padding: '10px 8px', borderRadius: 12,
                 fontSize: '0.82rem', fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                 backgroundColor: activeTab === tab.id ? '#2563EB' : 'transparent',
@@ -308,7 +308,7 @@ export const DeliveryDashboard: React.FC = () => {
                           style={{
                             flex: '0 0 auto', padding: '9px 14px', borderRadius: 10,
                             backgroundColor: '#DCFCE7', color: '#15803D', fontWeight: 700,
-                            fontSize: '0.8rem', border: 'none', cursor: 'pointer',
+                            fontSize: '0.8rem', minHeight: 44, border: 'none', cursor: 'pointer',
                             display: 'flex', alignItems: 'center', gap: 5
                           }}
                         >
@@ -320,7 +320,7 @@ export const DeliveryDashboard: React.FC = () => {
                           onClick={() => handleStatusUpdate(order, 'out_for_delivery')}
                           disabled={isProcessing}
                           style={{
-                            flex: 1, minWidth: 120, padding: '11px 16px', borderRadius: 12,
+                            flex: 1, minWidth: 120, minHeight: 44, padding: '11px 16px', borderRadius: 12,
                             backgroundColor: isProcessing ? '#93C5FD' : '#2563EB',
                             color: '#FFFFFF', fontWeight: 700, fontSize: '0.85rem',
                             border: 'none', cursor: isProcessing ? 'wait' : 'pointer',
@@ -336,7 +336,7 @@ export const DeliveryDashboard: React.FC = () => {
                           onClick={() => handleStatusUpdate(order, 'delivered')}
                           disabled={isProcessing}
                           style={{
-                            flex: 1, minWidth: 120, padding: '11px 16px', borderRadius: 12,
+                            flex: 1, minWidth: 120, minHeight: 44, padding: '11px 16px', borderRadius: 12,
                             backgroundColor: isProcessing ? '#86EFAC' : '#16A34A',
                             color: '#FFFFFF', fontWeight: 700, fontSize: '0.85rem',
                             border: 'none', cursor: isProcessing ? 'wait' : 'pointer',

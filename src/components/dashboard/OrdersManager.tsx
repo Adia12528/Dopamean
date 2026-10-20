@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 
 type SectionTab = 'pending' | 'confirmed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'all';
+type OrderSort = 'default' | 'newest' | 'oldest' | 'highest_total' | 'lowest_total';
 
 export const OrdersManager: React.FC = () => {
   const { orders, updateOrderStatus, settings, updateSettings, setActiveInvoiceOrder, showToast } = useStore();
@@ -30,6 +31,7 @@ export const OrdersManager: React.FC = () => {
   const [activeTab, setActiveTab] = useState<SectionTab>('pending');
   const [searchQuery, setSearchQuery] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'paid' | 'pending' | 'cod'>('all');
+  const [orderSort, setOrderSort] = useState<OrderSort>('default');
   
   // Settings Panel Toggle & Local Form State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -134,7 +136,7 @@ export const OrdersManager: React.FC = () => {
 
   // Filtered orders list based on active tab and search query
   const filteredOrders = useMemo(() => {
-    return orders.filter(order => {
+    const filtered = orders.filter(order => {
       // Tab matching
       if (activeTab === 'pending' && order.status !== 'pending') return false;
       if (activeTab === 'confirmed' && order.status !== 'confirmed' && order.status !== 'processing') return false;
@@ -165,7 +167,17 @@ export const OrdersManager: React.FC = () => {
 
       return true;
     });
-  }, [orders, activeTab, paymentFilter, searchQuery]);
+    if (orderSort === 'default') return filtered;
+
+    return filtered.sort((a, b) => {
+      if (orderSort === 'newest' || orderSort === 'oldest') {
+        const dateDifference = new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return orderSort === 'newest' ? dateDifference : -dateDifference;
+      }
+      const totalDifference = b.total - a.total;
+      return orderSort === 'highest_total' ? totalDifference : -totalDifference;
+    });
+  }, [orders, activeTab, paymentFilter, searchQuery, orderSort]);
 
   // Save Settings handler
   const handleSaveSettings = async (e: React.FormEvent) => {
@@ -792,7 +804,7 @@ export const OrdersManager: React.FC = () => {
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          5. SEARCH & PAYMENT FILTER BAR
+          5. SEARCH, FILTER & SORT BAR
          ───────────────────────────────────────────────────────────── */}
       <div style={{
         display: 'flex',
@@ -842,30 +854,57 @@ export const OrdersManager: React.FC = () => {
           )}
         </div>
 
-        {/* Payment Filter */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Payment:</span>
-          <select
-            value={paymentFilter}
-            onChange={(e) => {
-              const value = e.target.value;
-              setPaymentFilter(value === 'paid' || value === 'pending' || value === 'cod' ? value : 'all');
-            }}
-            style={{
-              padding: '8px 12px',
-              borderRadius: '10px',
-              border: '1.5px solid var(--border-medium)',
-              fontSize: '0.82rem',
-              backgroundColor: '#FFFFFF',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            <option value="all">All Payments</option>
-            <option value="paid">Paid Only</option>
-            <option value="pending">Payment Pending</option>
-            <option value="cod">Cash on Delivery (COD)</option>
-          </select>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+          {/* Payment Filter */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Payment:</span>
+            <select
+              value={paymentFilter}
+              onChange={(e) => {
+                const value = e.target.value;
+                setPaymentFilter(value === 'paid' || value === 'pending' || value === 'cod' ? value : 'all');
+              }}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '10px',
+                border: '1.5px solid var(--border-medium)',
+                fontSize: '0.82rem',
+                backgroundColor: '#FFFFFF',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="all">All Payments</option>
+              <option value="paid">Paid Only</option>
+              <option value="pending">Payment Pending</option>
+              <option value="cod">Cash on Delivery (COD)</option>
+            </select>
+          </label>
+
+          {/* Order Sorting */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Sort:</span>
+            <select
+              aria-label="Sort orders"
+              value={orderSort}
+              onChange={(e) => setOrderSort(e.target.value as OrderSort)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '10px',
+                border: '1.5px solid var(--border-medium)',
+                fontSize: '0.82rem',
+                backgroundColor: '#FFFFFF',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              <option value="default">As received</option>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="highest_total">Highest total</option>
+              <option value="lowest_total">Lowest total</option>
+            </select>
+          </label>
         </div>
       </div>
 

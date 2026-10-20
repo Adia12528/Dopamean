@@ -15,6 +15,7 @@ export interface StoreSettings {
   
   // Maker Story / About the Artisan
   showAboutSection?: boolean;
+  showTestimonialsSection?: boolean;
   aboutBadge?: string;
   aboutTitle?: string;
   aboutStory1?: string;
@@ -44,6 +45,7 @@ export interface StoreSettings {
   freeShippingThreshold: number;
   shippingFee: number;
   lowStockThreshold: number;
+  productCardBadgePriority?: ProductCardBadge[];
   shippingNotice?: string;
   codRules?: CodRule[];
   
@@ -112,6 +114,8 @@ export interface StoreSettings {
   payuMerchantSalt?: string;
   payuConfigured?: boolean;
 }
+
+export type ProductCardBadge = 'bestseller' | 'discount' | 'lowStock' | 'craftTime';
 
 export interface Product {
   id: string;

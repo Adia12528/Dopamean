@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useUser } from '../../context/UserContext';
 import { api, getAssetUrl } from '../../services/api';
@@ -10,6 +10,7 @@ import {
   ArrowRight, 
   Tag, 
   CheckCircle2, 
+  Clock,
   CreditCard, 
   QrCode, 
   Truck, 
@@ -18,11 +19,13 @@ import {
   Copy,
   Check,
   Smartphone,
-  Landmark
+  Landmark,
+  AlertCircle
 } from 'lucide-react';
 import { downloadInvoicePDF } from '../../utils/downloadInvoicePdf';
-import { createWhatsAppUrl, getWhatsAppTemplate, isWhatsAppEnabled, renderWhatsAppTemplate } from '../../lib/whatsapp';
+import { createWhatsAppUrl, getWhatsAppTemplate, isWhatsAppEnabled, isWhatsAppSupportEnabled, renderWhatsAppTemplate } from '../../lib/whatsapp';
 import { isCartCodEligible, isProductCodEligible } from '../../lib/codPolicy';
+import { forgetPendingPayment, getPendingPaymentReferences, rememberPendingPayment } from '../../lib/paymentRecovery';
 
 const isValidUpiVpa = (value?: string) =>
   Boolean(value && /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim()));
@@ -59,12 +62,16 @@ interface RazorpayOptions {
     razorpay_signature?: string;
   }) => void | Promise<void>;
   modal?: { ondismiss?: () => void };
+  on?: (event: 'payment.failed', handler: (response: { error?: { description?: string } }) => void) => void;
 }
 
 declare global {
   interface Window {
     Razorpay?: {
-      new (options: RazorpayOptions): { open: () => void };
+      new (options: RazorpayOptions): {
+        open: () => void;
+        on: (event: 'payment.failed', handler: (response: { error?: { description?: string } }) => void) => void;
+      };
     };
   }
 }
@@ -97,9 +104,20 @@ export const CartDrawer: React.FC = () => {
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState<'address' | 'payment'>('address');
+  const [addressErrors, setAddressErrors] = useState<Partial<Record<'name' | 'email' | 'phone' | 'address', string>>>({});
   const [orderComplete, setOrderComplete] = useState<Order | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
+  const [paymentIssue, setPaymentIssue] = useState<{
+    orderId: string;
+    method: 'razorpay' | 'payu';
+    state: 'checking' | 'pending' | 'failed' | 'unavailable';
+    message?: string;
+    createdAt: number;
+  } | null>(null);
+  const [paymentStatusRefresh, setPaymentStatusRefresh] = useState(0);
+  const isPaymentStatusCheckInProgress = useRef(false);
 
   // Payment method selection
   const [selectedPaymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'payu' | 'cod'>(() =>
@@ -118,6 +136,7 @@ export const CartDrawer: React.FC = () => {
     phone?: string;
     address?: string;
   }>({});
+  const draftStorageWarningShown = useRef(false);
   const profileAddress = [currentUser?.address, currentUser?.city, currentUser?.pincode]
     .filter(value => value?.trim())
     .join(', ');
@@ -127,6 +146,57 @@ export const CartDrawer: React.FC = () => {
     phone: formOverrides.phone ?? currentUser?.phone ?? '',
     address: formOverrides.address ?? profileAddress
   };
+  const clearCheckoutDraft = useCallback(() => {
+    try {
+      sessionStorage.removeItem('dopamean_checkout_draft');
+    } catch (error) {
+      console.error('Could not clear the session checkout draft:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!currentUser?.email) return;
+    try {
+      const stored = sessionStorage.getItem('dopamean_checkout_draft');
+      if (!stored) return;
+      const draft: { email?: string; name?: string; phone?: string; address?: string } = JSON.parse(stored);
+      if (draft.email?.toLowerCase() === currentUser.email.toLowerCase()) {
+        setFormOverrides({
+          name: draft.name,
+          phone: draft.phone,
+          address: draft.address
+        });
+      } else {
+        sessionStorage.removeItem('dopamean_checkout_draft');
+      }
+    } catch (error) {
+      console.error('Could not restore the session checkout draft:', error);
+      if (!draftStorageWarningShown.current) {
+        showToast('Saved delivery edits could not be restored. Please review your address before payment.', 'error');
+        draftStorageWarningShown.current = true;
+      }
+    }
+  }, [currentUser?.email, showToast]);
+
+  useEffect(() => {
+    if (!currentUser?.email || !Object.values(formOverrides).some(value => value?.trim())) return;
+    try {
+      sessionStorage.setItem('dopamean_checkout_draft', JSON.stringify({
+        email: currentUser.email,
+        name: formData.name,
+        phone: formData.phone,
+        address: formData.address
+      }));
+      draftStorageWarningShown.current = false;
+    } catch (error) {
+      console.error('Could not save the session checkout draft:', error);
+      if (!draftStorageWarningShown.current) {
+        showToast('Your delivery edits could not be saved for recovery. Keep this checkout open while completing payment.', 'error');
+        draftStorageWarningShown.current = true;
+      }
+    }
+  }, [currentUser?.email, formData.address, formData.name, formData.phone, formOverrides, showToast]);
+  const isOrderPaymentConfirmed = orderComplete?.paymentStatus === 'paid';
 
   const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
 
@@ -189,6 +259,13 @@ export const CartDrawer: React.FC = () => {
     });
     return createWhatsAppUrl(phone, message, settings.whatsappCountryCode || '91');
   })();
+  const paymentSupportUrl = paymentIssue && isWhatsAppSupportEnabled(settings)
+    ? createWhatsAppUrl(
+      settings.whatsappBusinessPhone || settings.contactPhone || '',
+      renderWhatsAppTemplate(getWhatsAppTemplate(settings, 'support'), { orderId: paymentIssue.orderId }),
+      settings.whatsappCountryCode || '91'
+    )
+    : null;
 
   // Generate UPI QR Code URL dynamically whenever paymentMethod is 'upi' or total changes
   useEffect(() => {
@@ -214,6 +291,77 @@ export const CartDrawer: React.FC = () => {
     }
   }, [paymentMethod, isCheckingOut, upiPaymentUri]);
 
+  const paymentIssueOrderId = paymentIssue?.orderId;
+
+  useEffect(() => {
+    if (!paymentIssueOrderId || !formData.email) return;
+    let active = true;
+    const checkPaymentStatus = async () => {
+      if (isPaymentStatusCheckInProgress.current) return;
+      isPaymentStatusCheckInProgress.current = true;
+      if (!navigator.onLine) {
+        setPaymentIssue(previous => previous ? { ...previous, state: 'checking' } : null);
+        isPaymentStatusCheckInProgress.current = false;
+        return;
+      }
+      try {
+        const orders = await api.trackOrder(paymentIssueOrderId, formData.email);
+        const order = orders.find(candidate => candidate.id === paymentIssueOrderId);
+        if (!active) return;
+        if (order?.paymentStatus === 'paid') {
+          try {
+            forgetPendingPayment(paymentIssueOrderId);
+          } catch (error) {
+            console.error('Could not clear resolved payment recovery details:', error);
+            showToast('Payment is confirmed, but this device could not clear its saved recovery reminder.', 'error');
+          }
+          syncOrder(order);
+          clearCheckoutDraft();
+          clearCart();
+          setOrderComplete(order);
+          setIsCheckingOut(false);
+          setPaymentIssue(null);
+          return;
+        }
+        if (order?.paymentStatus === 'failed' || order?.status === 'cancelled') {
+          try {
+            forgetPendingPayment(paymentIssueOrderId);
+          } catch (error) {
+            console.error('Could not clear failed payment recovery details:', error);
+          }
+          if (order) syncOrder(order);
+          setPaymentIssue(previous => previous ? {
+            ...previous,
+            state: 'failed',
+            message: previous.message || 'The payment was not completed. Your cart and delivery details are still saved.'
+          } : null);
+          return;
+        }
+        setPaymentIssue(previous => previous ? { ...previous, state: 'pending' } : null);
+      } catch (error) {
+        if (!active) return;
+        setPaymentIssue(previous => previous ? {
+          ...previous,
+          state: 'unavailable',
+          message: error instanceof Error
+            ? 'We could not reach order tracking. We will check again when your connection is available.'
+            : 'We could not reach order tracking. Your cart and order reference are saved.'
+        } : null);
+      } finally {
+        isPaymentStatusCheckInProgress.current = false;
+      }
+    };
+
+    void checkPaymentStatus();
+    const interval = window.setInterval(() => { void checkPaymentStatus(); }, 15000);
+    window.addEventListener('online', checkPaymentStatus);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener('online', checkPaymentStatus);
+    };
+  }, [paymentIssueOrderId, formData.email, clearCart, clearCheckoutDraft, showToast, syncOrder, paymentStatusRefresh]);
+
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!promoInput.trim()) return;
@@ -238,6 +386,81 @@ export const CartDrawer: React.FC = () => {
     }
   };
 
+  const handleSafelyRetryPayment = async () => {
+    if (!paymentIssue || paymentIssue.method !== 'razorpay' || !userToken) return;
+    setIsSubmitting(true);
+    try {
+      const order = await api.cancelRazorpayOrder(paymentIssue.orderId, userToken);
+      syncOrder(order);
+      if (order.paymentStatus === 'paid') {
+        clearCheckoutDraft();
+        clearCart();
+        setOrderComplete(order);
+        setIsCheckingOut(false);
+        setPaymentIssue(null);
+        return;
+      }
+      if (order.status !== 'cancelled' && order.paymentStatus !== 'failed') {
+        setPaymentIssue(previous => previous ? {
+          ...previous,
+          state: 'pending',
+          message: 'The earlier payment is not safely closed yet. We will not start another payment until its status changes.'
+        } : null);
+        return;
+      }
+      try {
+        forgetPendingPayment(paymentIssue.orderId);
+      } catch (storageError) {
+        console.error('Could not clear the resolved Razorpay reference:', storageError);
+      }
+      setPaymentIssue(null);
+      setCheckoutStep('payment');
+      setIsCheckingOut(true);
+    } catch (error) {
+      console.error('Could not safely release the previous Razorpay attempt:', error);
+      try {
+        const orders = await api.trackOrder(paymentIssue.orderId, formData.email);
+        const order = orders.find(candidate => candidate.id === paymentIssue.orderId);
+        if (order?.paymentStatus === 'paid') {
+          syncOrder(order);
+          try {
+            forgetPendingPayment(paymentIssue.orderId);
+          } catch (storageError) {
+            console.error('Could not clear the confirmed Razorpay reference:', storageError);
+          }
+          clearCheckoutDraft();
+          clearCart();
+          setOrderComplete(order);
+          setIsCheckingOut(false);
+          setPaymentIssue(null);
+          return;
+        }
+        if (order?.paymentStatus === 'failed' || order?.status === 'cancelled') {
+          try {
+            forgetPendingPayment(paymentIssue.orderId);
+          } catch (storageError) {
+            console.error('Could not clear the cancelled Razorpay reference:', storageError);
+          }
+          setPaymentIssue(null);
+          setCheckoutStep('payment');
+          setIsCheckingOut(true);
+          return;
+        }
+      } catch (statusError) {
+        console.error('Could not refresh payment status after retry was blocked:', statusError);
+      }
+      setPaymentIssue(previous => previous ? {
+        ...previous,
+        state: 'pending',
+        message: error instanceof Error
+          ? `${error.message} We will not start another payment while this one is unresolved.`
+          : 'We could not safely release this payment attempt. Check its status before trying again.'
+      } : null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const triggerCelebration = async () => {
     try {
       const { default: confetti } = await import('canvas-confetti');
@@ -253,6 +476,17 @@ export const CartDrawer: React.FC = () => {
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (checkoutStep === 'address') {
+      const errors: typeof addressErrors = {};
+      if (!formData.name.trim()) errors.name = 'Enter your full name.';
+      if (!formData.email.trim()) errors.email = 'Your signed-in account email is required.';
+      if (!formData.phone.trim()) errors.phone = 'Enter a mobile phone number.';
+      if (!formData.address.trim()) errors.address = 'Enter your complete delivery address.';
+      setAddressErrors(errors);
+      if (Object.keys(errors).length > 0) return;
+      setCheckoutStep('payment');
+      return;
+    }
     if (!isUserLoggedIn || !userToken) {
       showToast('Sign in to your account before placing an order.', 'error');
       setIsCheckingOut(false);
@@ -266,6 +500,61 @@ export const CartDrawer: React.FC = () => {
     }
 
     const authenticatedUserToken = userToken;
+    try {
+      const references = getPendingPaymentReferences();
+      for (const reference of references) {
+        let orders: Order[];
+        try {
+          orders = await api.trackOrder(reference.orderId, formData.email);
+        } catch {
+          setPaymentIssue({
+            orderId: reference.orderId,
+            method: reference.paymentMethod,
+            state: 'unavailable',
+            message: 'We could not confirm an earlier payment. Check its status before placing another order.',
+            createdAt: reference.createdAt
+          });
+          return;
+        }
+        const existingOrder = orders.find(order => order.id === reference.orderId);
+        if (!existingOrder) {
+          setPaymentIssue({
+            orderId: reference.orderId,
+            method: reference.paymentMethod,
+            state: 'unavailable',
+            message: 'We could not find the earlier order for this account. Check its reference before placing another order.',
+            createdAt: reference.createdAt
+          });
+          return;
+        }
+        if (existingOrder.paymentStatus === 'paid') {
+          forgetPendingPayment(reference.orderId);
+          syncOrder(existingOrder);
+          clearCheckoutDraft();
+          clearCart();
+          setOrderComplete(existingOrder);
+          setIsCheckingOut(false);
+          return;
+        }
+        if (existingOrder.paymentStatus === 'failed' || existingOrder.status === 'cancelled') {
+          forgetPendingPayment(reference.orderId);
+          continue;
+        }
+        setPaymentIssue({
+          orderId: reference.orderId,
+          method: reference.paymentMethod,
+          state: 'pending',
+          message: 'An earlier payment is still awaiting confirmation. We will not start another payment until its status is clear.',
+          createdAt: reference.createdAt
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Could not check saved payment references:', error);
+      showToast('Could not check a previous payment. Please check your order status before trying again.', 'error');
+      return;
+    }
+
     setIsSubmitting(true);
     let pendingRazorpayStoreOrderId: string | null = null;
     let razorpayCheckoutOpened = false;
@@ -287,6 +576,12 @@ export const CartDrawer: React.FC = () => {
           promoCodeApplied: activePromo?.code,
           userToken: authenticatedUserToken
         });
+        try {
+          rememberPendingPayment(checkout.orderId, 'payu');
+        } catch (error) {
+          console.error('Could not save the PayU recovery reference:', error);
+          showToast('Keep order reference ' + checkout.orderId + ' available in case you need to check this payment later.', 'error');
+        }
         const form = document.createElement('form');
         form.method = 'POST';
         form.action = checkout.checkoutUrl;
@@ -314,7 +609,7 @@ export const CartDrawer: React.FC = () => {
             document.body.appendChild(script);
           });
           if (!loaded || !window.Razorpay) {
-            alert('Razorpay Checkout SDK is still loading. Please retry or choose UPI QR / COD.');
+            showToast('Razorpay checkout could not load. Please retry or choose another payment method.', 'error');
             setIsSubmitting(false);
             return;
           }
@@ -337,6 +632,12 @@ export const CartDrawer: React.FC = () => {
           status: 'pending'
         }, authenticatedUserToken);
         pendingRazorpayStoreOrderId = storeOrder.id;
+        try {
+          rememberPendingPayment(storeOrder.id, 'razorpay');
+        } catch (error) {
+          console.error('Could not save the Razorpay recovery reference:', error);
+          showToast('Keep order reference ' + storeOrder.id + ' available in case you need to check this payment later.', 'error');
+        }
         const rzpOrder = await api.createRazorpayOrder({ orderId: storeOrder.id, userToken: authenticatedUserToken });
 
         const rzpKey = rzpOrder.keyId || settings.razorpayKeyId || '';
@@ -362,31 +663,93 @@ export const CartDrawer: React.FC = () => {
             razorpay_payment_id?: string;
             razorpay_signature?: string;
           }) => {
-            const razorpayOrderId = response.razorpay_order_id ?? '';
-            const razorpayPaymentId = response.razorpay_payment_id ?? '';
-            const razorpaySignature = response.razorpay_signature ?? '';
-
-            const verification = await api.verifyRazorpayPayment({
-              razorpay_order_id: razorpayOrderId,
-              razorpay_payment_id: razorpayPaymentId,
-              razorpay_signature: razorpaySignature,
+            setPaymentIssue({
               orderId: storeOrder.id,
-              userToken: authenticatedUserToken
+              method: 'razorpay',
+              state: 'checking',
+              message: 'Your payment was submitted. We are confirming its status with the store.',
+              createdAt: Date.now()
             });
-            syncOrder(verification.order);
-            clearCart();
-            setOrderComplete(verification.order);
-            setIsCheckingOut(false);
-            void triggerCelebration();
+            try {
+              const razorpayOrderId = response.razorpay_order_id ?? '';
+              const razorpayPaymentId = response.razorpay_payment_id ?? '';
+              const razorpaySignature = response.razorpay_signature ?? '';
+
+              const verification = await api.verifyRazorpayPayment({
+                razorpay_order_id: razorpayOrderId,
+                razorpay_payment_id: razorpayPaymentId,
+                razorpay_signature: razorpaySignature,
+                orderId: storeOrder.id,
+                userToken: authenticatedUserToken
+              });
+              syncOrder(verification.order);
+              try {
+                forgetPendingPayment(storeOrder.id);
+              } catch (error) {
+                console.error('Could not clear the confirmed payment recovery reference:', error);
+              }
+              clearCart();
+              clearCheckoutDraft();
+              setOrderComplete(verification.order);
+              setIsCheckingOut(false);
+              setPaymentIssue(null);
+              void triggerCelebration();
+            } catch (error) {
+              console.error('Razorpay confirmation request did not complete:', error);
+              setPaymentIssue(previous => previous ? {
+                ...previous,
+                state: 'checking',
+                message: 'We could not finish checking your payment yet. Your cart is saved while we check the order status.'
+              } : null);
+            }
           },
           modal: {
             ondismiss: () => {
-              void api.cancelRazorpayOrder(storeOrder.id, authenticatedUserToken).then(syncOrder).catch(() => undefined);
+              setPaymentIssue({
+                orderId: storeOrder.id,
+                method: 'razorpay',
+                state: 'checking',
+                message: 'Checkout was closed. We are checking whether a payment was completed.',
+                createdAt: Date.now()
+              });
+              void api.cancelRazorpayOrder(storeOrder.id, authenticatedUserToken)
+                .then(order => {
+                  syncOrder(order);
+                  if (order.status === 'cancelled' || order.paymentStatus === 'failed') {
+                    try {
+                      forgetPendingPayment(storeOrder.id);
+                    } catch (error) {
+                      console.error('Could not clear the cancelled payment recovery reference:', error);
+                    }
+                    setPaymentIssue(previous => previous ? {
+                      ...previous,
+                      state: 'failed',
+                      message: 'Checkout was closed before payment was completed. Your cart and delivery details are saved.'
+                    } : null);
+                  }
+                })
+                .catch(error => {
+                  console.error('Could not safely close the pending Razorpay order:', error);
+                  setPaymentIssue(previous => previous ? {
+                    ...previous,
+                    state: 'pending',
+                    message: 'We are still checking this payment. Please wait for its status before retrying.'
+                  } : null);
+                });
             }
           }
         };
 
         const rzp = new window.Razorpay(rzpOptions);
+        rzp.on('payment.failed', response => {
+          setPaymentIssue({
+            orderId: storeOrder.id,
+            method: 'razorpay',
+            state: 'checking',
+            message: response.error?.description || 'The payment could not be completed. We are checking the order status before you retry.',
+            createdAt: Date.now()
+          });
+        });
         razorpayCheckoutOpened = true;
         rzp.open();
         setIsSubmitting(false);
@@ -401,16 +764,34 @@ export const CartDrawer: React.FC = () => {
       });
 
       if (placedOrder) {
+        clearCheckoutDraft();
         setOrderComplete(placedOrder);
         setIsCheckingOut(false);
         void triggerCelebration();
       }
     } catch (error: unknown) {
       if (pendingRazorpayStoreOrderId && !razorpayCheckoutOpened) {
-        await api.cancelRazorpayOrder(pendingRazorpayStoreOrderId, authenticatedUserToken).then(syncOrder).catch(() => undefined);
+        try {
+          const cancelledOrder = await api.cancelRazorpayOrder(pendingRazorpayStoreOrderId, authenticatedUserToken);
+          syncOrder(cancelledOrder);
+          try {
+            forgetPendingPayment(pendingRazorpayStoreOrderId);
+          } catch (storageError) {
+            console.error('Could not clear the cancelled Razorpay recovery reference:', storageError);
+          }
+        } catch (cancelError) {
+          console.error('Could not safely cancel the Razorpay order after checkout setup failed:', cancelError);
+          setPaymentIssue({
+            orderId: pendingRazorpayStoreOrderId,
+            method: 'razorpay',
+            state: 'pending',
+            message: 'We could not safely close this payment attempt. Check its status before trying another payment.',
+            createdAt: Date.now()
+          });
+        }
       }
       const message = error instanceof Error ? error.message : 'Failed to place order. Please check your network connection.';
-      alert(message);
+      showToast(message, 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -427,10 +808,12 @@ export const CartDrawer: React.FC = () => {
     }
     if (!isUserLoggedIn) {
       openUserAuthModal('signin', () => {
+        setCheckoutStep('address');
         setIsCheckingOut(true);
       });
       return;
     }
+    setCheckoutStep('address');
     setIsCheckingOut(true);
   };
 
@@ -545,6 +928,57 @@ export const CartDrawer: React.FC = () => {
           overflowY: 'auto',
           padding: '20px 24px'
         }}>
+          {(cart.length > 0 || orderComplete) && (() => {
+            const activeStep = orderComplete ? 3 : !isCheckingOut ? 0 : checkoutStep === 'address' ? 1 : 2;
+            const steps = ['Cart', 'Address', 'Payment', 'Confirmation'];
+            return (
+              <ol aria-label="Checkout progress" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                gap: '6px',
+                listStyle: 'none',
+                padding: 0,
+                margin: '0 0 18px'
+              }}>
+                {steps.map((step, index) => {
+                  const isCurrent = index === activeStep;
+                  const isComplete = index < activeStep;
+                  return (
+                    <li
+                      key={step}
+                      aria-current={isCurrent ? 'step' : undefined}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '5px',
+                        textAlign: 'center',
+                        color: isCurrent || isComplete ? 'var(--accent-terracotta)' : 'var(--text-muted)',
+                        fontSize: '0.68rem',
+                        fontWeight: isCurrent ? 800 : 600
+                      }}
+                    >
+                      <span style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        border: `1px solid ${isCurrent || isComplete ? 'var(--accent-terracotta)' : 'var(--border-medium)'}`,
+                        background: isComplete ? 'var(--accent-terracotta)' : '#FFFFFF',
+                        color: isComplete ? '#FFFFFF' : 'inherit',
+                        fontSize: '0.7rem'
+                      }}>
+                        {index + 1}
+                      </span>
+                      {step}
+                    </li>
+                  );
+                })}
+              </ol>
+            );
+          })()}
           {orderComplete ? (
             /* Order Placed Success View */
             <div style={{
@@ -560,20 +994,28 @@ export const CartDrawer: React.FC = () => {
                 width: '74px',
                 height: '74px',
                 borderRadius: '50%',
-                backgroundColor: 'var(--accent-sage-light)',
+                backgroundColor: isOrderPaymentConfirmed ? 'var(--accent-sage-light)' : 'var(--accent-amber-light)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: 'var(--accent-sage)',
+                color: isOrderPaymentConfirmed ? 'var(--accent-sage)' : 'var(--accent-amber)',
                 marginBottom: '18px'
               }}>
-                <CheckCircle2 size={42} />
+                {isOrderPaymentConfirmed ? <CheckCircle2 size={42} /> : <Clock size={42} />}
               </div>
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '6px' }}>
-                Order #{orderComplete.id} Confirmed!
+                {isOrderPaymentConfirmed ? 'Payment received' : 'Order placed'} · #{orderComplete.id}
               </h2>
               <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, maxWidth: '380px' }}>
-                Thank you, <strong>{orderComplete.customer.name}</strong>! Your order has been registered in our database. Deepa has started prepping your yarns and floral stitches!
+                {isOrderPaymentConfirmed ? (
+                  <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your payment is verified and your order is being prepared.</>
+                ) : orderComplete.paymentMethod === 'upi' ? (
+                  <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your order is recorded, but manual UPI payment is not automatically verified. The store will verify your payment before marking this order as paid.{orderComplete.upiRefNumber ? ' Your UPI reference has been saved with the order.' : ' If you already paid, keep your UPI transaction reference available.'}</>
+                ) : orderComplete.paymentMethod === 'cod' ? (
+                  <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your order is placed with Cash on Delivery. No payment has been collected; pay the courier when your parcel arrives.</>
+                ) : (
+                  <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your order is recorded and its payment is still pending confirmation.</>
+                )}
               </p>
 
               {/* Action Buttons: Track + Invoice */}
@@ -645,21 +1087,101 @@ export const CartDrawer: React.FC = () => {
                 </button>
               </div>
             </div>
+          ) : paymentIssue ? (
+            <div role="status" aria-live="polite" style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              padding: '30px 8px',
+              gap: '12px'
+            }}>
+              {paymentIssue.state === 'failed'
+                ? <AlertCircle size={42} color="#B91C1C" />
+                : <Clock size={42} color="#B45309" />}
+              <h2 style={{ fontSize: '1.35rem', margin: 0, color: 'var(--text-main)' }}>
+                {paymentIssue.state === 'failed'
+                  ? 'Payment was not completed'
+                  : 'Checking your payment status'}
+              </h2>
+              <p style={{ maxWidth: '390px', margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem', lineHeight: 1.6 }}>
+                {paymentIssue.message || 'The store is checking the payment status. We will not assume it succeeded or failed until the order status is confirmed.'}
+              </p>
+              <p style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                Order reference: #{paymentIssue.orderId}
+              </p>
+              <p style={{ maxWidth: '390px', margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                Your cart and delivery details are saved. Please do not pay again while this order is pending.
+              </p>
+              {Date.now() - paymentIssue.createdAt >= 3 * 60 * 1000 && (
+                <p style={{ maxWidth: '390px', margin: 0, color: '#92400E', fontSize: '0.82rem', lineHeight: 1.55 }}>
+                  This is taking longer than expected. Contact support with order reference #{paymentIssue.orderId} before retrying.
+                </p>
+              )}
+              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '9px', marginTop: '4px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setPaymentStatusRefresh(value => value + 1)}
+                  disabled={isSubmitting}
+                >
+                  Check status again
+                </button>
+                {paymentIssue.method === 'razorpay' && (paymentIssue.state === 'failed' || paymentIssue.state === 'pending') && (
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={() => void handleSafelyRetryPayment()}
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? 'Checking safely…' : 'Try again or choose another method'}
+                  </button>
+                )}
+                {paymentSupportUrl && Date.now() - paymentIssue.createdAt >= 3 * 60 * 1000 && (
+                  <a href={paymentSupportUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary" style={{ textDecoration: 'none' }}>
+                    Contact support
+                  </a>
+                )}
+                {!paymentSupportUrl && settings.contactPhone && Date.now() - paymentIssue.createdAt >= 3 * 60 * 1000 && (
+                  <a href={`tel:${settings.contactPhone.replace(/[^\d+]/g, '')}`} className="btn-secondary" style={{ textDecoration: 'none' }}>
+                    Call store support
+                  </a>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsCartOpen(false);
+                  setIsCheckingOut(false);
+                }}
+                style={{ border: 0, background: 'none', color: 'var(--accent-terracotta)', fontWeight: 700, cursor: 'pointer', marginTop: '6px' }}
+              >
+                Return to store — your order reference is saved
+              </button>
+            </div>
           ) : isCheckingOut ? (
             /* Multi-Gateway Production Checkout View */
-            <form onSubmit={handleCheckoutSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <form onSubmit={handleCheckoutSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
                 <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>
-                  Shipping & Payment Details
+                  {checkoutStep === 'address' ? 'Delivery Details' : 'Choose Payment'}
                 </h4>
                 <button
                   type="button"
-                  onClick={() => setIsCheckingOut(false)}
+                  onClick={() => {
+                    if (checkoutStep === 'payment') {
+                      setCheckoutStep('address');
+                    } else {
+                      setIsCheckingOut(false);
+                    }
+                  }}
                   style={{ fontSize: '0.8rem', color: 'var(--accent-terracotta)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
                 >
-                  ← Back to Bag
+                  {checkoutStep === 'payment' ? '← Back to Address' : '← Back to Bag'}
                 </button>
               </div>
+              {checkoutStep === 'address' ? (
+                <>
               <div style={{
                 padding: '10px 12px',
                 borderRadius: '10px',
@@ -681,7 +1203,11 @@ export const CartDrawer: React.FC = () => {
                   required
                   placeholder="e.g. Pooja Sharma"
                   value={formData.name}
-                  onChange={(e) => setFormOverrides({ ...formOverrides, name: e.target.value })}
+                  aria-invalid={Boolean(addressErrors.name)}
+                  onChange={(e) => {
+                    setFormOverrides({ ...formOverrides, name: e.target.value });
+                    setAddressErrors(prev => ({ ...prev, name: '' }));
+                  }}
                   style={{
                     width: '100%',
                     minHeight: '44px',
@@ -692,6 +1218,7 @@ export const CartDrawer: React.FC = () => {
                     boxSizing: 'border-box'
                   }}
                 />
+                {addressErrors.name && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{addressErrors.name}</p>}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: '10px' }}>
@@ -704,6 +1231,7 @@ export const CartDrawer: React.FC = () => {
                     required
                     readOnly
                     aria-readonly="true"
+                    aria-invalid={Boolean(addressErrors.email)}
                     title="The order is placed under your signed-in account email."
                     placeholder="name@gmail.com"
                     value={formData.email}
@@ -718,6 +1246,7 @@ export const CartDrawer: React.FC = () => {
                       boxSizing: 'border-box'
                     }}
                   />
+                  {addressErrors.email && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{addressErrors.email}</p>}
                 </div>
 
                 <div>
@@ -729,7 +1258,11 @@ export const CartDrawer: React.FC = () => {
                     required
                     placeholder="e.g. 9876543210"
                     value={formData.phone}
-                    onChange={(e) => setFormOverrides({ ...formOverrides, phone: e.target.value })}
+                    aria-invalid={Boolean(addressErrors.phone)}
+                    onChange={(e) => {
+                      setFormOverrides({ ...formOverrides, phone: e.target.value });
+                      setAddressErrors(prev => ({ ...prev, phone: '' }));
+                    }}
                     style={{
                       width: '100%',
                       minHeight: '44px',
@@ -740,6 +1273,7 @@ export const CartDrawer: React.FC = () => {
                       boxSizing: 'border-box'
                     }}
                   />
+                  {addressErrors.phone && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{addressErrors.phone}</p>}
                 </div>
               </div>
 
@@ -752,7 +1286,11 @@ export const CartDrawer: React.FC = () => {
                   rows={2}
                   placeholder="Flat/House No., Street, Landmark, City, State & Pincode"
                   value={formData.address}
-                  onChange={(e) => setFormOverrides({ ...formOverrides, address: e.target.value })}
+                  aria-invalid={Boolean(addressErrors.address)}
+                  onChange={(e) => {
+                    setFormOverrides({ ...formOverrides, address: e.target.value });
+                    setAddressErrors(prev => ({ ...prev, address: '' }));
+                  }}
                   style={{
                     width: '100%',
                     minHeight: '60px',
@@ -764,8 +1302,11 @@ export const CartDrawer: React.FC = () => {
                     boxSizing: 'border-box'
                   }}
                 />
+                {addressErrors.address && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{addressErrors.address}</p>}
               </div>
-
+                </>
+              ) : (
+                <>
               {/* Payment Method Selector */}
               <div style={{ marginTop: '6px' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
@@ -1173,7 +1714,7 @@ export const CartDrawer: React.FC = () => {
                 </div>
               )}
 
-              {/* Total & Submit Button */}
+              {/* Order total */}
               <div style={{
                 borderTop: '1px solid var(--border-medium)',
                 paddingTop: '14px',
@@ -1185,26 +1726,6 @@ export const CartDrawer: React.FC = () => {
                     {settings.currency}{total.toFixed(2)}
                   </span>
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={isSubmitting || availablePaymentMethods.length === 0}
-                  className="btn-primary"
-                  style={{ width: '100%', padding: '14px', fontSize: '0.96rem' }}
-                >
-                  <ShieldCheck size={18} />
-                  <span>
-                    {isSubmitting
-                      ? 'Processing Order...'
-                      : paymentMethod === 'razorpay'
-                      ? 'Pay with Razorpay'
-                      : paymentMethod === 'payu'
-                      ? 'Continue to PayU'
-                      : paymentMethod === 'upi'
-                      ? 'I have paid — place order'
-                      : 'Confirm Cash on Delivery Order'}
-                  </span>
-                </button>
                 {paymentMethod === 'cod' && (
                   <div style={{ marginTop: '10px', padding: '12px', borderRadius: '10px', background: '#F0FDF4', color: '#166534', fontSize: '0.8rem', lineHeight: 1.45 }}>
                     Pay {settings.currency}{total.toFixed(2)} to the courier when your order arrives. You will not be charged online now.
@@ -1220,7 +1741,46 @@ export const CartDrawer: React.FC = () => {
                     You’ll continue to PayU to complete payment. The order is marked paid only after the server verifies the transaction.
                   </div>
                 )}
-              </div>
+                </div>
+                </>
+              )}
+              {checkoutStep === 'address' ? (
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  style={{ width: '100%', padding: '14px', fontSize: '0.96rem' }}
+                >
+                  <span>Continue to Payment</span>
+                  <ArrowRight size={16} />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={isSubmitting || availablePaymentMethods.length === 0}
+                  aria-busy={isSubmitting}
+                  className="btn-primary"
+                  style={{ width: '100%', padding: '14px', fontSize: '0.96rem' }}
+                >
+                  <ShieldCheck size={18} />
+                  <span>
+                    {isSubmitting
+                      ? paymentMethod === 'razorpay'
+                        ? 'Opening secure Razorpay checkout…'
+                        : paymentMethod === 'payu'
+                          ? 'Connecting to PayU…'
+                          : paymentMethod === 'upi'
+                            ? 'Recording order…'
+                            : 'Placing order…'
+                      : paymentMethod === 'razorpay'
+                      ? 'Pay with Razorpay'
+                      : paymentMethod === 'payu'
+                      ? 'Continue to PayU'
+                      : paymentMethod === 'upi'
+                      ? 'I have paid — place order'
+                      : 'Confirm Cash on Delivery Order'}
+                  </span>
+                </button>
+              )}
             </form>
           ) : cart.length === 0 ? (
             /* Empty Cart View */

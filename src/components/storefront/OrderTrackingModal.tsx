@@ -239,7 +239,19 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
           {orders.map((order) => {
             const step = getStepIndex(order.status);
+            const paymentStatus = order.paymentStatus ?? 'pending';
             const whatsappSupportUrl = createWhatsAppSupportUrl(order, settings);
+            const paymentNotice = paymentStatus === 'failed'
+              ? 'Payment was not confirmed. If you believe you were charged, contact the store before attempting another payment.'
+              : paymentStatus === 'refund_pending'
+                ? 'Your refund is being processed. Contact the store if you need an update.'
+                : paymentStatus === 'refunded'
+                  ? 'Your payment has been refunded.'
+                  : order.paymentMethod === 'cod'
+                    ? 'Cash on Delivery: payment has not been collected yet. Pay the courier when your parcel arrives.'
+                    : order.paymentMethod === 'upi'
+                      ? 'Your UPI payment is awaiting manual verification by the store.'
+                      : 'Payment confirmation is pending. Please wait for the status to update before attempting another payment.';
             return (
               <div
                 key={order.id}
@@ -293,6 +305,24 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                     </div>
                   </div>
                 </div>
+
+                {paymentStatus !== 'paid' && (
+                  <div
+                    role={paymentStatus === 'failed' ? 'alert' : 'status'}
+                    style={{
+                      backgroundColor: paymentStatus === 'failed' ? '#FEF2F2' : '#FFFBEB',
+                      border: `1px solid ${paymentStatus === 'failed' ? '#FECACA' : '#FDE68A'}`,
+                      borderRadius: '12px',
+                      padding: '11px 14px',
+                      marginBottom: '16px',
+                      color: paymentStatus === 'failed' ? '#991B1B' : '#92400E',
+                      fontSize: '0.82rem',
+                      lineHeight: 1.45
+                    }}
+                  >
+                    <strong>Payment status: {paymentStatus.replace('_', ' ').toUpperCase()}.</strong> {paymentNotice}
+                  </div>
+                )}
 
                 {/* Cancelled Banner if Order is Cancelled */}
                 {order.status === 'cancelled' ? (
@@ -349,7 +379,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
                       {[
                         { label: 'Placed', icon: Clock },
-                        { label: 'Crafting', icon: Scissors },
+                        { label: 'In Progress', icon: Scissors },
                         { label: 'Shipped', icon: Truck },
                         { label: 'Out for Delivery', icon: MapPin },
                         { label: 'Delivered', icon: CheckCircle2 }

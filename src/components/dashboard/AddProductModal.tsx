@@ -102,6 +102,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
 
   const [isMainUploading, setIsMainUploading] = useState(false);
   const [isSecondaryUploading, setIsSecondaryUploading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   if (!isOpen) return null;
 
@@ -113,6 +114,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       setIsMainUploading(true);
       const uploadedUrl = await api.uploadImage(file);
       setImage(uploadedUrl);
+      setValidationErrors(prev => ({ ...prev, image: '' }));
     } catch {
       alert('Failed to upload image file');
     } finally {
@@ -148,14 +150,27 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      alert('Please enter a product title');
-      return;
+    const parsedPrice = Number(price);
+    const parsedOriginalPrice = originalPrice.trim() ? Number(originalPrice) : undefined;
+    const parsedStock = Number(stock);
+    const parsedMaxOrderQuantity = maxOrderQuantity.trim() ? Number(maxOrderQuantity) : undefined;
+    const errors: Record<string, string> = {};
+    if (!title.trim()) errors.title = 'Enter a product title.';
+    if (!image.trim()) errors.image = 'Upload or enter a product image URL.';
+    if (!price.trim() || !Number.isInteger(parsedPrice) || parsedPrice < 0) {
+      errors.price = 'Enter a whole-number selling price of 0 or more.';
     }
-    if (!image.trim()) {
-      alert('Please upload or specify a product image');
-      return;
+    if (parsedOriginalPrice !== undefined && (!Number.isInteger(parsedOriginalPrice) || parsedOriginalPrice < 0)) {
+      errors.originalPrice = 'Enter a whole-number price of 0 or more, or leave this blank.';
     }
+    if (!stock.trim() || !Number.isInteger(parsedStock) || parsedStock < 0) {
+      errors.stock = 'Enter a whole number of units (0 or more).';
+    }
+    if (parsedMaxOrderQuantity !== undefined && (!Number.isInteger(parsedMaxOrderQuantity) || parsedMaxOrderQuantity < 1)) {
+      errors.maxOrderQuantity = 'Enter a whole number of at least 1, or leave this blank.';
+    }
+    setValidationErrors(errors);
+    if (Object.values(errors).some(Boolean)) return;
 
     const finalCategory = category === 'Custom' ? (customCategory.trim() || 'Accessories') : category;
 
@@ -164,11 +179,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       .map(t => t.trim())
       .filter(Boolean);
 
-    const numPrice = parseFloat(price) || 0;
-    const numOriginal = originalPrice.trim() ? parseFloat(originalPrice) : undefined;
-    const numStock = parseInt(stock, 10) || 0;
+    const numPrice = parsedPrice;
+    const numOriginal = parsedOriginalPrice;
+    const numStock = parsedStock;
     const numCraftHours = parseFloat(craftTimeHours) || 2;
-    const numMaxOrderQty = maxOrderQuantity.trim() ? parseInt(maxOrderQuantity, 10) : undefined;
+    const numMaxOrderQty = parsedMaxOrderQuantity;
 
     const productPayload = {
       title: title.trim(),
@@ -283,7 +298,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
         </div>
 
         {/* Modal Body / Scrollable Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+        <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
           <div style={{
             padding: '28px',
             overflowY: 'auto',
@@ -335,15 +350,20 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                     type="text"
                     placeholder="Or enter image URL (e.g. /uploads/image.jpg)..."
                     value={image}
-                    onChange={(e) => setImage(e.target.value)}
+                    aria-invalid={Boolean(validationErrors.image)}
+                    onChange={(e) => {
+                      setImage(e.target.value);
+                      setValidationErrors(prev => ({ ...prev, image: '' }));
+                    }}
                     style={{
                       padding: '9px 12px',
                       borderRadius: '8px',
-                      border: '1px solid var(--border-medium)',
+                      border: `1px solid ${validationErrors.image ? '#DC2626' : 'var(--border-medium)'}`,
                       fontSize: '0.82rem',
                       backgroundColor: '#FFFFFF'
                     }}
                   />
+                  {validationErrors.image && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: 0 }}>{validationErrors.image}</p>}
                 </div>
               </div>
 
@@ -514,15 +534,20 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   required
                   placeholder="e.g. Handmade Red Rose Rubber Band"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  aria-invalid={Boolean(validationErrors.title)}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setValidationErrors(prev => ({ ...prev, title: '' }));
+                  }}
                   style={{
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '10px',
-                    border: '1px solid var(--border-medium)',
+                    border: `1px solid ${validationErrors.title ? '#DC2626' : 'var(--border-medium)'}`,
                     fontSize: '0.9rem'
                   }}
                 />
+                {validationErrors.title && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.title}</p>}
               </div>
 
               <div>
@@ -596,17 +621,22 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   step="1"
                   required
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  aria-invalid={Boolean(validationErrors.price)}
+                  onChange={(e) => {
+                    setPrice(e.target.value);
+                    setValidationErrors(prev => ({ ...prev, price: '' }));
+                  }}
                   placeholder="100"
                   style={{
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '10px',
-                    border: '1px solid var(--border-medium)',
+                    border: `1px solid ${validationErrors.price ? '#DC2626' : 'var(--border-medium)'}`,
                     fontSize: '0.95rem',
                     fontWeight: 700
                   }}
                 />
+                {validationErrors.price && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.price}</p>}
               </div>
 
               <div>
@@ -617,16 +647,21 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   type="number"
                   step="1"
                   value={originalPrice}
-                  onChange={(e) => setOriginalPrice(e.target.value)}
+                  aria-invalid={Boolean(validationErrors.originalPrice)}
+                  onChange={(e) => {
+                    setOriginalPrice(e.target.value);
+                    setValidationErrors(prev => ({ ...prev, originalPrice: '' }));
+                  }}
                   placeholder="e.g. 130"
                   style={{
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '10px',
-                    border: '1px solid var(--border-medium)',
+                    border: `1px solid ${validationErrors.originalPrice ? '#DC2626' : 'var(--border-medium)'}`,
                     fontSize: '0.95rem'
                   }}
                 />
+                {validationErrors.originalPrice && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.originalPrice}</p>}
                 {hasDiscount && (
                   <span style={{ fontSize: '0.74rem', color: '#16A34A', fontWeight: 700, marginTop: '4px', display: 'block' }}>
                     Customer saves {settings.currency}{numStrikePrice - numSellingPrice} ({discountPercent}% discount)
@@ -643,16 +678,21 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   required
                   min="0"
                   value={stock}
-                  onChange={(e) => setStock(e.target.value)}
+                  aria-invalid={Boolean(validationErrors.stock)}
+                  onChange={(e) => {
+                    setStock(e.target.value);
+                    setValidationErrors(prev => ({ ...prev, stock: '' }));
+                  }}
                   placeholder="15"
                   style={{
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '10px',
-                    border: '1px solid var(--border-medium)',
+                    border: `1px solid ${validationErrors.stock ? '#DC2626' : 'var(--border-medium)'}`,
                     fontSize: '0.95rem'
                   }}
                 />
+                {validationErrors.stock && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.stock}</p>}
               </div>
 
               <div>
@@ -663,17 +703,22 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   type="number"
                   min="1"
                   value={maxOrderQuantity}
-                  onChange={(e) => setMaxOrderQuantity(e.target.value)}
+                  aria-invalid={Boolean(validationErrors.maxOrderQuantity)}
+                  onChange={(e) => {
+                    setMaxOrderQuantity(e.target.value);
+                    setValidationErrors(prev => ({ ...prev, maxOrderQuantity: '' }));
+                  }}
                   placeholder="e.g. 5 (leave blank for no limit)"
                   style={{
                     width: '100%',
                     padding: '10px 14px',
                     borderRadius: '10px',
-                    border: '1.5px dashed var(--accent-terracotta)',
+                    border: `1.5px ${validationErrors.maxOrderQuantity ? 'solid #DC2626' : 'dashed var(--accent-terracotta)'}`,
                     fontSize: '0.95rem',
                     backgroundColor: '#FFF8F5'
                   }}
                 />
+                {validationErrors.maxOrderQuantity && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.maxOrderQuantity}</p>}
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
                   Customers can order at most this many pieces per item. Leave blank for unlimited.
                 </span>

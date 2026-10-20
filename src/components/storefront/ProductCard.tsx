@@ -1,8 +1,9 @@
 import React from 'react';
-import type { Product } from '../../types';
+import type { Product, ProductCardBadge } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
 import { Star, ShoppingBag, Eye, Clock } from 'lucide-react';
+import { normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
 
 interface ProductCardProps {
   product: Product;
@@ -11,15 +12,25 @@ interface ProductCardProps {
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const { addToCart, setSelectedProductForModal, settings } = useStore();
 
-  const discountPercent = product.originalPrice 
+  const discountPercent = product.originalPrice && product.originalPrice > product.price
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0;
 
   const isLowStock = product.stock > 0 && product.stock <= (settings.lowStockThreshold ?? 5);
   const isOutOfStock = product.stock === 0;
+  const badgeContent: Record<ProductCardBadge, string | null> = {
+    bestseller: product.isBestSeller ? '★ Bestseller' : null,
+    discount: discountPercent > 0 ? `-${discountPercent}% OFF` : null,
+    lowStock: isLowStock ? `Only ${product.stock} left in stock!` : null,
+    craftTime: `${product.craftTimeHours}h hand-stitched`
+  };
+  const visibleBadges = normalizeProductCardBadgePriority(settings.productCardBadgePriority)
+    .filter(badge => badgeContent[badge] !== null)
+    .slice(0, 2);
 
   return (
     <div
+      className="product-card"
       style={{
         backgroundColor: '#FFFFFF',
         borderRadius: '22px',
@@ -56,6 +67,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         <img
           src={getAssetUrl(product.image)}
           alt={product.title}
+          loading="lazy"
+          decoding="async"
           style={{
             position: 'absolute',
             top: 0,
@@ -69,7 +82,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
         />
 
-        {/* Badges on Top */}
+        {/* At most two badges are shown, following Studio-configured priority. */}
         <div style={{
           position: 'absolute',
           top: '12px',
@@ -79,55 +92,39 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           gap: '6px',
           zIndex: 2
         }}>
-          {product.isBestSeller && (
-            <span style={{
-              background: 'var(--accent-terracotta)',
-              color: '#FFFFFF',
-              fontSize: '0.68rem',
-              fontWeight: 700,
-              padding: '3px 9px',
-              borderRadius: '999px',
-              textTransform: 'uppercase',
-              letterSpacing: '0.04em',
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-              ★ Bestseller
+          {visibleBadges.map(badge => (
+            <span
+              key={badge}
+              style={{
+                background: badge === 'bestseller'
+                  ? 'var(--accent-terracotta)'
+                  : badge === 'discount'
+                    ? 'var(--accent-rose)'
+                    : badge === 'lowStock'
+                      ? '#FEF3C7'
+                      : 'rgba(255, 255, 255, 0.94)',
+                color: badge === 'lowStock'
+                  ? '#B91C1C'
+                  : badge === 'craftTime'
+                    ? 'var(--text-muted)'
+                    : '#FFFFFF',
+                fontSize: '0.68rem',
+                fontWeight: 700,
+                padding: '4px 9px',
+                borderRadius: '999px',
+                textTransform: badge === 'bestseller' ? 'uppercase' : 'none',
+                letterSpacing: badge === 'bestseller' ? '0.04em' : 'normal',
+                boxShadow: 'var(--shadow-sm)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                width: 'fit-content'
+              }}
+            >
+              {badge === 'craftTime' && <Clock size={12} color="var(--accent-terracotta)" />}
+              {badgeContent[badge]}
             </span>
-          )}
-
-          {discountPercent > 0 && (
-            <span style={{
-              background: 'var(--accent-rose)',
-              color: '#FFFFFF',
-              fontSize: '0.68rem',
-              fontWeight: 700,
-              padding: '3px 8px',
-              borderRadius: '999px',
-              boxShadow: 'var(--shadow-sm)'
-            }}>
-              -{discountPercent}% OFF
-            </span>
-          )}
-        </div>
-
-        {/* Stock / Craft hours badge */}
-        <div style={{
-          position: 'absolute',
-          bottom: '12px',
-          left: '12px',
-          background: 'rgba(255, 255, 255, 0.92)',
-          backdropFilter: 'blur(6px)',
-          padding: '3px 10px',
-          borderRadius: '999px',
-          fontSize: '0.72rem',
-          fontWeight: 600,
-          color: 'var(--text-muted)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '5px'
-        }}>
-          <Clock size={12} color="var(--accent-terracotta)" />
-          <span>{product.craftTimeHours}h hand-stitched</span>
+          ))}
         </div>
 
         {/* Quick View Button on Hover */}
@@ -158,7 +155,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       </div>
 
       {/* Product Content Details */}
-      <div style={{
+      <div className="product-card-details" style={{
         padding: '18px 20px 20px',
         display: 'flex',
         flexDirection: 'column',
@@ -167,13 +164,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       }}>
         <div>
           {/* Category & Rating */}
-          <div style={{
+          <div className="product-card-meta" style={{
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             marginBottom: '6px'
           }}>
-            <span style={{
+            <span className="product-card-category" style={{
               fontSize: '0.74rem',
               fontWeight: 700,
               textTransform: 'uppercase',
@@ -183,7 +180,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               {product.category}
             </span>
 
-            <div style={{
+            <div className="product-card-rating" style={{
               display: 'flex',
               alignItems: 'center',
               gap: '3px',
@@ -201,15 +198,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
           {/* Product Title */}
           <h3 
+            className="product-card-title"
             onClick={() => setSelectedProductForModal(product)}
-            style={{
-              fontSize: '1.05rem',
-              fontWeight: 700,
-              color: 'var(--text-main)',
-              lineHeight: 1.35,
-              cursor: 'pointer',
-              marginBottom: '6px'
-            }}
           >
             {product.title}
           </h3>
@@ -235,80 +225,60 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Price & Action Row */}
-        <div>
-          {/* Stock urgency */}
-          {isLowStock && (
-            <div style={{
-              fontSize: '0.72rem',
-              fontWeight: 600,
-              color: '#DC2626',
-              marginBottom: '6px'
+        <div className="product-card-footer">
+          <div className="product-card-price">
+            <span style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: '1.25rem',
+              fontWeight: 800,
+              color: 'var(--accent-terracotta)'
             }}>
-              Only {product.stock} left in stock!
-            </div>
-          )}
-
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingTop: '10px',
-            borderTop: '1px solid var(--border-light)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
+              {settings.currency}{product.price}
+            </span>
+            {product.originalPrice && product.originalPrice > product.price && (
               <span style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: '1.25rem',
-                fontWeight: 800,
-                color: 'var(--accent-terracotta)'
+                fontSize: '0.85rem',
+                color: 'var(--text-subtle)',
+                textDecoration: 'line-through'
               }}>
-                {settings.currency}{product.price}
+                {settings.currency}{product.originalPrice}
               </span>
-              {product.originalPrice && product.originalPrice > product.price && (
-                <span style={{
-                  fontSize: '0.85rem',
-                  color: 'var(--text-subtle)',
-                  textDecoration: 'line-through'
-                }}>
-                  {settings.currency}{product.originalPrice}
-                </span>
-              )}
-            </div>
-
-            <button
-              onClick={() => addToCart(product, 1)}
-              disabled={isOutOfStock}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
-                borderRadius: 'var(--radius-full)',
-                backgroundColor: isOutOfStock ? '#E2E8F0' : 'var(--accent-terracotta)',
-                color: isOutOfStock ? '#94A3B8' : '#FFFFFF',
-                fontWeight: 600,
-                fontSize: '0.82rem',
-                boxShadow: isOutOfStock ? 'none' : '0 3px 10px rgba(200, 90, 50, 0.25)',
-                transition: 'var(--transition-smooth)',
-                cursor: isOutOfStock ? 'not-allowed' : 'pointer'
-              }}
-              onMouseEnter={(e) => {
-                if (!isOutOfStock) {
-                  e.currentTarget.style.backgroundColor = 'var(--accent-terracotta-hover)';
-                  e.currentTarget.style.transform = 'scale(1.03)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (!isOutOfStock) {
-                  e.currentTarget.style.backgroundColor = 'var(--accent-terracotta)';
-                  e.currentTarget.style.transform = 'scale(1)';
-                }
-              }}
-            >
-              <ShoppingBag size={14} />
-              <span>{isOutOfStock ? 'Sold Out' : 'Add to Cart'}</span>
-            </button>
+            )}
           </div>
+          <button
+            className="product-card-add-button"
+            onClick={() => addToCart(product, 1)}
+            disabled={isOutOfStock}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 16px',
+              borderRadius: 'var(--radius-full)',
+              backgroundColor: isOutOfStock ? '#E2E8F0' : 'var(--accent-terracotta)',
+              color: isOutOfStock ? '#94A3B8' : '#FFFFFF',
+              fontWeight: 600,
+              fontSize: '0.82rem',
+              boxShadow: isOutOfStock ? 'none' : '0 3px 10px rgba(200, 90, 50, 0.25)',
+              transition: 'var(--transition-smooth)',
+              cursor: isOutOfStock ? 'not-allowed' : 'pointer'
+            }}
+            onMouseEnter={(e) => {
+              if (!isOutOfStock) {
+                e.currentTarget.style.backgroundColor = 'var(--accent-terracotta-hover)';
+                e.currentTarget.style.transform = 'scale(1.03)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isOutOfStock) {
+                e.currentTarget.style.backgroundColor = 'var(--accent-terracotta)';
+                e.currentTarget.style.transform = 'scale(1)';
+              }
+            }}
+          >
+            <ShoppingBag size={14} />
+            <span>{isOutOfStock ? 'Sold Out' : 'Add to Cart'}</span>
+          </button>
         </div>
       </div>
     </div>
