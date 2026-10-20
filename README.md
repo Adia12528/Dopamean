@@ -15,6 +15,17 @@ React storefront and Studio dashboard with an Express API. Local development use
 
 The Vite development server runs on `http://localhost:5173` and proxies `/api` and `/uploads` to `http://localhost:5000`.
 
+## Continuous integration
+
+GitHub Actions runs the CI workflow on pushes and pull requests targeting `main`, and it can also be started manually from the Actions tab. The workflow uses Node.js 22 and runs:
+
+1. `npm ci` to install the exact dependencies from `package-lock.json`.
+2. `node --check server/index.js` to validate the API entrypoint syntax.
+3. `npm run lint` to lint the project.
+4. `npm run build` to type-check and create the production frontend bundle.
+
+The workflow does not deploy the app or run end-to-end tests. The project currently has no automated test script; verify checkout, payment, authentication, and order flows separately before production releases.
+
 ## Supabase PostgreSQL setup
 
 1. Create a Supabase project and set a strong database password.
