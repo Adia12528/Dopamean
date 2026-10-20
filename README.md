@@ -108,7 +108,7 @@ GitHub Actions runs on pushes and pull requests targeting `main`, and can also b
 3. `npm run lint`
 4. `npm run build`
 
-CI validates syntax, lint, and the production frontend build. It does not deploy the app or run end-to-end tests. Test checkout, payment, authentication, and order flows separately before production releases.
+CI validates syntax, lint, and the production frontend build. That build uses `https://api.example.invalid` only to satisfy production URL validation; it is a reserved, non-routable placeholder and must not be used for deployment. CI does not deploy the app or run end-to-end tests. Test checkout, payment, authentication, and order flows separately before production releases.
 
 ## Production deployment
 
