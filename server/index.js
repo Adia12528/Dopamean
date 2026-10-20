@@ -1069,7 +1069,7 @@ app.get('/api/orders/track/lookup', lookupLimit, async (req, res) => {
   }
 });
 
-app.post('/api/orders', orderLimit, async (req, res) => {
+app.post('/api/orders', orderLimit, requireUser, async (req, res) => {
   try {
     const settings = await db.getSettings();
     const method = req.body?.paymentMethod || 'cod';
@@ -1084,7 +1084,16 @@ app.post('/api/orders', orderLimit, async (req, res) => {
     if (method === 'razorpay' && !isRazorpayActive) {
       return res.status(400).json({ error: 'Razorpay online payment is currently unavailable. Please choose UPI QR or Cash on Delivery.' });
     }
-    const newOrder = await db.createOrder(req.body);
+    const customer = req.body?.customer || {};
+    const newOrder = await db.createOrder({
+      ...req.body,
+      customer: {
+        ...customer,
+        name: String(customer.name || req.user.name || '').trim(),
+        email: req.user.email,
+        phone: String(customer.phone || req.user.phone || '').trim()
+      }
+    });
     res.status(201).json(newOrder);
   } catch (err) {
     const clientErrors = ['INVALID_CUSTOMER', 'EMPTY_ORDER', 'INVALID_QUANTITY', 'PRODUCT_NOT_FOUND', 'INSUFFICIENT_STOCK', 'INVALID_PROMO', 'INVALID_PAYMENT_METHOD', 'COD_NOT_AVAILABLE_FOR_ITEMS'];
@@ -1191,7 +1200,7 @@ app.delete('/api/reviews/:id', requireAdmin, async (req, res) => {
 // ==========================================
 // PAYMENT GATEWAYS API: PAYU, RAZORPAY & UPI
 // ==========================================
-app.post('/api/payments/payu/create-order', paymentLimit, async (req, res) => {
+app.post('/api/payments/payu/create-order', paymentLimit, requireUser, async (req, res) => {
   let storeOrder;
   try {
     const settings = await db.getSettings();
@@ -1219,7 +1228,18 @@ app.post('/api/payments/payu/create-order', paymentLimit, async (req, res) => {
       return res.status(503).json({ error: 'PAYU_CALLBACK_BASE_URL must be a valid public HTTPS URL.' });
     }
 
-    storeOrder = await db.createOrder({ ...req.body, paymentMethod: 'payu', status: 'pending' });
+    const customer = req.body?.customer || {};
+    storeOrder = await db.createOrder({
+      ...req.body,
+      customer: {
+        ...customer,
+        name: String(customer.name || req.user.name || '').trim(),
+        email: req.user.email,
+        phone: String(customer.phone || req.user.phone || '').trim()
+      },
+      paymentMethod: 'payu',
+      status: 'pending'
+    });
     const transactionId = `D${crypto.randomBytes(12).toString('hex')}`;
     await db.linkPayuTransaction(storeOrder.id, transactionId);
     const amount = formatPayuAmount(storeOrder.total);
@@ -1381,7 +1401,7 @@ app.post('/api/payments/razorpay/test', requireAdmin, paymentLimit, async (req, 
   }
 });
 
-app.post('/api/payments/razorpay/create-order', paymentLimit, async (req, res) => {
+app.post('/api/payments/razorpay/create-order', paymentLimit, requireUser, async (req, res) => {
   try {
     const { orderId } = req.body;
     const settings = await db.getSettings();
@@ -1398,6 +1418,9 @@ app.post('/api/payments/razorpay/create-order', paymentLimit, async (req, res) =
     const storeOrder = await db.getOrderById(orderId);
     if (!storeOrder || storeOrder.paymentMethod !== 'razorpay' || storeOrder.status !== 'pending' || storeOrder.razorpayOrderId) {
       return res.status(400).json({ error: 'A valid pending Razorpay order is required.' });
+    }
+    if (storeOrder.customer.email?.toLowerCase() !== req.user.email.toLowerCase()) {
+      return res.status(404).json({ error: 'Order not found.' });
     }
 
     const instance = new Razorpay({
@@ -1429,7 +1452,7 @@ app.post('/api/payments/razorpay/create-order', paymentLimit, async (req, res) =
   }
 });
 
-app.post('/api/payments/razorpay/verify', paymentLimit, async (req, res) => {
+app.post('/api/payments/razorpay/verify', paymentLimit, requireUser, async (req, res) => {
   try {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature, orderId } = req.body;
     const settings = await db.getSettings();
@@ -1443,6 +1466,9 @@ app.post('/api/payments/razorpay/verify', paymentLimit, async (req, res) => {
     const storeOrder = await db.getOrderById(orderId);
     if (!storeOrder || storeOrder.paymentMethod !== 'razorpay' || storeOrder.razorpayOrderId !== razorpay_order_id || storeOrder.status !== 'pending') {
       return res.status(400).json({ success: false, message: 'Payment does not match a pending store order.' });
+    }
+    if (storeOrder.customer.email?.toLowerCase() !== req.user.email.toLowerCase()) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
     }
 
     const generatedSignature = crypto
@@ -1515,10 +1541,13 @@ app.post('/api/webhooks/razorpay', async (req, res) => {
   }
 });
 
-app.post('/api/orders/:id/cancel-payment', paymentLimit, async (req, res) => {
+app.post('/api/orders/:id/cancel-payment', paymentLimit, requireUser, async (req, res) => {
   try {
     const order = await db.getOrderById(req.params.id);
     if (!order || order.paymentMethod !== 'razorpay' || order.paymentStatus !== 'pending') {
+      return res.status(404).json({ error: 'Pending payment order not found.' });
+    }
+    if (order.customer.email?.toLowerCase() !== req.user.email.toLowerCase()) {
       return res.status(404).json({ error: 'Pending payment order not found.' });
     }
     if (order.razorpayOrderId) {

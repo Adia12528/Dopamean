@@ -155,10 +155,10 @@ export const api = {
     return res.json();
   },
 
-  createOrder: async (orderData: Partial<Order>): Promise<Order> => {
+  createOrder: async (orderData: Partial<Order>, userToken: string): Promise<Order> => {
     const res = await fetch(`${BASE_URL}/api/orders`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken}` },
       body: JSON.stringify(orderData)
     });
     if (!res.ok) {
@@ -243,11 +243,18 @@ export const api = {
     subtotal: number;
     discountAmount?: number;
     promoCodeApplied?: string;
+    userToken: string;
   }): Promise<{ success: boolean; orderId: string; checkoutUrl: string; fields: Record<string, string> }> => {
     const res = await fetch(`${BASE_URL}/api/payments/payu/create-order`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.userToken}` },
+      body: JSON.stringify({
+        customer: data.customer,
+        items: data.items,
+        subtotal: data.subtotal,
+        discountAmount: data.discountAmount,
+        promoCodeApplied: data.promoCodeApplied
+      })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -258,11 +265,12 @@ export const api = {
 
   createRazorpayOrder: async (data: {
     orderId: string;
+    userToken: string;
   }): Promise<{ success: boolean; orderId: string; storeOrderId: string; amount: number; currency: string; keyId: string }> => {
     const res = await fetch(`${BASE_URL}/api/payments/razorpay/create-order`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.userToken}` },
+      body: JSON.stringify({ orderId: data.orderId })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -276,11 +284,17 @@ export const api = {
     razorpay_payment_id: string;
     razorpay_signature: string;
     orderId?: string;
+    userToken: string;
   }): Promise<{ success: boolean; paymentId: string; order: Order }> => {
     const res = await fetch(`${BASE_URL}/api/payments/razorpay/verify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.userToken}` },
+      body: JSON.stringify({
+        razorpay_order_id: data.razorpay_order_id,
+        razorpay_payment_id: data.razorpay_payment_id,
+        razorpay_signature: data.razorpay_signature,
+        orderId: data.orderId
+      })
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -289,8 +303,11 @@ export const api = {
     return res.json();
   },
 
-  cancelRazorpayOrder: async (orderId: string): Promise<Order> => {
-    const res = await fetch(`${BASE_URL}/api/orders/${encodeURIComponent(orderId)}/cancel-payment`, { method: 'POST' });
+  cancelRazorpayOrder: async (orderId: string, userToken: string): Promise<Order> => {
+    const res = await fetch(`${BASE_URL}/api/orders/${encodeURIComponent(orderId)}/cancel-payment`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${userToken}` }
+    });
     if (!res.ok) throw new Error('Unable to release the reserved stock for this payment.');
     return res.json();
   },

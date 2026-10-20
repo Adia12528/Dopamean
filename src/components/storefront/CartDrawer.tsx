@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { useUser } from '../../context/UserContext';
 import { api, getAssetUrl } from '../../services/api';
 import type { Order } from '../../types';
 import { 
@@ -70,6 +71,13 @@ declare global {
 
 export const CartDrawer: React.FC = () => {
   const {
+    currentUser,
+    userToken,
+    isUserLoggedIn,
+    isLoadingUser,
+    openUserAuthModal
+  } = useUser();
+  const {
     isCartOpen,
     setIsCartOpen,
     cart,
@@ -105,12 +113,20 @@ export const CartDrawer: React.FC = () => {
   const [upiUtrNumber, setUpiUtrNumber] = useState('');
   const [hasCopiedUpiId, setHasCopiedUpiId] = useState(false);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: ''
-  });
+  const [formOverrides, setFormOverrides] = useState<{
+    name?: string;
+    phone?: string;
+    address?: string;
+  }>({});
+  const profileAddress = [currentUser?.address, currentUser?.city, currentUser?.pincode]
+    .filter(value => value?.trim())
+    .join(', ');
+  const formData = {
+    name: formOverrides.name ?? currentUser?.name ?? '',
+    email: currentUser?.email ?? '',
+    phone: formOverrides.phone ?? currentUser?.phone ?? '',
+    address: formOverrides.address ?? profileAddress
+  };
 
   const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
 
@@ -237,12 +253,19 @@ export const CartDrawer: React.FC = () => {
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.email || !formData.address) return;
+    if (!isUserLoggedIn || !userToken) {
+      showToast('Sign in to your account before placing an order.', 'error');
+      setIsCheckingOut(false);
+      openUserAuthModal('signin');
+      return;
+    }
+    if (!formData.name || !formData.email || !formData.phone || !formData.address) return;
     if (availablePaymentMethods.length === 0) {
       showToast('Online payment is not configured yet. Please contact the store or try again later.', 'error');
       return;
     }
 
+    const authenticatedUserToken = userToken;
     setIsSubmitting(true);
     let pendingRazorpayStoreOrderId: string | null = null;
     let razorpayCheckoutOpened = false;
@@ -261,7 +284,8 @@ export const CartDrawer: React.FC = () => {
           })),
           subtotal,
           discountAmount: discount,
-          promoCodeApplied: activePromo?.code
+          promoCodeApplied: activePromo?.code,
+          userToken: authenticatedUserToken
         });
         const form = document.createElement('form');
         form.method = 'POST';
@@ -311,9 +335,9 @@ export const CartDrawer: React.FC = () => {
           promoCodeApplied: activePromo?.code,
           paymentMethod: 'razorpay',
           status: 'pending'
-        });
+        }, authenticatedUserToken);
         pendingRazorpayStoreOrderId = storeOrder.id;
-        const rzpOrder = await api.createRazorpayOrder({ orderId: storeOrder.id });
+        const rzpOrder = await api.createRazorpayOrder({ orderId: storeOrder.id, userToken: authenticatedUserToken });
 
         const rzpKey = rzpOrder.keyId || settings.razorpayKeyId || '';
         if (!rzpKey) throw new Error('Razorpay public key is missing. Please contact store support.');
@@ -346,7 +370,8 @@ export const CartDrawer: React.FC = () => {
               razorpay_order_id: razorpayOrderId,
               razorpay_payment_id: razorpayPaymentId,
               razorpay_signature: razorpaySignature,
-              orderId: storeOrder.id
+              orderId: storeOrder.id,
+              userToken: authenticatedUserToken
             });
             syncOrder(verification.order);
             clearCart();
@@ -356,7 +381,7 @@ export const CartDrawer: React.FC = () => {
           },
           modal: {
             ondismiss: () => {
-              void api.cancelRazorpayOrder(storeOrder.id).then(syncOrder).catch(() => undefined);
+              void api.cancelRazorpayOrder(storeOrder.id, authenticatedUserToken).then(syncOrder).catch(() => undefined);
             }
           }
         };
@@ -369,7 +394,7 @@ export const CartDrawer: React.FC = () => {
       }
 
       // 2. UPI QR / COD / WHATSAPP FLOW
-      const placedOrder = await createOrder(formData, {
+      const placedOrder = await createOrder(formData, authenticatedUserToken, {
         method: paymentMethod,
         status: paymentMethod === 'upi' ? 'pending' : 'pending',
         upiRefNumber: upiUtrNumber.trim() || undefined
@@ -382,7 +407,7 @@ export const CartDrawer: React.FC = () => {
       }
     } catch (error: unknown) {
       if (pendingRazorpayStoreOrderId && !razorpayCheckoutOpened) {
-        await api.cancelRazorpayOrder(pendingRazorpayStoreOrderId).then(syncOrder).catch(() => undefined);
+        await api.cancelRazorpayOrder(pendingRazorpayStoreOrderId, authenticatedUserToken).then(syncOrder).catch(() => undefined);
       }
       const message = error instanceof Error ? error.message : 'Failed to place order. Please check your network connection.';
       alert(message);
@@ -394,6 +419,20 @@ export const CartDrawer: React.FC = () => {
   if (!isCartOpen) {
     return null;
   }
+
+  const handleStartCheckout = () => {
+    if (isLoadingUser) {
+      showToast('Checking your sign-in status. Please try again in a moment.', 'info');
+      return;
+    }
+    if (!isUserLoggedIn) {
+      openUserAuthModal('signin', () => {
+        setIsCheckingOut(true);
+      });
+      return;
+    }
+    setIsCheckingOut(true);
+  };
 
   return (
     <div className="mobile-drawer-overlay" style={{
@@ -621,6 +660,16 @@ export const CartDrawer: React.FC = () => {
                   ← Back to Bag
                 </button>
               </div>
+              <div style={{
+                padding: '10px 12px',
+                borderRadius: '10px',
+                background: '#F0FDF4',
+                color: '#166534',
+                fontSize: '0.8rem',
+                lineHeight: 1.5
+              }}>
+                Signed in as <strong>{currentUser?.email}</strong>. Your account details have been filled in; confirm your phone number and delivery address before placing the order.
+              </div>
 
               {/* Customer Inputs */}
               <div>
@@ -632,7 +681,7 @@ export const CartDrawer: React.FC = () => {
                   required
                   placeholder="e.g. Pooja Sharma"
                   value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  onChange={(e) => setFormOverrides({ ...formOverrides, name: e.target.value })}
                   style={{
                     width: '100%',
                     minHeight: '44px',
@@ -648,14 +697,16 @@ export const CartDrawer: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: '10px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '5px' }}>
-                    Email Address *
+                    Account Email *
                   </label>
                   <input
                     type="email"
                     required
+                    readOnly
+                    aria-readonly="true"
+                    title="The order is placed under your signed-in account email."
                     placeholder="name@gmail.com"
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     style={{
                       width: '100%',
                       minHeight: '44px',
@@ -663,6 +714,7 @@ export const CartDrawer: React.FC = () => {
                       borderRadius: '10px',
                       border: '1px solid var(--border-medium)',
                       fontSize: '16px', // Prevents iOS auto-zoom
+                      backgroundColor: '#F8FAFC',
                       boxSizing: 'border-box'
                     }}
                   />
@@ -677,7 +729,7 @@ export const CartDrawer: React.FC = () => {
                     required
                     placeholder="e.g. 9876543210"
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(e) => setFormOverrides({ ...formOverrides, phone: e.target.value })}
                     style={{
                       width: '100%',
                       minHeight: '44px',
@@ -700,7 +752,7 @@ export const CartDrawer: React.FC = () => {
                   rows={2}
                   placeholder="Flat/House No., Street, Landmark, City, State & Pincode"
                   value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  onChange={(e) => setFormOverrides({ ...formOverrides, address: e.target.value })}
                   style={{
                     width: '100%',
                     minHeight: '60px',
@@ -1403,11 +1455,12 @@ export const CartDrawer: React.FC = () => {
             </div>
 
             <button
-              onClick={() => setIsCheckingOut(true)}
+              onClick={handleStartCheckout}
+              disabled={isLoadingUser}
               className="btn-primary"
-              style={{ width: '100%', padding: '14px', fontSize: '0.96rem' }}
+              style={{ width: '100%', padding: '14px', fontSize: '0.96rem', opacity: isLoadingUser ? 0.7 : 1 }}
             >
-              <span>Proceed to Checkout</span>
+              <span>{isLoadingUser ? 'Checking Account…' : isUserLoggedIn ? 'Proceed to Checkout' : 'Sign in to Checkout'}</span>
               <ArrowRight size={16} />
             </button>
 
@@ -1417,6 +1470,15 @@ export const CartDrawer: React.FC = () => {
                 href={whatsappOrderUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={event => {
+                  if (isLoadingUser) {
+                    event.preventDefault();
+                    showToast('Checking your sign-in status. Please try again in a moment.', 'info');
+                  } else if (!isUserLoggedIn) {
+                    event.preventDefault();
+                    openUserAuthModal('signin');
+                  }
+                }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -1438,7 +1500,7 @@ export const CartDrawer: React.FC = () => {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                 </svg>
-                <span>Order via WhatsApp</span>
+                <span>{isUserLoggedIn ? 'Order via WhatsApp' : 'Sign in to order via WhatsApp'}</span>
               </a>
             )}
           </div>

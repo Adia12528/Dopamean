@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { UserProfile, Order } from '../types';
 import { api } from '../services/api';
 import { getSupabaseClient, supabaseAuthEnabled } from '../lib/supabase';
@@ -13,7 +13,7 @@ interface UserContextType {
   userAuthModalTab: 'signin' | 'signup';
   isLoadingUser: boolean;
 
-  openUserAuthModal: (tab?: 'signin' | 'signup') => void;
+  openUserAuthModal: (tab?: 'signin' | 'signup', onAuthenticated?: () => void) => void;
   closeUserAuthModal: () => void;
   setUserAuthModalTab: (tab: 'signin' | 'signup') => void;
 
@@ -34,7 +34,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
   const [isUserAuthModalOpen, setIsUserAuthModalOpen] = useState(false);
   const [userAuthModalTab, setUserAuthModalTab] = useState<'signin' | 'signup'>('signin');
-  const [isLoadingUser, setIsLoadingUser] = useState(() => Boolean(userToken));
+  const [isLoadingUser, setIsLoadingUser] = useState(true);
+  const pendingAuthCallback = useRef<(() => void) | null>(null);
 
   // Rehydrate user from stored token or Supabase session on mount
   useEffect(() => {
@@ -68,7 +69,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const restoreSupabaseSession = async () => {
         try {
           const supabase = await getSupabaseClient();
-          if (!active || !supabase) return;
+          if (!active) return;
+          if (!supabase) {
+            await restoreLocalToken();
+            return;
+          }
           const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
             const supaToken = session?.access_token || null;
             if (supaToken) {
@@ -120,13 +125,23 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try { localStorage.setItem(USER_TOKEN_KEY, token); } catch { /* ignore */ }
   };
 
-  const openUserAuthModal = useCallback((tab: 'signin' | 'signup' = 'signin') => {
+  const openUserAuthModal = useCallback((tab: 'signin' | 'signup' = 'signin', onAuthenticated?: () => void) => {
+    pendingAuthCallback.current = onAuthenticated || null;
     setUserAuthModalTab(tab);
     setIsUserAuthModalOpen(true);
   }, []);
 
   const closeUserAuthModal = useCallback(() => {
+    pendingAuthCallback.current = null;
     setIsUserAuthModalOpen(false);
+  }, []);
+
+  const completeSignIn = useCallback((user: UserProfile) => {
+    setCurrentUser(user);
+    setIsUserAuthModalOpen(false);
+    const callback = pendingAuthCallback.current;
+    pendingAuthCallback.current = null;
+    callback?.();
   }, []);
 
   const userRegister = useCallback(async (data: { name: string; email: string; password: string; phone?: string }): Promise<'signed-in' | 'confirmation-required'> => {
@@ -143,17 +158,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       persistToken(result.session.access_token);
       const user = await api.getMe(result.session.access_token);
-      setCurrentUser(user);
-      setIsUserAuthModalOpen(false);
+      completeSignIn(user);
       return 'signed-in';
     } else {
       const result = await api.userRegister(data);
       persistToken(result.token);
-      setCurrentUser(result.user);
-      setIsUserAuthModalOpen(false);
+      completeSignIn(result.user);
       return 'signed-in';
     }
-  }, []);
+  }, [completeSignIn]);
 
   const userLogin = useCallback(async (email: string, password: string) => {
     if (supabaseAuthEnabled) {
@@ -165,15 +178,13 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!token) throw new Error('Check your email and confirm your account before signing in.');
       persistToken(token);
       const user = await api.getMe(token);
-      setCurrentUser(user);
-      setIsUserAuthModalOpen(false);
+      completeSignIn(user);
       return;
     }
     const result = await api.userLogin(email, password);
     persistToken(result.token);
-    setCurrentUser(result.user);
-    setIsUserAuthModalOpen(false);
-  }, []);
+    completeSignIn(result.user);
+  }, [completeSignIn]);
 
   const userLogout = useCallback(() => {
     if (supabaseAuthEnabled) {

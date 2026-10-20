@@ -5,6 +5,7 @@ Dopamean is a React storefront and studio dashboard backed by an Express API. Th
 ## Features
 
 - Product catalog, offers, shopping cart, checkout, order tracking, and reviews
+- Customer sign-in required to place orders, with saved profile details prefilled at checkout
 - Studio dashboard for managing products, orders, offers, and store settings
 - Optional Supabase Auth for customer accounts
 - Supabase Storage for production image uploads

@@ -104,6 +104,7 @@ interface StoreContextType {
 
   createOrder: (
     customer: { name: string; email: string; phone?: string; address: string },
+    userToken: string,
     paymentInfo?: {
       method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
       status?: 'pending' | 'paid';
@@ -493,6 +494,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // ORDERS & CHECKOUT
   const createOrder = async (
     customer: { name: string; email: string; phone?: string; address: string },
+    userToken: string,
     paymentInfo?: {
       method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
       status?: 'pending' | 'paid';
@@ -543,7 +545,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
 
     try {
-      const placedOrder = await api.createOrder(orderPayload);
+      const placedOrder = await api.createOrder(orderPayload, userToken);
       setOrders(prev => [placedOrder, ...prev]);
 
       // Refresh product stock
@@ -554,8 +556,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setActivePromo(null);
       showToast(`Order #${placedOrder.id} placed successfully! 🌸`);
       return placedOrder;
-    } catch {
-      showToast('Failed to record order', 'error');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to record order', 'error');
       return null;
     }
   };
