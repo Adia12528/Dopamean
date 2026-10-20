@@ -1,59 +1,133 @@
 # Dopamean Store
 
-React storefront and Studio dashboard with an Express API. Local development uses SQLite; when `SUPABASE_DB_URL` is configured, the server uses Supabase-hosted PostgreSQL.
+Dopamean is a React storefront and studio dashboard backed by an Express API. The API uses local SQLite for development unless `SUPABASE_DB_URL` is configured, in which case it uses Supabase-hosted PostgreSQL.
+
+## Features
+
+- Product catalog, offers, shopping cart, checkout, order tracking, and reviews
+- Studio dashboard for managing products, orders, offers, and store settings
+- Optional Supabase Auth for customer accounts
+- Supabase Storage for production image uploads
+- Optional Razorpay checkout and payment webhooks
+- Separate delivery dashboard
+
+## Requirements
+
+- Node.js 22 or newer
+- npm
+- For hosted production: a Supabase project, a Vercel project for the frontend, and a Render web service for the API
 
 ## Local development
 
-1. Copy `.env.example` to `.env` and replace the placeholder secrets.
-2. Install the frontend dependencies with `npm install`.
-3. Install the backend dependencies with `npm --prefix server install`.
-4. Start both the API backend and the storefront frontend together with a single command:
+1. Copy `.env.example` to `.env`. Keep `.env` local; it is ignored by Git. Fill in only the values needed for the features you want to run.
+2. Install dependencies:
+
+   ```bash
+   npm ci
+   npm --prefix server install
+   ```
+
+3. Start the API and frontend together:
+
    ```bash
    npm run dev
    ```
-   *(Or individually: `npm run server` and `npm run client`)*
 
-The Vite development server runs on `http://localhost:5173` and proxies `/api` and `/uploads` to `http://localhost:5000`.
+The Vite frontend is available at `http://localhost:5173` and the API at `http://localhost:5000`. Vite proxies `/api` and `/uploads` to the local API. The API uses SQLite by default; configure `SUPABASE_DB_URL` to use PostgreSQL instead.
+
+Run the API or frontend separately with `npm run server` or `npm run client`.
+
+## Environment variables
+
+Use `.env.example` as the local template. Never commit `.env` or put server-only secrets in variables prefixed with `VITE_`; Vite embeds `VITE_` values in the browser bundle.
+
+### API server
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `NODE_ENV` | Production | Set to `production` on Render. |
+| `PORT` | No | API port; defaults to `5000` locally. Render supplies its own port. |
+| `SUPABASE_DB_URL` | Production | PostgreSQL connection string. If omitted locally, the API uses SQLite. |
+| `DB_POOL_SIZE` | No | PostgreSQL connection pool size; defaults to `10`. |
+| `SUPABASE_URL` | Production | Supabase project URL. |
+| `SUPABASE_SECRET_KEY` | Production | Server-only Supabase key for privileged Storage operations. Never expose it to the browser. |
+| `SUPABASE_PUBLISHABLE_KEY` | If using customer Supabase Auth | Publishable key used by the API for customer token verification. |
+| `SUPABASE_STORAGE_BUCKET` | No | Public Storage bucket for uploaded images; defaults to `media`. |
+| `JWT_SECRET` | Production | Admin-session signing secret, at least 32 bytes. |
+| `USER_JWT_SECRET` | Production | User-session signing secret, at least 32 bytes and different from `JWT_SECRET`. |
+| `ADMIN_PASSCODE` | Production | Initial/admin passcode, at least 12 characters. |
+| `CORS_ORIGIN` | Production | Comma-separated HTTPS storefront origins, without paths. |
+| `DELIVERY_AGENT_PASSCODE` | No | Optional delivery-agent passcode. |
+| `SUPER_ADMIN_ID`, `SUPER_ADMIN_PASSWORD` | No | Optional separate super-admin credentials. Keep the password server-side. |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | If using Razorpay | Razorpay API credentials. |
+| `RAZORPAY_WEBHOOK_SECRET` | If verifying Razorpay webhooks | Webhook signing secret, not the webhook URL. |
+
+### Frontend
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `VITE_API_BASE_URL` | Production build | HTTPS origin of the deployed API, without a path, query, or credentials. Leave empty locally to use the Vite proxy. |
+| `VITE_SUPABASE_URL` | If using customer Supabase Auth | Supabase project URL used by browser sign-in. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | If using customer Supabase Auth | Public Supabase publishable key. Never use a Supabase secret key here. |
+
+Production API startup requires `SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `JWT_SECRET`, `USER_JWT_SECRET`, `ADMIN_PASSCODE`, and `CORS_ORIGIN`. It validates HTTPS origins, signing-secret length, and admin passcode length at startup. Set the same values in the appropriate platform's environment-variable settings; do not commit them.
+
+## Supabase PostgreSQL
+
+1. Create a Supabase project and set a strong database password.
+2. In the Supabase dashboard, choose **Connect → Session pooler** and copy the connection string. Replace `[YOUR-PASSWORD]` with the database password; URL-encode reserved characters.
+3. Set the connection string as `SUPABASE_DB_URL` in the local `.env` and in Render's environment settings. Do not use a `VITE_` variable for it.
+4. Back up the current SQLite database before migrating. With the local database available, run:
+
+   ```bash
+   npm --prefix server run migrate:supabase
+   ```
+
+   The migration stops if the target database already contains store records. It copies products, offers, orders, reviews, settings, and existing customer password hashes.
+5. Start the API. It creates the PostgreSQL tables and indexes automatically. Confirm `/api/health` reports `Supabase PostgreSQL`.
+
+Use the session pooler for hosted environments that need IPv4 connectivity; use the direct connection when the host supports IPv6.
+
+## Customer Supabase Auth
+
+1. In **Authentication → Providers**, enable email sign-in and keep email confirmation enabled.
+2. In **Authentication → URL Configuration**, set the production Site URL and add local (`http://localhost:5173/**`) and production redirect URLs.
+3. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` on the API. Set the same project URL and publishable key as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for the frontend.
+4. Restart the API and rebuild/redeploy the frontend. The API validates customer access tokens and syncs verified account profiles with PostgreSQL.
+
+Existing customer passwords use the previous application's hash format and cannot be imported into Supabase Auth. Customers need to create an Auth account with their existing email and choose a new password; profile and order history are reconnected by email after verification.
+
+Studio admin access is separate from customer Auth. Keep admin and optional super-admin credentials in server-side settings or deployment secrets.
 
 ## Continuous integration
 
-GitHub Actions runs the CI workflow on pushes and pull requests targeting `main`, and it can also be started manually from the Actions tab. The workflow uses Node.js 22 and runs:
+GitHub Actions runs on pushes and pull requests targeting `main`, and can also be started manually from the Actions tab. It uses Node.js 22 and runs:
 
-1. `npm ci` to install the exact dependencies from `package-lock.json`.
-2. `node --check server/index.js` to validate the API entrypoint syntax.
-3. `npm run lint` to lint the project.
-4. `npm run build` to type-check and create the production frontend bundle.
+1. `npm ci`
+2. `node --check server/index.js`
+3. `npm run lint`
+4. `npm run build`
 
-The workflow does not deploy the app or run end-to-end tests. The project currently has no automated test script; verify checkout, payment, authentication, and order flows separately before production releases.
-
-## Supabase PostgreSQL setup
-
-1. Create a Supabase project and set a strong database password.
-2. In the Supabase dashboard, select **Connect**, choose **Session pooler**, and copy its connection string. Replace `[YOUR-PASSWORD]` with the project database password. Reserved characters in the password must be URL-encoded.
-3. Put the complete string in the local `.env` as `SUPABASE_DB_URL=...`. Do not put it in frontend variables or commit it. Use the session pooler for IPv4-only hosts; use the direct connection when the host supports IPv6.
-4. While the current SQLite database is still available, take a backup, then run `npm --prefix server run migrate:supabase`. The migration stops if the Supabase database already contains store records; it copies products, offers, orders, reviews, settings, and existing customer password hashes.
-5. Start the API with `npm --prefix server start`. It creates the Postgres tables and indexes automatically. Check `/api/health`; it should report `Supabase PostgreSQL`.
-
-## Supabase Auth setup
-
-1. In **Authentication → Providers**, enable Email sign-in and keep email confirmation enabled. In **Authentication → URL Configuration**, set the production Site URL and add the local URL (`http://localhost:5173/**`) plus the production URL to Redirect URLs.
-2. Copy the Supabase project URL and its publishable key from **Project Settings → API Keys**. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` for the API, and the same values as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for the storefront in `.env` / deployment settings. A publishable key can be public; never expose a secret/service-role key.
-3. Restart both the API and Vite. New customer registration and sign-in will use Supabase Auth. The API validates each Supabase access token and syncs the verified account profile into PostgreSQL. Existing profile/order data with the same email is retained when the customer first signs in after confirming their email.
-4. Existing passwords are stored using the old app's hash format and cannot be imported into Supabase Auth. Customers need to create a Supabase Auth account with their existing email and choose a new password. The profile sync reconnects their existing profile and order history by email.
-
-Studio admin access remains separate from customer Auth. Keep `SUPER_ADMIN_ID`, `SUPER_ADMIN_PASSWORD`, and the admin passcode only in server secrets.
+CI validates syntax, lint, and the production frontend build. It does not deploy the app or run end-to-end tests. Test checkout, payment, authentication, and order flows separately before production releases.
 
 ## Production deployment
 
-- Deploy the frontend to Vercel and the Express API as a separate Render web service (or provide an equivalent HTTPS API origin). Set the Vercel environment variable `VITE_API_BASE_URL` to the API's HTTPS origin, without a path. Production frontend builds fail if it is missing or invalid; the Vercel SPA rewrite does not proxy API requests.
-- Set these API environment variables in Render's secret manager: `NODE_ENV=production`, `SUPABASE_DB_URL`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `JWT_SECRET`, `USER_JWT_SECRET`, `ADMIN_PASSCODE`, and `CORS_ORIGIN`. Use unique randomly generated signing secrets of at least 32 bytes and an initial admin passcode of at least 12 characters. `CORS_ORIGIN` must be the exact HTTPS storefront origin (for example, `https://dopamean.vercel.app`), without a path. Add a comma-separated origin only when you intentionally serve the API from multiple storefronts.
-- Create a **public** Supabase Storage bucket (default name `media`) and set `SUPABASE_STORAGE_BUCKET` if you use another name. The API uses `SUPABASE_SECRET_KEY` to upload images and stores their public CDN URLs. Production uploads fail explicitly if storage is unavailable; they never report success after writing to ephemeral local disk. Never expose `SUPABASE_SECRET_KEY` through a `VITE_` variable.
-- If customer Supabase Auth is enabled, also set `SUPABASE_PUBLISHABLE_KEY` on the API and `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY` on Vercel. Publishable keys are public; secret keys are not.
-- For delivery-agent access, set a unique `DELIVERY_AGENT_PASSCODE` or configure one in the studio. Separate super-admin credentials are optional; if configured, keep them in server-side settings or deployment secrets.
-- If using Razorpay, set live `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` (or configure them in the studio), then configure a Razorpay webhook to call `/api/webhooks/razorpay` for `payment.captured`. Set `RAZORPAY_WEBHOOK_SECRET` to the webhook's signing secret, **not** to the webhook URL. Checkout's SDK is loaded only when a customer chooses Razorpay.
-- Set `CORS_ORIGIN` on the API to the Vercel site's exact HTTPS origin. Verify the frontend can reach `/api/health` at the configured API origin after deployment.
-- Build the storefront with `npm run build`. Start the API from the `server` directory with `npm start` after installing its dependencies.
-- Back up Supabase database data and verify Storage bucket backups/retention separately. Relative `/uploads/...` image paths resolve against the API origin; checked-in seed images are included with the API. Move any older user uploads from `server/uploads` into the configured Storage bucket before deploying to an ephemeral API host.
-- Start with a clean production database or explicitly review imported data. Never launch with demo orders or customer records from a development database.
+### Vercel frontend
 
-The API fails to start in production if its database, storage, CORS, signing-secret, or initial admin configuration is missing. Keep payment card entry in the payment provider's hosted checkout; do not collect or store card numbers in this application. If any credentials have been shared outside the deployment secret manager, rotate them before launch.
+1. Connect the repository to Vercel and set `VITE_API_BASE_URL` to the Render API's HTTPS origin, with no path (for example, `https://your-api.onrender.com`).
+2. If customer Supabase Auth is enabled, also set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`.
+3. Trigger a new deployment after changing frontend environment variables; Vite embeds these values at build time.
+
+### Render API
+
+1. Deploy the `server` directory as a Node web service. The included `render.yaml` uses `server` as the root, installs dependencies, starts `npm start`, and checks `/api/health`.
+2. Set the production API variables listed above in Render. Use unique random signing secrets of at least 32 bytes and an initial admin passcode of at least 12 characters.
+3. Set `CORS_ORIGIN` to the exact HTTPS origin of the storefront (for example, `https://your-site.vercel.app`), with no path. Add other HTTPS origins only when intentionally serving them.
+4. Create a **public** Supabase Storage bucket named `media`, or set `SUPABASE_STORAGE_BUCKET` to your chosen bucket. The API uses its server-only Supabase secret key to upload images and stores public CDN URLs. Production uploads require Storage; local disk is not a persistent production upload destination.
+5. Set `SUPABASE_PUBLISHABLE_KEY` on the API if customer Supabase Auth is enabled. Optionally configure `DELIVERY_AGENT_PASSCODE` and separate super-admin credentials.
+6. If enabling Razorpay, configure the API credentials and a webhook for `/api/webhooks/razorpay` with the `payment.captured` event. Set `RAZORPAY_WEBHOOK_SECRET` to the webhook's signing secret, never its URL. Checkout loads the payment SDK only when a customer selects Razorpay.
+7. After deployment, verify the API health endpoint and test the storefront-to-API connection and critical user flows.
+
+Before launch, back up the database and confirm it contains no development/demo customer or order data. Move older uploads from `server/uploads` into Supabase Storage; relative `/uploads/...` paths must resolve against the API origin. Review backup and retention settings for both the database and Storage.
+
+Keep payment card entry in the payment provider's hosted checkout; do not collect or store card numbers in this application. If a credential has been shared or committed, rotate it before production. Removing a secret from the latest files does not remove it from Git history.
