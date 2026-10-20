@@ -36,11 +36,11 @@ const DEFAULT_SETTINGS: StoreSettings = {
   whatsappOrderCancelledEnabled: true,
   whatsappCodReminderEnabled: true,
   whatsappSupportEnabled: true,
-  paymentUpiEnabled: false,
+  paymentUpiEnabled: true,
   upiId: '',
   upiPayeeName: 'Deepa Soni (Cozy Loops)',
   paymentCodEnabled: true,
-  paymentRazorpayEnabled: false,
+  paymentRazorpayEnabled: true,
   razorpayKeyId: ''
 };
 

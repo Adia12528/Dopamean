@@ -54,11 +54,11 @@
   footerCopyright: 'Â© 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion. All Rights Reserved.',
   adminPasscode: '',
   // Payment Options
-  paymentRazorpayEnabled: false,
+  paymentRazorpayEnabled: true,
   razorpayKeyId: '',
   razorpayKeySecret: '',
   razorpayWebhookSecret: '',
-  paymentUpiEnabled: false,
+  paymentUpiEnabled: true,
   upiId: '',
   upiPayeeName: 'Deepa Soni (Cozy Loops)',
   paymentCodEnabled: true,
