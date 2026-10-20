@@ -17,23 +17,19 @@ const statusColors: Record<string, { bg: string; text: string; label: string }> 
 };
 
 export const DeliveryDashboard: React.FC = () => {
-  const { deliveryOrders, adminLogout, showToast, settings } = useStore();
+  const { deliveryOrders, setDeliveryOrders, adminLogout, showToast, settings } = useStore();
   const [activeTab, setActiveTab] = useState<DeliveryTab>('active');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [deliveryNotes, setDeliveryNotes] = useState<Record<string, string>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [localOrders, setLocalOrders] = useState<Order[]>(deliveryOrders);
-
-  useMemo(() => { setLocalOrders(deliveryOrders); }, [deliveryOrders]);
-
   const activeOrders = useMemo(() =>
-    localOrders.filter(o => o.status === 'shipped' || o.status === 'out_for_delivery'),
-    [localOrders]
+    deliveryOrders.filter(o => o.status === 'shipped' || o.status === 'out_for_delivery'),
+    [deliveryOrders]
   );
   const deliveredOrders = useMemo(() =>
-    localOrders.filter(o => o.status === 'delivered'),
-    [localOrders]
+    deliveryOrders.filter(o => o.status === 'delivered'),
+    [deliveryOrders]
   );
   const displayOrders = activeTab === 'active' ? activeOrders : deliveredOrders;
 
@@ -41,7 +37,7 @@ export const DeliveryDashboard: React.FC = () => {
     setIsRefreshing(true);
     try {
       const fresh = await api.getDeliveryOrders();
-      setLocalOrders(fresh);
+      setDeliveryOrders(fresh);
       showToast('Orders refreshed', 'success');
     } catch {
       showToast('Could not refresh orders', 'error');
@@ -56,7 +52,7 @@ export const DeliveryDashboard: React.FC = () => {
       const updated = await api.updateDeliveryOrderStatus(order.id, status, {
         deliveryNotes: deliveryNotes[order.id] || undefined
       });
-      setLocalOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
+      setDeliveryOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
       showToast(`Order #${order.id.slice(-6)} marked as ${status === 'out_for_delivery' ? 'Out for Delivery' : 'Delivered'} ✓`);
       if (status === 'delivered') setExpandedId(null);
     } catch (err) {
@@ -135,9 +131,9 @@ export const DeliveryDashboard: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 18, maxWidth: 480, margin: '18px auto 0' }}>
           {[
-            { label: 'Awaiting Pickup', count: localOrders.filter(o => o.status === 'shipped').length, color: '#60A5FA' },
-            { label: 'In Transit', count: localOrders.filter(o => o.status === 'out_for_delivery').length, color: '#FB923C' },
-            { label: 'Delivered', count: localOrders.filter(o => o.status === 'delivered').length, color: '#4ADE80' },
+            { label: 'Awaiting Pickup', count: deliveryOrders.filter(o => o.status === 'shipped').length, color: '#60A5FA' },
+            { label: 'In Transit', count: deliveryOrders.filter(o => o.status === 'out_for_delivery').length, color: '#FB923C' },
+            { label: 'Delivered', count: deliveryOrders.filter(o => o.status === 'delivered').length, color: '#4ADE80' },
           ].map(stat => (
             <div key={stat.label} style={{
               flex: 1, backgroundColor: 'rgba(255,255,255,0.12)',
@@ -274,7 +270,7 @@ export const DeliveryDashboard: React.FC = () => {
                     </p>
                     {(order.items || []).slice(0, 3).map((item, idx) => (
                       <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                        <span style={{ fontSize: '0.82rem', color: '#374151' }}>{(item as any).title || item.productTitle || 'Item'} × {item.quantity}</span>
+                        <span style={{ fontSize: '0.82rem', color: '#374151' }}>{item.productTitle || 'Item'} × {item.quantity}</span>
                         <span style={{ fontSize: '0.82rem', color: '#0F172A', fontWeight: 700 }}>₹{item.price * item.quantity}</span>
                       </div>
                     ))}

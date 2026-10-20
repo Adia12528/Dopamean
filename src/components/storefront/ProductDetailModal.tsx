@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { 
   X, 
   Star, 
@@ -33,7 +34,8 @@ export const ProductDetailModal: React.FC = () => {
   );
 
   return (
-    <div 
+    <div
+      className="mobile-modal-overlay"
       onClick={() => setSelectedProductForModal(null)}
       style={{
         position: 'fixed',
@@ -49,7 +51,8 @@ export const ProductDetailModal: React.FC = () => {
         boxSizing: 'border-box'
       }}
     >
-      <div 
+      <div
+        className="mobile-modal-panel product-modal-panel"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -92,14 +95,14 @@ export const ProductDetailModal: React.FC = () => {
         </button>
 
         {/* Left: Gallery */}
-        <div style={{
+        <div className="product-modal-gallery" style={{
           padding: '24px',
           backgroundColor: '#FAF6F1',
           display: 'flex',
           flexDirection: 'column',
           gap: '14px'
         }}>
-          <div style={{
+          <div className="product-modal-image" style={{
             width: '100%',
             height: '380px',
             borderRadius: '18px',
@@ -108,7 +111,7 @@ export const ProductDetailModal: React.FC = () => {
             border: '1px solid var(--border-light)'
           }}>
             <img
-              src={allImages[activeImageIndex] || product.image}
+              src={getAssetUrl(allImages[activeImageIndex] || product.image)}
               alt={product.title}
               style={{
                 width: '100%',
@@ -142,7 +145,7 @@ export const ProductDetailModal: React.FC = () => {
                   }}
                 >
                   <img
-                    src={img}
+                    src={getAssetUrl(img)}
                     alt=""
                     style={{
                       width: '100%',

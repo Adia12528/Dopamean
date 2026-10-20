@@ -1,35 +1,42 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { StoreProvider, useStore } from './context/StoreContext';
-import { UserProvider } from './context/UserContext';
+import { UserProvider, useUser } from './context/UserContext';
 import { Navbar } from './components/common/Navbar';
 import { Toast } from './components/common/Toast';
-import { StorefrontView } from './components/storefront/StorefrontView';
-import { DashboardView } from './components/dashboard/DashboardView';
-import { DeliveryDashboard } from './components/delivery/DeliveryDashboard';
-import { CartDrawer } from './components/storefront/CartDrawer';
-import { ProductDetailModal } from './components/storefront/ProductDetailModal';
-import { OrderTrackingModal } from './components/storefront/OrderTrackingModal';
-import { InvoiceModal } from './components/storefront/InvoiceModal';
-import { Footer } from './components/common/Footer';
-import { AdminLoginModal } from './components/auth/AdminLoginModal';
-import { UserAuthModal } from './components/auth/UserAuthModal';
+
+const StorefrontView = lazy(() => import('./components/storefront/StorefrontView').then(module => ({ default: module.StorefrontView })));
+const Footer = lazy(() => import('./components/common/Footer').then(module => ({ default: module.Footer })));
+const DashboardView = lazy(() => import('./components/dashboard/DashboardView').then(module => ({ default: module.DashboardView })));
+const DeliveryDashboard = lazy(() => import('./components/delivery/DeliveryDashboard').then(module => ({ default: module.DeliveryDashboard })));
+const CartDrawer = lazy(() => import('./components/storefront/CartDrawer').then(module => ({ default: module.CartDrawer })));
+const ProductDetailModal = lazy(() => import('./components/storefront/ProductDetailModal').then(module => ({ default: module.ProductDetailModal })));
+const OrderTrackingModal = lazy(() => import('./components/storefront/OrderTrackingModal').then(module => ({ default: module.OrderTrackingModal })));
+const InvoiceModal = lazy(() => import('./components/storefront/InvoiceModal').then(module => ({ default: module.InvoiceModal })));
+const AdminLoginModal = lazy(() => import('./components/auth/AdminLoginModal').then(module => ({ default: module.AdminLoginModal })));
+const UserAuthModal = lazy(() => import('./components/auth/UserAuthModal').then(module => ({ default: module.UserAuthModal })));
 
 const MainApp: React.FC = () => {
   const { 
     viewMode, 
+    isAdminLoginModalOpen,
     isTrackingModalOpen, 
     setIsTrackingModalOpen, 
+    isCartOpen,
+    selectedProductForModal,
     activeInvoiceOrder, 
     setActiveInvoiceOrder 
   } = useStore();
+  const { isUserAuthModalOpen } = useUser();
 
   // Delivery agent gets its own standalone portal — no navbar/footer clutter
   if (viewMode === 'delivery') {
     return (
       <>
-        <DeliveryDashboard />
+        <Suspense fallback={<main className="container" role="status">Loading delivery dashboard…</main>}>
+          <DeliveryDashboard />
+        </Suspense>
         <Toast />
-        <AdminLoginModal />
+        {isAdminLoginModalOpen && <Suspense fallback={null}><AdminLoginModal /></Suspense>}
       </>
     );
   }
@@ -41,25 +48,35 @@ const MainApp: React.FC = () => {
 
       {/* Main View Router */}
       <main style={{ flex: 1 }}>
-        {viewMode === 'store' ? <StorefrontView /> : <DashboardView />}
+        <Suspense fallback={<div className="container" role="status">Loading studio…</div>}>
+          {viewMode === 'store' ? <StorefrontView /> : <DashboardView />}
+        </Suspense>
       </main>
 
       {/* Storefront Footer */}
-      <Footer />
+      <Suspense fallback={null}>
+        <Footer />
+      </Suspense>
 
       {/* Global Modals & Overlays */}
-      <CartDrawer />
-      <ProductDetailModal />
-      <AdminLoginModal />
-      <UserAuthModal />
-      <OrderTrackingModal 
-        isOpen={isTrackingModalOpen} 
-        onClose={() => setIsTrackingModalOpen(false)} 
-      />
-      <InvoiceModal 
-        order={activeInvoiceOrder} 
-        onClose={() => setActiveInvoiceOrder(null)} 
-      />
+      <Suspense fallback={null}>
+        {isCartOpen && <CartDrawer />}
+        {selectedProductForModal && <ProductDetailModal />}
+        {isAdminLoginModalOpen && <AdminLoginModal />}
+        {isUserAuthModalOpen && <UserAuthModal />}
+        {isTrackingModalOpen && (
+          <OrderTrackingModal
+            isOpen={isTrackingModalOpen}
+            onClose={() => setIsTrackingModalOpen(false)}
+          />
+        )}
+        {activeInvoiceOrder && (
+          <InvoiceModal
+            order={activeInvoiceOrder}
+            onClose={() => setActiveInvoiceOrder(null)}
+          />
+        )}
+      </Suspense>
       <Toast />
     </div>
   );

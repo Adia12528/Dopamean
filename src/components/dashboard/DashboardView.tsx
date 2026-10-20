@@ -57,7 +57,7 @@ export const DashboardView: React.FC = () => {
           gap: '16px',
           marginBottom: '28px'
         }}>
-          <div>
+          <div className="dashboard-title-copy">
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -97,7 +97,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Navigation Tabs */}
-        <div style={{
+        <div className="dashboard-tabs" style={{
           display: 'flex',
           gap: '10px',
           borderBottom: '1px solid var(--border-medium)',
@@ -135,6 +135,7 @@ export const DashboardView: React.FC = () => {
         </div>
 
         {/* Tab Content Panels */}
+        <div className="dashboard-content">
         {dashboardTab === 'overview' && (
           <DashboardOverview
             onOpenAddProduct={() => {
@@ -175,6 +176,7 @@ export const DashboardView: React.FC = () => {
         {dashboardTab === 'settings' && (
           <StudioSettings />
         )}
+        </div>
       </div>
 
       {/* Add / Edit Product Modal */}

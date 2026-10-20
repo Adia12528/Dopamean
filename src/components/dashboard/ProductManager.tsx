@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { 
   Plus, 
   Search, 
@@ -185,7 +186,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
               {/* Product Image */}
               <div style={{ position: 'relative', height: '190px', backgroundColor: '#F8F5F0' }}>
                 <img
-                  src={p.image}
+                  src={getAssetUrl(p.image)}
                   alt={p.title}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
@@ -377,7 +378,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                       <img
-                        src={p.image}
+                        src={getAssetUrl(p.image)}
                         alt=""
                         style={{ width: '48px', height: '48px', borderRadius: '10px', objectFit: 'cover' }}
                       />

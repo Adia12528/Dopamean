@@ -194,17 +194,22 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
   const [confirm, setConfirm] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
+  const [confirmationMessage, setConfirmationMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setConfirmationMessage('');
     if (!name || !email || !password) { setError('Name, email, and password are required.'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters.'); return; }
     if (password !== confirm) { setError('Passwords do not match.'); return; }
     setLoading(true);
     try {
-      await userRegister({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
+      const result = await userRegister({ name: name.trim(), email: email.trim(), password, phone: phone.trim() });
+      if (result === 'confirmation-required') {
+        setConfirmationMessage('Account created. Check your email for a confirmation link before signing in.');
+      }
     } catch (err: unknown) {
       setError((err as Error).message || 'Could not create account. Please try again.');
     } finally {
@@ -278,6 +283,7 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
         required
       />
 
+      {confirmationMessage && <p role="status" style={{ fontSize: '0.78rem', color: '#15803D', fontWeight: 600, margin: 0 }}>{confirmationMessage}</p>}
       {error && <p role="alert" style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 600, margin: 0 }}>{error}</p>}
 
       {/* Member benefits card */}
@@ -351,6 +357,7 @@ export const UserAuthModal: React.FC = () => {
 
   return (
     <div
+      className="mobile-modal-overlay"
       onClick={closeUserAuthModal}
       style={{
         position: 'fixed',
@@ -368,6 +375,7 @@ export const UserAuthModal: React.FC = () => {
       }}
     >
       <div
+        className="mobile-modal-panel"
         onClick={e => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -483,4 +491,3 @@ export const UserAuthModal: React.FC = () => {
     </div>
   );
 };
-

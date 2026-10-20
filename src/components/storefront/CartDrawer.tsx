@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { api } from '../../services/api';
+import { api, getAssetUrl } from '../../services/api';
 import type { Order } from '../../types';
-import QRCode from 'qrcode';
-import confetti from 'canvas-confetti';
 import { 
   X, 
   Trash2, 
@@ -112,17 +110,21 @@ export const CartDrawer: React.FC = () => {
       const upiId = settings.upiId || 'cozyloops@upi';
       const payeeName = encodeURIComponent(settings.upiPayeeName || settings.storeName || 'Cozy Loops by Deepa');
       const upiUrl = `upi://pay?pa=${upiId}&pn=${payeeName}&am=${total.toFixed(2)}&cu=INR&tn=Cozy%20Loops%20Craft%20Order`;
-      
-      QRCode.toDataURL(upiUrl, {
-        width: 220,
-        margin: 1,
-        color: {
-          dark: '#1E293B',
-          light: '#FFFFFF'
-        }
-      })
-        .then((url: string) => setUpiQrDataUrl(url))
-        .catch(() => console.warn('QR Code generation failed'));
+      let active = true;
+      void import('qrcode')
+        .then(({ default: QRCode }) => QRCode.toDataURL(upiUrl, {
+          width: 220,
+          margin: 1,
+          color: {
+            dark: '#1E293B',
+            light: '#FFFFFF'
+          }
+        }))
+        .then(url => {
+          if (active) setUpiQrDataUrl(url);
+        })
+        .catch(error => console.error('QR code generation failed:', error));
+      return () => { active = false; };
     }
   }, [paymentMethod, isCheckingOut, total, settings.upiId, settings.upiPayeeName, settings.storeName]);
 
@@ -138,15 +140,16 @@ export const CartDrawer: React.FC = () => {
     }
   };
 
-  const triggerCelebration = () => {
+  const triggerCelebration = async () => {
     try {
+      const { default: confetti } = await import('canvas-confetti');
       confetti({
         particleCount: 120,
         spread: 70,
         origin: { y: 0.6 }
       });
-    } catch {
-      // Confetti fallback
+    } catch (error) {
+      console.warn('Could not load checkout celebration effect:', error);
     }
   };
 
@@ -232,7 +235,7 @@ export const CartDrawer: React.FC = () => {
             clearCart();
             setOrderComplete(verification.order);
             setIsCheckingOut(false);
-            triggerCelebration();
+            void triggerCelebration();
           },
           modal: {
             ondismiss: () => {
@@ -258,7 +261,7 @@ export const CartDrawer: React.FC = () => {
       if (placedOrder) {
         setOrderComplete(placedOrder);
         setIsCheckingOut(false);
-        triggerCelebration();
+        void triggerCelebration();
       }
     } catch (error: unknown) {
       if (pendingRazorpayStoreOrderId && !razorpayCheckoutOpened) {
@@ -276,7 +279,7 @@ export const CartDrawer: React.FC = () => {
   }
 
   return (
-    <div style={{
+    <div className="mobile-drawer-overlay" style={{
       position: 'fixed',
       inset: 0,
       backgroundColor: 'rgba(35, 28, 22, 0.6)',
@@ -286,7 +289,7 @@ export const CartDrawer: React.FC = () => {
       justifyContent: 'flex-end',
       animation: 'fadeIn 0.2s ease-out'
     }}>
-      <div style={{
+      <div className="mobile-drawer-panel" style={{
         width: '100%',
         maxWidth: '520px',
         backgroundColor: '#FFFFFF',
@@ -831,7 +834,7 @@ export const CartDrawer: React.FC = () => {
                   }}
                 >
                   <img
-                    src={item.product.image}
+                    src={getAssetUrl(item.product.image)}
                     alt={item.product.title}
                     style={{
                       width: '74px',

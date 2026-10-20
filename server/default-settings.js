@@ -37,7 +37,7 @@
   contactPhone: '+91 98765 43210',
   instagramHandle: '@cozyloopsbydeepa',
   studioLocation: 'Handcrafted Studio, India',
-  heroImage: '/uploads/media_1791711047623.jpg',
+  heroImage: '/uploads/hero_landing.webp',
   footerAboutText: 'Cozy Loops by Deepa crafts slow-fashioned, joyful crochet hair accessories and gifts with organic soft cotton and gentle care.',
   footerCopyright: 'Â© 2026 Cozy Loops by Deepa. Handcrafted Slow Fashion. All Rights Reserved.',
   adminPasscode: '',

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { Order, StoreSettings } from '../../types';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { 
   Package, 
   Clock, 
@@ -874,7 +875,10 @@ export const OrdersManager: React.FC = () => {
           <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Payment:</span>
           <select
             value={paymentFilter}
-            onChange={(e) => setPaymentFilter(e.target.value as any)}
+            onChange={(e) => {
+              const value = e.target.value;
+              setPaymentFilter(value === 'paid' || value === 'pending' || value === 'cod' ? value : 'all');
+            }}
             style={{
               padding: '8px 12px',
               borderRadius: '10px',
@@ -1059,7 +1063,7 @@ export const OrdersManager: React.FC = () => {
                           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             {item.image && (
                               <img
-                                src={item.image}
+                                src={getAssetUrl(item.image)}
                                 alt={item.productTitle}
                                 style={{ width: '38px', height: '38px', borderRadius: '8px', objectFit: 'cover' }}
                               />

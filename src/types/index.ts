@@ -88,6 +88,7 @@ export interface StoreSettings {
   paymentPayuEnabled?: boolean;
   payuMerchantKey?: string;
   payuMerchantSalt?: string;
+  payuConfigured?: boolean;
 }
 
 export interface Product {
@@ -211,4 +212,3 @@ export interface UserProfile {
   createdAt?: string;
   updatedAt?: string;
 }
-

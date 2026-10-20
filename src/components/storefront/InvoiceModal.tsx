@@ -70,7 +70,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
 
   return (
     <div 
-      className="invoice-modal-overlay"
+      className="invoice-modal-overlay mobile-modal-overlay"
       style={{
         position: 'fixed',
         inset: 0,
@@ -84,8 +84,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
         overflowY: 'auto'
       }}
     >
-      <div 
-        className="invoice-container"
+      <div
+        className="invoice-container mobile-modal-panel"
         style={{
           backgroundColor: '#FFFFFF',
           borderRadius: '24px',

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { Tag, Sparkles, Copy, Check, Clock } from 'lucide-react';
 
 export const OffersShowcase: React.FC = () => {
@@ -87,7 +88,7 @@ export const OffersShowcase: React.FC = () => {
                 overflow: 'hidden'
               }}>
                 <img
-                  src={offer.image}
+                  src={getAssetUrl(offer.image)}
                   alt={offer.title}
                   style={{
                     width: '100%',

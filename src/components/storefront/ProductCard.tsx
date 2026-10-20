@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { Star, ShoppingBag, Eye, Clock } from 'lucide-react';
 
 interface ProductCardProps {
@@ -53,7 +54,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         }}
       >
         <img
-          src={product.image}
+          src={getAssetUrl(product.image)}
           alt={product.title}
           style={{
             position: 'absolute',

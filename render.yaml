@@ -18,6 +18,8 @@ services:
         sync: false
       - key: SUPABASE_SECRET_KEY
         sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: media
       - key: JWT_SECRET
         generateValue: true
       - key: USER_JWT_SECRET
@@ -26,6 +28,8 @@ services:
         sync: false
       - key: CORS_ORIGIN
         sync: false
+      - key: DELIVERY_AGENT_PASSCODE
+        sync: false
       - key: SUPER_ADMIN_ID
         sync: false
       - key: SUPER_ADMIN_PASSWORD
@@ -33,4 +37,6 @@ services:
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false

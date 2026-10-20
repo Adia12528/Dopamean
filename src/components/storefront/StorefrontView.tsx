@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { HeroBanner } from './HeroBanner';
 import { OffersShowcase } from './OffersShowcase';
 import { CategoryFilter } from './CategoryFilter';
@@ -227,7 +228,7 @@ export const StorefrontView: React.FC = () => {
                     position: 'relative'
                   }}>
                     <img
-                      src={settings.aboutImage}
+                      src={getAssetUrl(settings.aboutImage)}
                       alt={settings.aboutTitle || 'Artisan Workshop'}
                       style={{
                         width: '100%',

@@ -89,6 +89,7 @@ export const AdminLoginModal: React.FC = () => {
 
   return (
     <div
+      className="mobile-modal-overlay"
       onClick={handleClose}
       style={{
         position: 'fixed', inset: 0,
@@ -100,6 +101,7 @@ export const AdminLoginModal: React.FC = () => {
       }}
     >
       <div
+        className="mobile-modal-panel"
         onClick={e => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -131,7 +133,7 @@ export const AdminLoginModal: React.FC = () => {
         {/* Header */}
         <div style={{ textAlign: 'center', paddingTop: 4 }}>
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
-            <div style={{
+      <div style={{
               width: 54, height: 54, borderRadius: 18,
               backgroundColor: activeTier.accentBg,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -229,7 +231,7 @@ export const AdminLoginModal: React.FC = () => {
                 </button>
               </div>
               <p style={{ fontSize: '0.73rem', color: 'var(--text-subtle)', margin: '2px 0 0' }}>
-                Default: <strong>deliver123</strong> — your store admin sets this in Super Admin Studio Settings.
+                Ask the store admin to set or share the delivery-agent passcode.
               </p>
             </div>
           ) : (

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { api } from '../../services/api';
+import { api, getAssetUrl } from '../../services/api';
 import { 
   Sliders, 
   Save, 
@@ -38,6 +38,7 @@ const COLOR_PRESETS = [
 
 export const StudioSettings: React.FC = () => {
   const { settings, updateSettings, resetDatabase, loadSampleTemplate, setViewMode } = useStore();
+  const minimumServerPasscodeLength = import.meta.env.PROD ? 12 : 6;
   
   const heroFileInputRef = useRef<HTMLInputElement>(null);
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
@@ -128,8 +129,8 @@ export const StudioSettings: React.FC = () => {
         alert('Super Admin passwords do not match! Please verify.');
         return false;
       }
-      if (newSuperAdminPassword.trim().length < 6) {
-        alert('Super Admin password must be at least 6 characters.');
+      if (newSuperAdminPassword.trim().length < minimumServerPasscodeLength) {
+        alert(`Super Admin password must be at least ${minimumServerPasscodeLength} characters.`);
         return false;
       }
       payload.superAdminPassword = newSuperAdminPassword.trim();
@@ -141,8 +142,8 @@ export const StudioSettings: React.FC = () => {
         alert('Delivery Agent passcodes do not match! Please verify.');
         return false;
       }
-      if (newDeliveryPasscode.trim().length < 6) {
-        alert('Delivery Agent passcode must be at least 6 characters.');
+      if (newDeliveryPasscode.trim().length < minimumServerPasscodeLength) {
+        alert(`Delivery Agent passcode must be at least ${minimumServerPasscodeLength} characters.`);
         return false;
       }
       payload.deliveryAgentPasscode = newDeliveryPasscode.trim();
@@ -154,8 +155,8 @@ export const StudioSettings: React.FC = () => {
         alert('Studio Staff Passcodes do not match! Please verify.');
         return false;
       }
-      if (newPasscode.trim().length < 6) {
-        alert('Studio Staff Passcode must be at least 6 characters.');
+      if (newPasscode.trim().length < minimumServerPasscodeLength) {
+        alert(`Studio Staff Passcode must be at least ${minimumServerPasscodeLength} characters.`);
         return false;
       }
       payload.adminPasscode = newPasscode.trim();
@@ -704,7 +705,7 @@ export const StudioSettings: React.FC = () => {
                         flexShrink: 0
                       }}>
                         <img
-                          src={form.heroImage}
+                          src={getAssetUrl(form.heroImage)}
                           alt="Hero Thumbnail Preview"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
@@ -900,7 +901,7 @@ export const StudioSettings: React.FC = () => {
                         flexShrink: 0
                       }}>
                         <img
-                          src={form.aboutImage}
+                          src={getAssetUrl(form.aboutImage)}
                           alt="About Preview"
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
@@ -1770,7 +1771,7 @@ export const StudioSettings: React.FC = () => {
                 }}>
                   <Info size={16} style={{ flexShrink: 0 }} />
                   <span>
-                    Delivery agents log in with this passcode to view dispatched orders, update tracking to <strong>Out for Delivery</strong> / <strong>Delivered</strong>, and trigger WhatsApp COD reminders. Default: <strong>deliver123</strong>.
+                    Delivery agents use this passcode to view dispatched orders, update tracking to <strong>Out for Delivery</strong> / <strong>Delivered</strong>, and trigger WhatsApp COD reminders. Set a unique passcode before enabling access.
                   </span>
                 </div>
 

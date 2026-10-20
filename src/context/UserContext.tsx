@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { UserProfile, Order } from '../types';
 import { api } from '../services/api';
-import { supabase, supabaseAuthEnabled } from '../lib/supabase';
+import { getSupabaseClient, supabaseAuthEnabled } from '../lib/supabase';
 
 const USER_TOKEN_KEY = 'dopamean_user_token';
 
@@ -17,7 +17,7 @@ interface UserContextType {
   closeUserAuthModal: () => void;
   setUserAuthModalTab: (tab: 'signin' | 'signup') => void;
 
-  userRegister: (data: { name: string; email: string; password: string; phone?: string }) => Promise<void>;
+  userRegister: (data: { name: string; email: string; password: string; phone?: string }) => Promise<'signed-in' | 'confirmation-required'>;
   userLogin: (email: string, password: string) => Promise<void>;
   userLogout: () => void;
   updateUserProfile: (updates: Partial<UserProfile> & { password?: string; currentPassword?: string }) => Promise<void>;
@@ -63,28 +63,52 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    if (supabaseAuthEnabled && supabase) {
-      supabase.auth.getSession().then(({ data }) => {
-        if (!active) return;
-        const supaToken = data.session?.access_token || null;
-        if (supaToken) {
-          setUserToken(supaToken);
-          api.getMe(supaToken)
-            .then(user => { if (active) setCurrentUser(user); })
-            .catch(() => {})
-            .finally(() => { if (active) setIsLoadingUser(false); });
-        } else {
-          void restoreLocalToken();
+    if (supabaseAuthEnabled) {
+      let unsubscribe: (() => void) | null = null;
+      const restoreSupabaseSession = async () => {
+        try {
+          const supabase = await getSupabaseClient();
+          if (!active || !supabase) return;
+          const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+            const supaToken = session?.access_token || null;
+            if (supaToken) {
+              setUserToken(supaToken);
+              api.getMe(supaToken)
+                .then(user => { if (active) setCurrentUser(user); })
+                .catch(error => console.error('Could not load the signed-in customer profile:', error));
+            }
+          });
+          unsubscribe = () => listener.subscription.unsubscribe();
+          const { data, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          if (!active) return;
+          const supaToken = data.session?.access_token || null;
+          if (supaToken) {
+            setUserToken(supaToken);
+            try {
+              const user = await api.getMe(supaToken);
+              if (active) setCurrentUser(user);
+            } catch (error) {
+              console.error('Could not load the signed-in customer profile:', error);
+            } finally {
+              if (active) setIsLoadingUser(false);
+            }
+          } else {
+            await restoreLocalToken();
+          }
+        } catch (error) {
+          if (active) {
+            console.error('Could not restore the Supabase customer session:', error);
+            await restoreLocalToken();
+          }
         }
-      });
-      const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-        const supaToken = session?.access_token || null;
-        if (supaToken) {
-          setUserToken(supaToken);
-          api.getMe(supaToken).then(user => { if (active) setCurrentUser(user); }).catch(() => {});
-        }
-      });
-      return () => { active = false; listener.subscription.unsubscribe(); };
+      };
+      const timeoutId = window.setTimeout(() => { void restoreSupabaseSession(); }, 1000);
+      return () => {
+        active = false;
+        window.clearTimeout(timeoutId);
+        unsubscribe?.();
+      };
     }
 
     void restoreLocalToken();
@@ -105,46 +129,45 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsUserAuthModalOpen(false);
   }, []);
 
-  const userRegister = useCallback(async (data: { name: string; email: string; password: string; phone?: string }) => {
-    if (supabaseAuthEnabled && supabase) {
-      try {
-        const { data: result, error } = await supabase.auth.signUp({
-          email: data.email,
-          password: data.password,
-          options: { data: { name: data.name, phone: data.phone || '' } }
-        });
-        if (!error && result.session?.access_token) {
-          persistToken(result.session.access_token);
-          const user = await api.getMe(result.session.access_token);
-          setCurrentUser(user);
-          setIsUserAuthModalOpen(false);
-          return;
-        }
-      } catch {
-        // Fall back to direct backend database registration
-      }
+  const userRegister = useCallback(async (data: { name: string; email: string; password: string; phone?: string }): Promise<'signed-in' | 'confirmation-required'> => {
+    if (supabaseAuthEnabled) {
+      const supabase = await getSupabaseClient();
+      if (!supabase) throw new Error('Supabase Auth is enabled but its client is unavailable.');
+      const { data: result, error } = await supabase.auth.signUp({
+        email: data.email,
+        password: data.password,
+        options: { data: { name: data.name, phone: data.phone || '' } }
+      });
+      if (error) throw error;
+      if (!result.session?.access_token) return 'confirmation-required';
+
+      persistToken(result.session.access_token);
+      const user = await api.getMe(result.session.access_token);
+      setCurrentUser(user);
+      setIsUserAuthModalOpen(false);
+      return 'signed-in';
+    } else {
+      const result = await api.userRegister(data);
+      persistToken(result.token);
+      setCurrentUser(result.user);
+      setIsUserAuthModalOpen(false);
+      return 'signed-in';
     }
-    // Direct database registration
-    const result = await api.userRegister(data);
-    persistToken(result.token);
-    setCurrentUser(result.user);
-    setIsUserAuthModalOpen(false);
   }, []);
 
   const userLogin = useCallback(async (email: string, password: string) => {
-    if (supabaseAuthEnabled && supabase) {
-      try {
-        const { data: result, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (!error && result.session?.access_token) {
-          persistToken(result.session.access_token);
-          const user = await api.getMe(result.session.access_token);
-          setCurrentUser(user);
-          setIsUserAuthModalOpen(false);
-          return;
-        }
-      } catch {
-        // Fall back to backend database login
-      }
+    if (supabaseAuthEnabled) {
+      const supabase = await getSupabaseClient();
+      if (!supabase) throw new Error('Supabase Auth is enabled but its client is unavailable.');
+      const { data: result, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      const token = result.session?.access_token;
+      if (!token) throw new Error('Check your email and confirm your account before signing in.');
+      persistToken(token);
+      const user = await api.getMe(token);
+      setCurrentUser(user);
+      setIsUserAuthModalOpen(false);
+      return;
     }
     const result = await api.userLogin(email, password);
     persistToken(result.token);
@@ -153,7 +176,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const userLogout = useCallback(() => {
-    if (supabaseAuthEnabled && supabase) void supabase.auth.signOut();
+    if (supabaseAuthEnabled) {
+      void getSupabaseClient()
+        .then(supabase => supabase?.auth.signOut())
+        .catch(error => console.error('Could not sign out of Supabase:', error));
+    }
     setCurrentUser(null);
     setUserToken(null);
     try { localStorage.removeItem(USER_TOKEN_KEY); } catch { /* ignore */ }
@@ -165,7 +192,9 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const password = profileUpdates.password;
     delete profileUpdates.password;
     delete profileUpdates.currentPassword;
-    if (password && supabaseAuthEnabled && supabase) {
+    if (password && supabaseAuthEnabled) {
+      const supabase = await getSupabaseClient();
+      if (!supabase) throw new Error('Supabase Auth is enabled but its client is unavailable.');
       const { error } = await supabase.auth.updateUser({ password });
       if (error) throw error;
     }

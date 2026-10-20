@@ -8,11 +8,11 @@ import multer from 'multer';
 import Razorpay from 'razorpay';
 import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
-import { db } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '..', '.env') });
+const { db } = await import('./db.js');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -20,19 +20,44 @@ const ADMIN_JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toStri
 const SUPER_ADMIN_ID = process.env.SUPER_ADMIN_ID || '';
 const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD || '';
 const USER_JWT_SECRET = process.env.USER_JWT_SECRET || crypto.randomBytes(32).toString('hex');
+const isProduction = process.env.NODE_ENV === 'production';
+if (isProduction && /^https?:\/\//i.test(process.env.RAZORPAY_WEBHOOK_SECRET || '')) {
+  throw new Error('RAZORPAY_WEBHOOK_SECRET must be the signing secret, not the webhook URL.');
+}
+const allowedOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean)
+  .map(origin => {
+    const url = new URL(origin);
+    if (url.origin !== origin.replace(/\/$/, '')) {
+      throw new Error(`CORS_ORIGIN entries must be origins without a path: ${origin}`);
+    }
+    if (isProduction && url.protocol !== 'https:') {
+      throw new Error('CORS_ORIGIN entries must use HTTPS in production.');
+    }
+    return url.origin;
+  });
 const supabaseAuth = process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
-const supabaseAdmin = process.env.SUPABASE_URL && (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY)
-  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
+const supabaseAdmin = process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false } })
   : null;
 
-if (process.env.NODE_ENV === 'production') {
-  const missing = ['SUPABASE_DB_URL'].filter(name => !process.env[name]);
-  if (missing.length) throw new Error(`Missing required production database configuration: ${missing.join(', ')}`);
-  if (process.env.ADMIN_PASSCODE && process.env.ADMIN_PASSCODE.length < 8) {
-    console.warn('Security Warning: ADMIN_PASSCODE is short. Consider using at least 12 characters for public production.');
+if (isProduction) {
+  const required = ['SUPABASE_DB_URL', 'SUPABASE_URL', 'SUPABASE_SECRET_KEY', 'JWT_SECRET', 'USER_JWT_SECRET', 'ADMIN_PASSCODE', 'CORS_ORIGIN'];
+  const missing = required.filter(name => !process.env[name]?.trim());
+  if (missing.length) throw new Error(`Missing required production configuration: ${missing.join(', ')}`);
+  for (const name of ['JWT_SECRET', 'USER_JWT_SECRET']) {
+    if (Buffer.byteLength(process.env[name], 'utf8') < 32) {
+      throw new Error(`${name} must be at least 32 bytes in production.`);
+    }
   }
+  if (process.env.ADMIN_PASSCODE.trim().length < 12) {
+    throw new Error('ADMIN_PASSCODE must be at least 12 characters in production.');
+  }
+  if (allowedOrigins.length === 0) throw new Error('CORS_ORIGIN must contain at least one HTTPS storefront origin.');
 }
 
 
@@ -56,8 +81,9 @@ const upload = multer({
 
 // Middleware
 app.disable('x-powered-by');
+if (isProduction) app.set('trust proxy', 1);
 app.use(cors({
-  origin: process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(s => s.trim()) : true,
+  origin: isProduction ? allowedOrigins : allowedOrigins.length ? allowedOrigins : true,
   credentials: true
 }));
 app.use((req, res, next) => {
@@ -67,6 +93,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '15mb', verify: (req, res, buffer) => { req.rawBody = Buffer.from(buffer); } }));
+app.get('/uploads/hero_landing.png', (_req, res) => res.redirect(301, '/uploads/hero_landing.webp'));
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 const requestWindows = new Map();
@@ -95,6 +122,12 @@ const paymentLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'payme
 
 function updateEnvFile(updates) {
   try {
+    if (isProduction) {
+      for (const [key, value] of Object.entries(updates)) {
+        if (value !== undefined && value !== null) process.env[key] = String(value).trim();
+      }
+      return;
+    }
     const envPath = path.join(__dirname, '..', '.env');
     if (!fs.existsSync(envPath)) return;
     let content = fs.readFileSync(envPath, 'utf8');
@@ -117,31 +150,32 @@ function updateEnvFile(updates) {
 }
 
 function getSuperAdminCredentials(settings) {
-  const id = (settings?.superAdminId?.trim() || process.env.SUPER_ADMIN_ID?.trim() || 'superadmin').trim();
-  const password = (settings?.superAdminPassword?.trim() || process.env.SUPER_ADMIN_PASSWORD?.trim() || 'superadmin12528').trim();
-  return { id, password };
+  const storedId = settings?.superAdminId?.trim() || '';
+  const storedPassword = settings?.superAdminPassword?.trim() || '';
+  const id = (storedId || SUPER_ADMIN_ID.trim()).trim();
+  const password = (storedPassword || SUPER_ADMIN_PASSWORD.trim()).trim();
+  if (!isProduction || password.length >= 12) return { id, password };
+  if (SUPER_ADMIN_ID.trim() && SUPER_ADMIN_PASSWORD.trim().length >= 12) {
+    return { id: SUPER_ADMIN_ID.trim(), password: SUPER_ADMIN_PASSWORD.trim() };
+  }
+  return { id: '', password: '' };
 }
 
 function getValidAdminPasscodes(settings) {
-  // If passcode is explicitly configured in DB settings, ONLY that passcode is valid!
   const dbPass = settings?.adminPasscode?.trim();
-  if (dbPass) return [dbPass];
+  if (dbPass && (!isProduction || dbPass.length >= 12)) return [dbPass];
   const envPass = process.env.ADMIN_PASSCODE?.trim();
-  if (envPass && envPass !== 'replace-with-a-unique-admin-passcode') return [envPass];
-  return ['admin123'];
-}
-
-function configuredAdminPasscode(settings) {
-  return getValidAdminPasscodes(settings)[0] || 'admin123';
+  if (envPass && envPass !== 'replace-with-a-unique-admin-passcode' && (!isProduction || envPass.length >= 12)) return [envPass];
+  return [];
 }
 
 // ── Delivery Agent Auth ────────────────────────────────────────────────────────
 function getDeliveryAgentPasscode(settings) {
   const dbPass = settings?.deliveryAgentPasscode?.trim();
-  if (dbPass) return dbPass;
+  if (dbPass && (!isProduction || dbPass.length >= 12)) return dbPass;
   const envPass = process.env.DELIVERY_AGENT_PASSCODE?.trim();
-  if (envPass) return envPass;
-  return 'deliver123';
+  if (envPass && (!isProduction || envPass.length >= 12)) return envPass;
+  return '';
 }
 
 function getImageExtension(buffer) {
@@ -230,7 +264,7 @@ function requireDeliveryAgent(req, res, next) {
     if (adminPasscodes.some(p => verifyAdminToken(token, p))) { req.adminRole = 'admin'; return next(); }
     // Check if it's a delivery agent token
     const deliveryPasscode = getDeliveryAgentPasscode(settings);
-    if (verifyDeliveryToken(token, deliveryPasscode)) { req.adminRole = 'delivery_agent'; return next(); }
+    if (deliveryPasscode && verifyDeliveryToken(token, deliveryPasscode)) { req.adminRole = 'delivery_agent'; return next(); }
     return res.status(401).json({ error: 'Unauthorized: Valid credentials required.' });
   }).catch(() => res.status(503).json({ error: 'Store database is unavailable.' }));
 }
@@ -366,7 +400,7 @@ app.post('/api/admin/verify', async (req, res) => {
     if (isAdmin) return res.json({ valid: true, role: 'admin' });
     // Check delivery agent
     const deliveryPasscode = getDeliveryAgentPasscode(settings);
-    const isDelivery = verifyDeliveryToken(token, deliveryPasscode);
+    const isDelivery = Boolean(deliveryPasscode && verifyDeliveryToken(token, deliveryPasscode));
     res.json({ valid: isDelivery, role: isDelivery ? 'delivery_agent' : null });
   } catch {
     res.json({ valid: false, role: null });
@@ -559,6 +593,12 @@ app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), async
     const extension = getImageExtension(req.file.buffer);
     if (!extension) return res.status(400).json({ error: 'Unsupported or invalid image file.' });
     const filename = `crochet_${crypto.randomUUID()}${extension}`;
+    const contentType = {
+      '.jpg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    }[extension];
 
     // 1. Try Supabase Cloud Storage first (permanent CDN for production)
     if (supabaseAdmin) {
@@ -567,7 +607,7 @@ app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), async
         const { error: uploadError } = await supabaseAdmin.storage
           .from(bucketName)
           .upload(filename, req.file.buffer, {
-            contentType: req.file.mimetype || 'image/jpeg',
+            contentType,
             upsert: true
           });
 
@@ -583,11 +623,23 @@ app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), async
             });
           }
         } else {
+          if (isProduction) {
+            console.error('Supabase storage upload failed:', uploadError.message);
+            return res.status(502).json({ error: 'Image storage is temporarily unavailable.' });
+          }
           console.warn('Supabase storage upload failed, falling back to local disk:', uploadError.message);
         }
       } catch (storageErr) {
+        if (isProduction) {
+          console.error('Supabase storage error:', storageErr);
+          return res.status(502).json({ error: 'Image storage is temporarily unavailable.' });
+        }
         console.warn('Supabase storage error, falling back to local disk:', storageErr?.message || storageErr);
       }
+    }
+
+    if (isProduction) {
+      return res.status(503).json({ error: 'Persistent image storage is not configured.' });
     }
 
     // 2. Local disk fallback
@@ -616,9 +668,15 @@ app.get('/api/settings', async (req, res) => {
     const sanitized = { ...settings };
     delete sanitized.adminPasscode;
     delete sanitized.superAdminPassword;
-    sanitized.superAdminId = settings.superAdminId || process.env.SUPER_ADMIN_ID || 'superadmin';
-    sanitized.adminPasscodeConfigured = Boolean(settings.adminPasscode || process.env.ADMIN_PASSCODE);
-    sanitized.superAdminConfigured = Boolean(settings.superAdminPassword || process.env.SUPER_ADMIN_PASSWORD);
+    delete sanitized.deliveryAgentPasscode;
+    delete sanitized.payuMerchantKey;
+    delete sanitized.payuMerchantSalt;
+    sanitized.superAdminId = settings.superAdminId || process.env.SUPER_ADMIN_ID || '';
+    sanitized.adminPasscodeConfigured = getValidAdminPasscodes(settings).length > 0;
+    const superAdmin = getSuperAdminCredentials(settings);
+    sanitized.superAdminConfigured = Boolean(superAdmin.id && superAdmin.password);
+    sanitized.deliveryAgentPasscodeConfigured = Boolean(getDeliveryAgentPasscode(settings));
+    sanitized.payuConfigured = Boolean(settings.payuMerchantKey && settings.payuMerchantSalt);
     sanitized.razorpayKeyId = (sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
     if (sanitized.razorpayKeySecret || process.env.RAZORPAY_KEY_SECRET) {
       sanitized.razorpayKeySecretConfigured = true;
@@ -655,8 +713,9 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     if (changes.adminPasscode !== undefined) {
       const newPass = String(changes.adminPasscode || '').trim();
       if (newPass.length > 0) {
-        if (newPass.length < 6) {
-          return res.status(400).json({ error: 'Admin passcode must be at least 6 characters.' });
+        const minimumLength = isProduction ? 12 : 6;
+        if (newPass.length < minimumLength) {
+          return res.status(400).json({ error: `Admin passcode must be at least ${minimumLength} characters.` });
         }
         changes.adminPasscode = newPass;
         envUpdates.ADMIN_PASSCODE = newPass;
@@ -681,8 +740,9 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     if (changes.superAdminPassword !== undefined) {
       const newSuperPass = String(changes.superAdminPassword || '').trim();
       if (newSuperPass.length > 0) {
-        if (newSuperPass.length < 6) {
-          return res.status(400).json({ error: 'Super Admin password must be at least 6 characters.' });
+        const minimumLength = isProduction ? 12 : 6;
+        if (newSuperPass.length < minimumLength) {
+          return res.status(400).json({ error: `Super Admin password must be at least ${minimumLength} characters.` });
         }
         changes.superAdminPassword = newSuperPass;
         envUpdates.SUPER_ADMIN_PASSWORD = newSuperPass;
@@ -695,8 +755,9 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     if (changes.deliveryAgentPasscode !== undefined) {
       const newDeliveryPass = String(changes.deliveryAgentPasscode || '').trim();
       if (newDeliveryPass.length > 0) {
-        if (newDeliveryPass.length < 6) {
-          return res.status(400).json({ error: 'Delivery agent passcode must be at least 6 characters.' });
+        const minimumLength = isProduction ? 12 : 6;
+        if (newDeliveryPass.length < minimumLength) {
+          return res.status(400).json({ error: `Delivery agent passcode must be at least ${minimumLength} characters.` });
         }
         changes.deliveryAgentPasscode = newDeliveryPass;
         envUpdates.DELIVERY_AGENT_PASSCODE = newDeliveryPass;
@@ -723,10 +784,14 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     delete sanitized.adminPasscode;
     delete sanitized.superAdminPassword;
     delete sanitized.deliveryAgentPasscode;
-    sanitized.superAdminId = updated.superAdminId || process.env.SUPER_ADMIN_ID || 'superadmin';
-    sanitized.adminPasscodeConfigured = Boolean(updated.adminPasscode || process.env.ADMIN_PASSCODE);
-    sanitized.superAdminConfigured = Boolean(updated.superAdminPassword || process.env.SUPER_ADMIN_PASSWORD);
-    sanitized.deliveryAgentPasscodeConfigured = Boolean(updated.deliveryAgentPasscode || process.env.DELIVERY_AGENT_PASSCODE);
+    delete sanitized.payuMerchantKey;
+    delete sanitized.payuMerchantSalt;
+    sanitized.superAdminId = updated.superAdminId || process.env.SUPER_ADMIN_ID || '';
+    sanitized.adminPasscodeConfigured = getValidAdminPasscodes(updated).length > 0;
+    const superAdmin = getSuperAdminCredentials(updated);
+    sanitized.superAdminConfigured = Boolean(superAdmin.id && superAdmin.password);
+    sanitized.deliveryAgentPasscodeConfigured = Boolean(getDeliveryAgentPasscode(updated));
+    sanitized.payuConfigured = Boolean(updated.payuMerchantKey && updated.payuMerchantSalt);
     if (newToken) sanitized.newToken = newToken;
 
     sanitized.razorpayKeyId = sanitized.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '';

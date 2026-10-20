@@ -2,6 +2,13 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "redirects": [
+    {
+      "source": "/uploads/hero_landing.png",
+      "destination": "/uploads/hero_landing.webp",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/(.*)",

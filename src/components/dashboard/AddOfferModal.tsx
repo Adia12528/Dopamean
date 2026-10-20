@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import type { Offer } from '../../types';
 import { useStore } from '../../context/StoreContext';
-import { api } from '../../services/api';
+import { api, getAssetUrl } from '../../services/api';
 import { X, Upload, Check } from 'lucide-react';
 
 interface AddOfferModalProps {
@@ -92,6 +92,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
 
   return (
     <div
+      className="mobile-modal-overlay"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -107,6 +108,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
       }}
     >
       <div
+        className="mobile-modal-panel"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -183,7 +185,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
               boxShadow: 'var(--shadow-sm)'
             }}>
               <img
-                src={image}
+                src={getAssetUrl(image)}
                 alt="Banner preview"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 onError={(e) => {

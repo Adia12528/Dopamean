@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Order } from '../../types';
-import { api } from '../../services/api';
+import { api, getAssetUrl } from '../../services/api';
 import { useStore } from '../../context/StoreContext';
 import { 
   Search, 
@@ -61,6 +61,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
 
   return (
     <div
+      className="mobile-modal-overlay"
       style={{
         position: 'fixed',
         inset: 0,
@@ -75,6 +76,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
       }}
     >
       <div
+        className="mobile-modal-panel"
         style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 'clamp(18px, 4vw, 28px)',
@@ -436,7 +438,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           {item.image && (
                             <img
-                              src={item.image}
+                              src={getAssetUrl(item.image)}
                               alt={item.productTitle}
                               style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
                             />

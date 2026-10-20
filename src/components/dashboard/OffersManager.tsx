@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Offer } from '../../types';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { 
   Plus, 
   Tag, 
@@ -99,7 +100,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({ onOpenAddModal, on
                 backgroundColor: '#F8F5F0'
               }}>
                 <img
-                  src={offer.image}
+                  src={getAssetUrl(offer.image)}
                   alt={offer.title}
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />

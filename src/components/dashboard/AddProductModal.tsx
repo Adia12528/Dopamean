@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import type { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
-import { api } from '../../services/api';
+import { api, getAssetUrl } from '../../services/api';
 import { X, Upload, Check, Sparkles } from 'lucide-react';
 
 interface AddProductModalProps {
@@ -204,7 +204,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
   const discountPercent = hasDiscount ? Math.round(((numStrikePrice - numSellingPrice) / numStrikePrice) * 100) : 0;
 
   return (
-    <div 
+    <div
+      className="mobile-modal-overlay"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -219,7 +220,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
         animation: 'fadeIn 0.25s ease-out'
       }}
     >
-      <div 
+      <div
+        className="mobile-modal-panel"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -362,7 +364,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   position: 'relative'
                 }}>
                   {image ? (
-                    <img src={image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={getAssetUrl(image)} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.8rem' }}>🧶</div>
                   )}
@@ -469,7 +471,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                         border: '1px solid var(--border-medium)'
                       }}
                     >
-                      <img src={secImg} alt={`Angle ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <img src={getAssetUrl(secImg)} alt={`Angle ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       <button
                         type="button"
                         onClick={() => removeSecondaryImage(idx)}

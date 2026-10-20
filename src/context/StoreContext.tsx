@@ -54,6 +54,7 @@ interface StoreContextType {
   isTrackingModalOpen: boolean;
   activeInvoiceOrder: Order | null;
   deliveryOrders: Order[];
+  setDeliveryOrders: React.Dispatch<React.SetStateAction<Order[]>>;
 
   setIsAdminLoginModalOpen: (open: boolean) => void;
   setIsTrackingModalOpen: (open: boolean) => void;
@@ -158,7 +159,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Fetch initial data from the configured backend database
   const loadData = useCallback(async () => {
-    setIsLoading(true);
     try {
       const [fetchedSettings, fetchedProducts, fetchedOffers, fetchedOrders] = await Promise.all([
         api.getSettings().catch(() => DEFAULT_SETTINGS),
@@ -178,8 +178,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  const refreshData = useCallback(async () => {
+    setIsLoading(true);
+    await loadData();
+  }, [loadData]);
+
   useEffect(() => {
-    void loadData();
+    void Promise.resolve().then(loadData);
     void api.verifyAdmin().then(result => {
       if (typeof result === 'object' && result !== null && 'role' in result) {
         const r = (result as { valid: boolean; role: AdminRole }).role;
@@ -632,6 +637,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isTrackingModalOpen,
         activeInvoiceOrder,
         deliveryOrders,
+        setDeliveryOrders,
 
         setIsAdminLoginModalOpen,
         setIsTrackingModalOpen,
@@ -668,13 +674,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         syncOrder,
         updateOrderStatus,
         submitReview,
-        refreshData: loadData,
+        refreshData,
         resetDatabase: async () => {
           clearCart();
           showToast('Database reset is maintained via SQLite WAL backup.', 'info');
         },
         loadSampleTemplate: async () => {
-          await loadData();
+          await refreshData();
           showToast('Catalog refreshed from SQLite database.');
         }
       }}

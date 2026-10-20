@@ -1,6 +1,11 @@
 import type { Product, Offer, Order, StoreSettings, Review, UserProfile } from '../types';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '';
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+
+export const getAssetUrl = (url?: string | null): string => {
+  if (!url || !url.startsWith('/uploads/')) return url || '';
+  return `${BASE_URL}${url}`;
+};
 
 const adminFetch = (url: string, init: RequestInit = {}) => {
   const token = sessionStorage.getItem('dopamean_admin_token');
@@ -187,15 +192,16 @@ export const api = {
   },
 
   cancelOrder: async (orderId: string, cancelReason?: string): Promise<Order> => {
-    try {
-      const res = await adminFetch(`${BASE_URL}/api/orders/${orderId}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cancelReason })
-      });
-      if (res.ok) return res.json();
-    } catch {}
-    // Fallback to updateOrderStatus
+    const res = await adminFetch(`${BASE_URL}/api/orders/${orderId}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cancelReason })
+    });
+    if (res.ok) return res.json();
+    if (res.status !== 404 && res.status !== 405) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to cancel order');
+    }
     return api.updateOrderStatus(orderId, 'cancelled', { cancelReason });
   },
 

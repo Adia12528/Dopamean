@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { getAssetUrl } from '../../services/api';
 import { Sparkles, Copy, Check, ArrowRight, Tag, Heart } from 'lucide-react';
 
 export const HeroBanner: React.FC = () => {
@@ -195,14 +196,21 @@ export const HeroBanner: React.FC = () => {
             overflow: 'hidden',
             minHeight: '260px'
           }}>
+            <div className="liquid-static-fallback" aria-hidden="true" />
             <img
-              src={settings.heroImage || '/uploads/media_1791711047623.jpg'}
+              src={getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp')}
               alt={settings.storeName || 'Handcrafted Crochet Accessories'}
+              fetchPriority="high"
+              decoding="async"
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                transition: 'transform 0.6s ease'
+                transition: 'transform 0.6s ease',
+                position: 'relative',
+                zIndex: 1,
+                opacity: 0.84,
+                mixBlendMode: 'multiply'
               }}
             />
             {/* Floating Editorial Badge */}
@@ -285,6 +293,7 @@ export const HeroBanner: React.FC = () => {
                 gap: '14px',
                 boxShadow: 'var(--shadow-sm)'
               }}
+              className="hero-glass-card"
             >
               <div style={{ fontSize: '1.6rem' }}>{pillar.icon}</div>
               <div>
