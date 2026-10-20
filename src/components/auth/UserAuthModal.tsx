@@ -19,6 +19,12 @@ interface InputFieldProps {
   onBlur?: (value: string) => void;
 }
 
+const isInvalidCredentialsError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) return false;
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : '';
+  return code === 'invalid_credentials' || error.message.toLowerCase() === 'invalid login credentials';
+};
+
 const InputField: React.FC<InputFieldProps> = ({
   label, type = 'text', placeholder, value, onChange, icon, rightAddon, required, error, autoFocus, onBlur
 }) => (
@@ -84,7 +90,7 @@ const InputField: React.FC<InputFieldProps> = ({
 // ─────────────────────────────────────────────────────────────────────────────
 // Sign In Tab
 // ─────────────────────────────────────────────────────────────────────────────
-const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignUp }) => {
+const SignInTab: React.FC<{ onSwitchToSignUp: (email: string) => void }> = ({ onSwitchToSignUp }) => {
   const { userLogin } = useUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -93,10 +99,12 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showCreateAccountAction, setShowCreateAccountAction] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setShowCreateAccountAction(false);
     const normalizedEmail = email.trim();
     const nextEmailError = !normalizedEmail
       ? 'Email address is required.'
@@ -111,7 +119,12 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
     try {
       await userLogin(normalizedEmail, password);
     } catch (err: unknown) {
-      setError((err as Error).message || 'Invalid email or password.');
+      if (isInvalidCredentialsError(err)) {
+        setError('We couldn’t sign you in with those details.');
+        setShowCreateAccountAction(true);
+      } else {
+        setError((err as Error).message || 'Could not sign in. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -124,7 +137,7 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
         type="email"
         placeholder="you@example.com"
         value={email}
-        onChange={v => { setEmail(v); setError(''); setEmailError(''); }}
+        onChange={v => { setEmail(v); setError(''); setEmailError(''); setShowCreateAccountAction(false); }}
         icon={<Mail size={16} />}
         required
         error={emailError}
@@ -141,7 +154,7 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
         type={showPw ? 'text' : 'password'}
         placeholder="Your password"
         value={password}
-        onChange={v => { setPassword(v); setError(''); setPasswordError(''); }}
+        onChange={v => { setPassword(v); setError(''); setPasswordError(''); setShowCreateAccountAction(false); }}
         icon={<Lock size={16} />}
         required
         error={passwordError}
@@ -167,6 +180,20 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
         }
       />
       {error && <p role="alert" style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 600, margin: 0 }}>{error}</p>}
+      {showCreateAccountAction && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: 0 }}>
+            If you’re new here, you can create an account with this email.
+          </p>
+          <button
+            type="button"
+            onClick={() => onSwitchToSignUp(email.trim())}
+            style={{ alignSelf: 'flex-start', color: 'var(--accent-terracotta)', fontWeight: 700, cursor: 'pointer', textDecoration: 'underline', padding: '4px 0' }}
+          >
+            Create an account with this email
+          </button>
+        </div>
+      )}
       <button
         type="submit"
         className="btn-primary"
@@ -191,7 +218,7 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
         New here?{' '}
         <button
           type="button"
-          onClick={onSwitchToSignUp}
+          onClick={() => onSwitchToSignUp(email.trim())}
           style={{
             color: 'var(--accent-terracotta)',
             fontWeight: 700,
@@ -210,10 +237,10 @@ const SignInTab: React.FC<{ onSwitchToSignUp: () => void }> = ({ onSwitchToSignU
 // ─────────────────────────────────────────────────────────────────────────────
 // Sign Up Tab
 // ─────────────────────────────────────────────────────────────────────────────
-const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignIn }) => {
-  const { userRegister } = useUser();
+const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }> = ({ onSwitchToSignIn, initialEmail }) => {
+  const { userRegister, userResendConfirmation } = useUser();
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -224,12 +251,31 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
   const [passwordError, setPasswordError] = useState('');
   const [confirmError, setConfirmError] = useState('');
   const [confirmationMessage, setConfirmationMessage] = useState('');
+  const [resendMessage, setResendMessage] = useState('');
+  const [resendError, setResendError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resending, setResending] = useState(false);
+
+  const handleResendConfirmation = async () => {
+    setResendMessage('');
+    setResendError('');
+    setResending(true);
+    try {
+      await userResendConfirmation(email.trim());
+      setResendMessage('A new confirmation email has been sent. Check your inbox.');
+    } catch (err: unknown) {
+      setResendError((err as Error).message || 'Could not resend the email. Please try again.');
+    } finally {
+      setResending(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setConfirmationMessage('');
+    setResendMessage('');
+    setResendError('');
     const normalizedEmail = email.trim();
     const nextNameError = name.trim() ? '' : 'Name is required.';
     const nextEmailError = !normalizedEmail
@@ -354,7 +400,21 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
             : '')}
       />
 
-      {confirmationMessage && <p role="status" style={{ fontSize: '0.78rem', color: '#15803D', fontWeight: 600, margin: 0 }}>{confirmationMessage}</p>}
+      {confirmationMessage && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <p role="status" style={{ fontSize: '0.78rem', color: '#15803D', fontWeight: 600, margin: 0 }}>{confirmationMessage}</p>
+          <button
+            type="button"
+            onClick={() => void handleResendConfirmation()}
+            disabled={resending || loading}
+            style={{ alignSelf: 'flex-start', color: 'var(--accent-terracotta)', fontWeight: 700, textDecoration: 'underline', cursor: resending ? 'wait' : 'pointer', padding: '4px 0' }}
+          >
+            {resending ? 'Sending confirmation email…' : 'Resend confirmation email'}
+          </button>
+          {resendMessage && <p role="status" style={{ fontSize: '0.76rem', color: '#15803D', margin: 0 }}>{resendMessage}</p>}
+          {resendError && <p role="alert" style={{ fontSize: '0.76rem', color: '#DC2626', margin: 0 }}>{resendError}</p>}
+        </div>
+      )}
       {error && <p role="alert" style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 600, margin: 0 }}>{error}</p>}
 
       {/* Member benefits card */}
@@ -421,6 +481,7 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void }> = ({ onSwitchToSignI
 // ─────────────────────────────────────────────────────────────────────────────
 export const UserAuthModal: React.FC = () => {
   const { isUserAuthModalOpen, closeUserAuthModal, userAuthModalTab, setUserAuthModalTab } = useUser();
+  const [signUpEmail, setSignUpEmail] = useState('');
 
   if (!isUserAuthModalOpen) return null;
 
@@ -555,8 +616,8 @@ export const UserAuthModal: React.FC = () => {
 
         {/* Form Body */}
         {isSignIn
-          ? <SignInTab onSwitchToSignUp={() => setUserAuthModalTab('signup')} />
-          : <SignUpTab onSwitchToSignIn={() => setUserAuthModalTab('signin')} />
+          ? <SignInTab onSwitchToSignUp={email => { setSignUpEmail(email); setUserAuthModalTab('signup'); }} />
+          : <SignUpTab initialEmail={signUpEmail} onSwitchToSignIn={() => setUserAuthModalTab('signin')} />
         }
       </div>
     </div>

@@ -95,7 +95,7 @@ Use the session pooler for hosted environments that need IPv4 connectivity; use 
 ## Customer Supabase Auth
 
 1. In **Authentication → Providers**, enable email sign-in and keep email confirmation enabled.
-2. In **Authentication → URL Configuration**, set the production Site URL and add local (`http://localhost:5173/**`) and production redirect URLs.
+2. In **Authentication → URL Configuration**, set the production Site URL and allow the confirmation route for local development (`http://localhost:5173/auth/confirm` and, if you use it, `http://127.0.0.1:5173/auth/confirm`) and the deployed frontend (for example, `https://your-production-domain/auth/confirm`). The sign-up flow redirects to `/auth/confirm` on the current frontend origin; add each exact origin to the allow-list before testing email confirmation.
 3. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` on the API. Set the same project URL and publishable key as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for the frontend.
 4. Restart the API and rebuild/redeploy the frontend. The API validates customer access tokens and syncs verified account profiles with PostgreSQL.
 
@@ -113,6 +113,19 @@ GitHub Actions runs on pushes and pull requests targeting `main`, and can also b
 4. `npm run build`
 
 CI validates syntax, lint, and the production frontend build. That build uses `https://api.example.invalid` only to satisfy production URL validation; it is a reserved, non-routable placeholder and must not be used for deployment. CI does not deploy the app or run end-to-end tests. Test checkout, payment, authentication, and order flows separately before production releases.
+
+### Automated versioning and changelogs
+
+The separate **Release Please** workflow watches pushes to `main`. Use Conventional Commit messages so it can determine version bumps:
+
+- `fix: ...` for a patch release.
+- `feat: ...` for a minor release.
+- `feat!: ...` or a `BREAKING CHANGE:` footer for a major release.
+- Other commit types (for example, `docs:` or `chore:`) do not normally trigger a release.
+
+Release Please opens or updates a release pull request. Review and merge it when you want to create the version release. The PR updates the relevant `package.json`, npm lockfile, and `CHANGELOG.md`; merging it creates a GitHub release and component-qualified tag (`dopamean-v...` for the root package and `dopamean-backend-v...` for the backend). Root and backend versions are managed independently. This workflow does not deploy to Vercel or Render.
+
+Before enabling the workflow, create a repository-scoped fine-grained personal access token with **Contents: read/write**, **Pull requests: read/write**, and **Issues: read/write** access, then save it as the `RELEASE_PLEASE_TOKEN` Actions secret. The workflow uses this token so the generated release pull request triggers the existing CI checks. Do not put the token in repository files.
 
 ## Production deployment
 

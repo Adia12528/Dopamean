@@ -74,6 +74,12 @@ export interface StoreSettings {
   commissionType?: 'percentage' | 'fixed';
   defaultCourierPartner?: string;
   estimatedCraftingDays?: number;
+  deliveryStagePlacedLabel?: string;
+  deliveryStageConfirmedLabel?: string;
+  deliveryStageInPreparationLabel?: string;
+  deliveryStageShippedLabel?: string;
+  deliveryStageOutForDeliveryLabel?: string;
+  deliveryStageDeliveredLabel?: string;
   autoMarkCodPaidOnDelivered?: boolean;
   whatsappEnabled?: boolean;
   whatsappBusinessPhone?: string;

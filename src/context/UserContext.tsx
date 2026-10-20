@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { UserProfile, Order } from '../types';
 import { api } from '../services/api';
-import { getSupabaseClient, supabaseAuthEnabled } from '../lib/supabase';
+import { getEmailConfirmationRedirectUrl, getSupabaseClient, supabaseAuthEnabled } from '../lib/supabase';
 
 const USER_TOKEN_KEY = 'dopamean_user_token';
 
@@ -18,6 +18,7 @@ interface UserContextType {
   setUserAuthModalTab: (tab: 'signin' | 'signup') => void;
 
   userRegister: (data: { name: string; email: string; password: string; phone?: string }) => Promise<'signed-in' | 'confirmation-required'>;
+  userResendConfirmation: (email: string) => Promise<void>;
   userLogin: (email: string, password: string) => Promise<void>;
   userLogout: () => void;
   updateUserProfile: (updates: Partial<UserProfile> & { password?: string; currentPassword?: string }) => Promise<void>;
@@ -151,7 +152,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const { data: result, error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password,
-        options: { data: { name: data.name, phone: data.phone || '' } }
+        options: {
+          data: { name: data.name, phone: data.phone || '' },
+          emailRedirectTo: getEmailConfirmationRedirectUrl()
+        }
       });
       if (error) throw error;
       if (!result.session?.access_token) return 'confirmation-required';
@@ -167,6 +171,20 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return 'signed-in';
     }
   }, [completeSignIn]);
+
+  const userResendConfirmation = useCallback(async (email: string) => {
+    if (!supabaseAuthEnabled) {
+      throw new Error('Email confirmation is not available right now.');
+    }
+    const supabase = await getSupabaseClient();
+    if (!supabase) throw new Error('Supabase Auth is enabled but its client is unavailable.');
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: email.trim(),
+      options: { emailRedirectTo: getEmailConfirmationRedirectUrl() }
+    });
+    if (error) throw error;
+  }, []);
 
   const userLogin = useCallback(async (email: string, password: string) => {
     if (supabaseAuthEnabled) {
@@ -230,6 +248,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       closeUserAuthModal,
       setUserAuthModalTab,
       userRegister,
+      userResendConfirmation,
       userLogin,
       userLogout,
       updateUserProfile,

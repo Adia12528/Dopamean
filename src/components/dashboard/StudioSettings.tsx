@@ -27,7 +27,7 @@ import {
 import type { CodRule, ProductCardBadge } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
 
-type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials';
+type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline';
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
 
 const isValidUpiVpa = (value: string) =>
@@ -52,7 +52,7 @@ export const StudioSettings: React.FC = () => {
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'cod' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -60,7 +60,8 @@ export const StudioSettings: React.FC = () => {
     productCards: { isSaving: false, error: '' },
     lowStock: { isSaving: false, error: '' },
     trustCards: { isSaving: false, error: '' },
-    testimonials: { isSaving: false, error: '' }
+    testimonials: { isSaving: false, error: '' },
+    deliveryTimeline: { isSaving: false, error: '' }
   });
   const [validationErrors, setValidationErrors] = useState<Partial<Record<'storeName' | 'heroTitle' | 'currency' | 'upiId', string>>>({});
   const [codRuleErrors, setCodRuleErrors] = useState<Record<string, string>>({});
@@ -98,12 +99,30 @@ export const StudioSettings: React.FC = () => {
   };
   const isTrustCardsDirty = JSON.stringify(trustCardFormValues) !== JSON.stringify(trustCardSavedValues);
   const isTestimonialsDirty = (form.showTestimonialsSection === true) !== (settings.showTestimonialsSection === true);
+  const deliveryTimelineFormValues = {
+    deliveryStagePlacedLabel: form.deliveryStagePlacedLabel || 'Order placed',
+    deliveryStageConfirmedLabel: form.deliveryStageConfirmedLabel || 'Confirmed',
+    deliveryStageInPreparationLabel: form.deliveryStageInPreparationLabel || 'In preparation',
+    deliveryStageShippedLabel: form.deliveryStageShippedLabel || 'Shipped',
+    deliveryStageOutForDeliveryLabel: form.deliveryStageOutForDeliveryLabel || 'Out for delivery',
+    deliveryStageDeliveredLabel: form.deliveryStageDeliveredLabel || 'Delivered'
+  };
+  const deliveryTimelineSavedValues = {
+    deliveryStagePlacedLabel: settings.deliveryStagePlacedLabel || 'Order placed',
+    deliveryStageConfirmedLabel: settings.deliveryStageConfirmedLabel || 'Confirmed',
+    deliveryStageInPreparationLabel: settings.deliveryStageInPreparationLabel || 'In preparation',
+    deliveryStageShippedLabel: settings.deliveryStageShippedLabel || 'Shipped',
+    deliveryStageOutForDeliveryLabel: settings.deliveryStageOutForDeliveryLabel || 'Out for delivery',
+    deliveryStageDeliveredLabel: settings.deliveryStageDeliveredLabel || 'Delivered'
+  };
+  const isDeliveryTimelineDirty = JSON.stringify(deliveryTimelineFormValues) !== JSON.stringify(deliveryTimelineSavedValues);
 
   const getUnsavedScopedSections = (): { id: ScopedSettingSection; label: string }[] => [
     ...(isBadgePriorityDirty ? [{ id: 'productCards' as const, label: 'Product Card Badge Rules' }] : []),
     ...(isLowStockThresholdDirty ? [{ id: 'lowStock' as const, label: 'Low Stock Threshold' }] : []),
     ...(isTrustCardsDirty ? [{ id: 'trustCards' as const, label: 'Trust Cards' }] : []),
-    ...(isTestimonialsDirty ? [{ id: 'testimonials' as const, label: 'Testimonials' }] : [])
+    ...(isTestimonialsDirty ? [{ id: 'testimonials' as const, label: 'Testimonials' }] : []),
+    ...(isDeliveryTimelineDirty ? [{ id: 'deliveryTimeline' as const, label: 'Delivery Timeline' }] : [])
   ];
 
   const confirmLeavingUnsavedScopedSections = () => {
@@ -129,7 +148,9 @@ export const StudioSettings: React.FC = () => {
         ? 'Low Stock Threshold'
         : section === 'trustCards'
           ? 'Trust Cards'
-          : 'Testimonials';
+          : section === 'testimonials'
+            ? 'Testimonials'
+            : 'Delivery Timeline';
     const otherUnsavedSections = getUnsavedScopedSections().filter(item => item.id !== section);
     if (otherUnsavedSections.length > 0) {
       const otherSectionNames = otherUnsavedSections.map(item => item.label).join(' and ');
@@ -145,7 +166,9 @@ export const StudioSettings: React.FC = () => {
         ? { lowStockThreshold: Math.max(0, Math.floor(Number(form.lowStockThreshold) || 0)) }
         : section === 'trustCards'
           ? trustCardFormValues
-          : { showTestimonialsSection: form.showTestimonialsSection === true };
+          : section === 'testimonials'
+            ? { showTestimonialsSection: form.showTestimonialsSection === true }
+            : deliveryTimelineFormValues;
 
     setScopedSaveStates(prev => ({
       ...prev,
@@ -329,6 +352,12 @@ export const StudioSettings: React.FC = () => {
     delete payload.trustBadge4Title;
     delete payload.trustBadge4Desc;
     delete payload.showTestimonialsSection;
+    delete payload.deliveryStagePlacedLabel;
+    delete payload.deliveryStageConfirmedLabel;
+    delete payload.deliveryStageInPreparationLabel;
+    delete payload.deliveryStageShippedLabel;
+    delete payload.deliveryStageOutForDeliveryLabel;
+    delete payload.deliveryStageDeliveredLabel;
     const requiredFieldErrors: typeof validationErrors = {};
     if (!String(form.storeName || '').trim()) requiredFieldErrors.storeName = 'Enter the store or studio name.';
     if (!String(form.heroTitle || '').trim()) requiredFieldErrors.heroTitle = 'Enter the hero headline.';
@@ -494,6 +523,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
     { id: 'trustCards' as const, label: 'Trust Cards', icon: <ShieldCheck size={16} /> },
     { id: 'testimonials' as const, label: 'Testimonials', icon: <Sparkles size={16} /> },
+    { id: 'deliveryTimeline' as const, label: 'Delivery Timeline', icon: <Truck size={16} /> },
     { id: 'shipping' as const, label: 'Shipping & Inventory', icon: <Truck size={16} /> },
     { id: 'productCards' as const, label: 'Product Cards', icon: <Sliders size={16} /> },
     { id: 'lowStock' as const, label: 'Low Stock Threshold', icon: <Info size={16} /> },
@@ -559,7 +589,7 @@ export const StudioSettings: React.FC = () => {
             <span>Live Store Preview</span>
           </button>
 
-          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && (
+          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && (
             <button
               type="button"
               onClick={() => handleSave()}
@@ -629,7 +659,7 @@ export const StudioSettings: React.FC = () => {
         {/* Dynamic Section Editor */}
         <form
           onSubmit={(e) => {
-            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials') {
+            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline') {
               e.preventDefault();
               void saveScopedSection(activeSection);
               return;
@@ -1423,6 +1453,58 @@ export const StudioSettings: React.FC = () => {
                 </span>
               </label>
               {renderScopedSaveControls('testimonials', isTestimonialsDirty)}
+            </div>
+          )}
+
+          {activeSection === 'deliveryTimeline' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Truck size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Delivery Timeline Labels
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '20px', lineHeight: 1.5 }}>
+                Rename the existing order milestones shown to customers. The order workflow stages and their recorded status events cannot be added or changed here.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))', gap: '14px' }}>
+                {([
+                  { field: 'deliveryStagePlacedLabel', label: 'Order placed' },
+                  { field: 'deliveryStageConfirmedLabel', label: 'Confirmed' },
+                  { field: 'deliveryStageInPreparationLabel', label: 'In preparation' },
+                  { field: 'deliveryStageShippedLabel', label: 'Shipped' },
+                  { field: 'deliveryStageOutForDeliveryLabel', label: 'Out for delivery' },
+                  { field: 'deliveryStageDeliveredLabel', label: 'Delivered' }
+                ] as const).map(stage => (
+                  <label key={stage.field} style={{ display: 'grid', gap: '6px', fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-main)' }}>
+                    {stage.label}
+                    <input
+                      type="text"
+                      maxLength={40}
+                      value={deliveryTimelineFormValues[stage.field]}
+                      onChange={event => handleChange(stage.field, event.target.value)}
+                      style={{
+                        width: '100%',
+                        minHeight: '42px',
+                        padding: '9px 12px',
+                        borderRadius: '9px',
+                        border: '1px solid var(--border-medium)',
+                        backgroundColor: '#FFFFFF',
+                        color: 'var(--text-main)',
+                        fontSize: '0.86rem',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+              {renderScopedSaveControls('deliveryTimeline', isDeliveryTimelineDirty)}
             </div>
           )}
 
@@ -2885,7 +2967,7 @@ export const StudioSettings: React.FC = () => {
           )}
 
           {/* Legacy sections retain their existing save flow until individually migrated. */}
-          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && (
+          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && (
             <div style={{
               display: 'flex',
               justifyContent: 'flex-end',

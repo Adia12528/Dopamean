@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { UserProvider, useUser } from './context/UserContext';
 import { Navbar } from './components/common/Navbar';
@@ -14,6 +14,7 @@ const OrderTrackingModal = lazy(() => import('./components/storefront/OrderTrack
 const InvoiceModal = lazy(() => import('./components/storefront/InvoiceModal').then(module => ({ default: module.InvoiceModal })));
 const AdminLoginModal = lazy(() => import('./components/auth/AdminLoginModal').then(module => ({ default: module.AdminLoginModal })));
 const UserAuthModal = lazy(() => import('./components/auth/UserAuthModal').then(module => ({ default: module.UserAuthModal })));
+const EmailConfirmationPage = lazy(() => import('./components/auth/EmailConfirmationPage').then(module => ({ default: module.EmailConfirmationPage })));
 
 const MainApp: React.FC = () => {
   const { 
@@ -26,7 +27,28 @@ const MainApp: React.FC = () => {
     activeInvoiceOrder, 
     setActiveInvoiceOrder 
   } = useStore();
-  const { isUserAuthModalOpen } = useUser();
+  const { isUserAuthModalOpen, openUserAuthModal } = useUser();
+  const isAuthConfirmationRoute = window.location.pathname.replace(/\/+$/, '') === '/auth/confirm';
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('auth') !== 'signin') return;
+    url.searchParams.delete('auth');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+    openUserAuthModal('signin');
+  }, [openUserAuthModal]);
+
+  if (isAuthConfirmationRoute) {
+    return (
+      <>
+        <Suspense fallback={<main className="container" role="status">Confirming your email…</main>}>
+          <EmailConfirmationPage onContinue={hasSession => { window.location.assign(hasSession ? '/' : '/?auth=signin'); }} />
+        </Suspense>
+        {isUserAuthModalOpen && <Suspense fallback={null}><UserAuthModal /></Suspense>}
+        <Toast />
+      </>
+    );
+  }
 
   // Delivery agent gets its own standalone portal — no navbar/footer clutter
   if (viewMode === 'delivery') {

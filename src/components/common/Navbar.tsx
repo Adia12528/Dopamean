@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { UserProfileMenu } from '../auth/UserProfileMenu';
+import { useUser } from '../../context/UserContext';
+import { getAssetUrl } from '../../services/api';
+import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
 import { 
   ShoppingBag, 
   LayoutDashboard, 
@@ -13,8 +15,10 @@ import {
   Truck
 } from 'lucide-react';
 
+const UserProfileMenu = lazy(() => import('../auth/UserProfileMenu').then(module => ({ default: module.UserProfileMenu })));
 
 export const Navbar: React.FC = () => {
+  const { isUserLoggedIn } = useUser();
   const { 
     viewMode, 
     setViewMode, 
@@ -23,6 +27,8 @@ export const Navbar: React.FC = () => {
     searchQuery, 
     setSearchQuery,
     setDashboardTab,
+    products,
+    setSelectedProductForModal,
     offers,
     settings,
     isAdmin,
@@ -33,6 +39,16 @@ export const Navbar: React.FC = () => {
 
   const totalCartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const activeOffersCount = offers.filter(o => o.isActive).length;
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [orderHistoryRequest, setOrderHistoryRequest] = useState(0);
+  const exactSearchMatches = useMemo(() => findExactProductMatches(products, searchQuery), [products, searchQuery]);
+  const searchSuggestions = useMemo(
+    () => exactSearchMatches.length > 0
+      ? exactSearchMatches.slice(0, 5)
+      : findClosestProducts(products, searchQuery, 5),
+    [exactSearchMatches, products, searchQuery]
+  );
+  const isSearchSuggestionsVisible = viewMode === 'store' && isSearchFocused && Boolean(searchQuery.trim());
 
   return (
     <header style={{
@@ -226,7 +242,8 @@ export const Navbar: React.FC = () => {
           maxWidth: '420px',
           display: 'flex',
           alignItems: 'center',
-          position: 'relative'
+          position: 'relative',
+          zIndex: 45
         }}>
           <Search size={16} style={{
             position: 'absolute',
@@ -236,9 +253,25 @@ export const Navbar: React.FC = () => {
           }} />
           <input
             type="text"
-            placeholder="Search bags, bucket hats, charms..."
+            placeholder="Search hair clips, scrunchies, bags..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onFocus={(e) => {
+              setIsSearchFocused(true);
+              e.target.style.borderColor = 'var(--accent-terracotta)';
+            }}
+            onBlur={(e) => {
+              window.setTimeout(() => setIsSearchFocused(false), 150);
+              e.target.style.borderColor = 'var(--border-medium)';
+            }}
+            onKeyDown={event => {
+              if (event.key === 'Escape') setIsSearchFocused(false);
+            }}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={isSearchSuggestionsVisible}
+            aria-controls="store-product-search-suggestions"
+            aria-label="Search products"
             style={{
               width: '100%',
               minHeight: '38px',
@@ -252,8 +285,6 @@ export const Navbar: React.FC = () => {
               transition: 'var(--transition-smooth)',
               boxSizing: 'border-box'
             }}
-            onFocus={(e) => e.target.style.borderColor = 'var(--accent-terracotta)'}
-            onBlur={(e) => e.target.style.borderColor = 'var(--border-medium)'}
           />
           {searchQuery && (
             <button
@@ -274,6 +305,77 @@ export const Navbar: React.FC = () => {
             >
               ✕
             </button>
+          )}
+          {isSearchSuggestionsVisible && (
+            <div
+              id="store-product-search-suggestions"
+              role="listbox"
+              aria-label="Product search suggestions"
+              style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                left: 0,
+                right: 0,
+                maxHeight: 'min(420px, 70vh)',
+                overflowY: 'auto',
+                padding: '8px',
+                borderRadius: '14px',
+                border: '1px solid var(--border-medium)',
+                background: '#FFFFFF',
+                boxShadow: '0 16px 36px rgba(35, 28, 22, 0.18)',
+                zIndex: 50
+              }}
+            >
+              <p style={{ margin: '4px 8px 8px', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {exactSearchMatches.length > 0 ? 'Matching products' : 'Closest matches'}
+              </p>
+              {searchSuggestions.length > 0 ? searchSuggestions.map(product => (
+                <button
+                  key={product.id}
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  onMouseDown={event => event.preventDefault()}
+                  onClick={() => {
+                    setSelectedProductForModal(product);
+                    setIsSearchFocused(false);
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    padding: '8px',
+                    border: 0,
+                    borderRadius: '10px',
+                    background: 'transparent',
+                    textAlign: 'left',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={event => { event.currentTarget.style.background = 'var(--bg-surface-soft)'; }}
+                  onMouseLeave={event => { event.currentTarget.style.background = 'transparent'; }}
+                >
+                  <img
+                    src={getAssetUrl(product.image)}
+                    alt=""
+                    loading="lazy"
+                    style={{ width: '46px', height: '46px', objectFit: 'cover', borderRadius: '8px', background: 'var(--bg-surface-soft)', flexShrink: 0 }}
+                  />
+                  <span style={{ minWidth: 0, display: 'grid', gap: '3px' }}>
+                    <strong style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-main)', fontSize: '0.84rem' }}>
+                      {product.title}
+                    </strong>
+                    <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+                      {product.category} · {settings.currency}{product.price.toFixed(2)}
+                    </span>
+                  </span>
+                </button>
+              )) : (
+                <p style={{ padding: '8px', margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  No close product names yet. Try a shorter search.
+                </p>
+              )}
+            </div>
           )}
         </div>
 
@@ -339,8 +441,11 @@ export const Navbar: React.FC = () => {
           {viewMode === 'store' && (
             <>
               <button
-                onClick={() => setIsTrackingModalOpen(true)}
-                title="Track your order"
+                onClick={() => {
+                  if (isUserLoggedIn) setOrderHistoryRequest(value => value + 1);
+                  else setIsTrackingModalOpen(true);
+                }}
+                title={isUserLoggedIn ? 'View your order history and delivery progress' : 'Track an order with order ID and checkout email'}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -366,11 +471,13 @@ export const Navbar: React.FC = () => {
                 }}
               >
                 <Truck size={15} />
-                <span className="hide-on-mobile-sm">Track Order</span>
+                <span className="hide-on-mobile-sm">{isUserLoggedIn ? 'My Orders' : 'Track Order'}</span>
               </button>
 
               {/* User Account (Sign In or Avatar Menu) */}
-              <UserProfileMenu />
+              <Suspense fallback={<span role="status" aria-label="Loading account" style={{ width: 42, height: 34 }} />}>
+                <UserProfileMenu orderHistoryRequest={orderHistoryRequest} />
+              </Suspense>
             </>
           )}
 

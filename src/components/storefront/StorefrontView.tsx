@@ -8,21 +8,25 @@ import { PendingPaymentRecoveryBanner } from './PendingPaymentRecoveryBanner';
 import { CategoryFilter } from './CategoryFilter';
 import { ProductCard } from './ProductCard';
 import { Sparkles } from 'lucide-react';
+import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
 
 export const StorefrontView: React.FC = () => {
-  const { products, selectedCategory, searchQuery, setViewMode, setDashboardTab, settings, loadSampleTemplate, isAdmin, isLoading } = useStore();
+  const { products, selectedCategory, searchQuery, setSearchQuery, setViewMode, setDashboardTab, settings, loadSampleTemplate, isAdmin, isLoading } = useStore();
 
-  const filteredProducts = useMemo(() => {
-    return products.filter(product => {
-      const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-      const matchesSearch = 
-        product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.tags.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesCategory && matchesSearch;
-    });
+  const exactProducts = useMemo(() => {
+    const categoryProducts = selectedCategory === 'All'
+      ? products
+      : products.filter(product => product.category === selectedCategory);
+    return findExactProductMatches(categoryProducts, searchQuery);
   }, [products, selectedCategory, searchQuery]);
+  const closeMatchProducts = useMemo(
+    () => searchQuery.trim() && exactProducts.length === 0
+      ? findClosestProducts(products, searchQuery)
+      : [],
+    [products, searchQuery, exactProducts.length]
+  );
+  const filteredProducts = exactProducts.length > 0 ? exactProducts : closeMatchProducts;
+  const isShowingCloseMatches = searchQuery.trim().length > 0 && exactProducts.length === 0 && closeMatchProducts.length > 0;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -69,7 +73,9 @@ export const StorefrontView: React.FC = () => {
                 color: 'var(--text-main)',
                 marginTop: '4px'
               }}>
-                {selectedCategory === 'All' ? 'All Handcrafted Accessories' : selectedCategory}
+                {isShowingCloseMatches
+                  ? `Closest matches for “${searchQuery.trim()}”`
+                  : selectedCategory === 'All' ? 'All Handcrafted Accessories' : selectedCategory}
               </h2>
             </div>
 
@@ -80,7 +86,20 @@ export const StorefrontView: React.FC = () => {
               alignItems: 'center',
               gap: '12px'
             }}>
-              <span>Showing <strong>{filteredProducts.length}</strong> creations</span>
+              <span>
+                {isShowingCloseMatches ? 'Showing similar products' : 'Showing'}{' '}
+                <strong>{filteredProducts.length}</strong> creations
+                {isShowingCloseMatches && selectedCategory !== 'All' ? ' across all collections' : ''}
+              </span>
+              {searchQuery.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  style={{ color: 'var(--accent-terracotta)', fontWeight: 700, background: 'none', border: 0, cursor: 'pointer' }}
+                >
+                  Clear search
+                </button>
+              )}
               {isAdmin && (
                 <button
                   onClick={() => {
@@ -157,15 +176,22 @@ export const StorefrontView: React.FC = () => {
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: '12px', color: 'var(--text-main)' }}>
                 {products.length === 0 
                   ? (isAdmin ? 'Your Catalog is Ready!' : 'New Creations Coming Soon!') 
-                  : 'No matches found'}
+                  : searchQuery.trim() ? 'No close matches found' : 'No matches found'}
               </h3>
               <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '4px', marginBottom: '20px' }}>
                 {products.length === 0
                   ? (isAdmin 
                       ? 'Add your latest handmade creations and photos in the Studio Dashboard.' 
                       : 'Our studio artisans are currently hand-stitching new pieces. Check back soon or browse other categories!')
-                  : 'Try adjusting your search terms or selecting another category.'}
+                  : searchQuery.trim()
+                    ? 'Try a shorter or different product name, or clear your search to browse the full collection.'
+                    : 'Try adjusting your search terms or selecting another category.'}
               </p>
+              {searchQuery.trim() && (
+                <button type="button" onClick={() => setSearchQuery('')} className="btn-secondary">
+                  Clear search and browse all products
+                </button>
+              )}
               
               {products.length === 0 && isAdmin && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' }}>
