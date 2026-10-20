@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { Pool } from 'pg';
 import { DEFAULT_SETTINGS } from './default-settings.js';
+import { isProductCodEligible } from './cod-policy.js';
 
 const pool = new Pool({
   connectionString: process.env.SUPABASE_DB_URL,
@@ -161,10 +162,12 @@ export const postgresDb = {
       if (!Array.isArray(orderData.items) || !orderData.items.length) throw new Error('EMPTY_ORDER');
       const quantities = new Map();
       for (const item of orderData.items) { const qty = Number(item.quantity); if (!item.productId || !Number.isSafeInteger(qty) || qty < 1) throw new Error('INVALID_QUANTITY'); quantities.set(item.productId, (quantities.get(item.productId) || 0) + qty); }
+      const settings = await settingsWith(client);
       const products = []; let subtotal = 0;
       for (const [productId, quantity] of quantities) {
         const { rows } = await client.query('SELECT data FROM products WHERE id=$1 FOR UPDATE', [productId]);
         if (!rows[0]) throw new Error('PRODUCT_NOT_FOUND'); const product = parse(rows[0].data);
+        if (paymentMethod === 'cod' && !isProductCodEligible(product, settings.codRules || [])) throw new Error('COD_NOT_AVAILABLE_FOR_ITEMS');
         if (!Number.isSafeInteger(product.stock) || product.stock < quantity) throw new Error('INSUFFICIENT_STOCK');
         const item = { productId, productTitle: product.title, price: Number(product.price), quantity, image: product.image, color: orderData.items.find(entry => entry.productId === productId)?.color };
         subtotal += item.price * quantity; products.push({ product, item, remainingStock: product.stock - quantity });
@@ -176,7 +179,7 @@ export const postgresDb = {
         if (!offer || (start && now < start) || (end && now > end) || subtotal < Number(offer.minOrderValue || 0)) throw new Error('INVALID_PROMO');
         discountAmount = Number((offer.discountType === 'percentage' ? subtotal * Number(offer.discountValue) / 100 : Math.min(subtotal, Number(offer.discountValue))).toFixed(2)); promoCodeApplied = offer.code;
       }
-      const settings = await settingsWith(client); const threshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299)); const shippingAmount = subtotal === 0 || subtotal >= threshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40)); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
+      const threshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299)); const shippingAmount = subtotal === 0 || subtotal >= threshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40)); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
       const id = `ORD-${crypto.randomUUID()}`; const createdAt = new Date().toISOString();
       const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
       await insertOrder(client, order); for (const entry of products) await saveProduct(client, { ...entry.product, stock: entry.remainingStock });

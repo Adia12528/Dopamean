@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { downloadInvoicePDF } from '../../utils/downloadInvoicePdf';
 import { createWhatsAppUrl, getWhatsAppTemplate, isWhatsAppEnabled, renderWhatsAppTemplate } from '../../lib/whatsapp';
+import { isCartCodEligible, isProductCodEligible } from '../../lib/codPolicy';
 
 const isValidUpiVpa = (value?: string) =>
   Boolean(value && /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim()));
@@ -128,10 +129,18 @@ export const CartDrawer: React.FC = () => {
   const upiId = settings.upiId?.trim() || '';
   const upiPayeeName = settings.upiPayeeName?.trim() || settings.storeName || '';
   const hasValidUpiId = settings.paymentUpiEnabled !== false && isValidUpiVpa(upiId);
+  const codUnavailableProducts = cart
+    .filter(item => !isProductCodEligible(item.product, settings.codRules || []))
+    .map(item => ({
+      id: item.product.id,
+      name: item.product.title,
+      category: item.product.category
+    }));
+  const isCodAvailableForCart = isCartCodEligible(cart.map(item => item.product), settings);
   const availablePaymentMethods = [
     ...(hasValidUpiId ? ['upi' as const] : []),
     ...(settings.paymentRazorpayEnabled ? ['razorpay' as const] : []),
-    ...(settings.paymentCodEnabled !== false ? ['cod' as const] : [])
+    ...(isCodAvailableForCart ? ['cod' as const] : [])
   ];
   const paymentMethod = availablePaymentMethods.includes(selectedPaymentMethod)
     ? selectedPaymentMethod
@@ -768,6 +777,58 @@ export const CartDrawer: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {settings.paymentCodEnabled !== false && codUnavailableProducts.length > 0 && (
+                <div role="status" style={{
+                  marginTop: '10px',
+                  padding: '14px',
+                  borderRadius: '12px',
+                  border: '1px solid #FDE68A',
+                  background: '#FFFBEB',
+                  color: '#78350F',
+                  fontSize: '0.82rem',
+                  lineHeight: 1.5
+                }}>
+                  <div style={{ fontWeight: 800, marginBottom: '4px' }}>
+                    Cash on Delivery is unavailable for this entire cart
+                  </div>
+                  <div style={{ color: '#92400E', marginBottom: '10px' }}>
+                    COD is disabled for the product{codUnavailableProducts.length === 1 ? '' : 's'} below. Because your order contains {codUnavailableProducts.length === 1 ? 'this item' : 'these items'}, COD cannot be selected for any item in this cart. Choose UPI or Razorpay to continue.
+                  </div>
+                  <div style={{ display: 'grid', gap: '7px' }}>
+                    {codUnavailableProducts.map(product => (
+                      <div
+                        key={product.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '10px',
+                          flexWrap: 'wrap',
+                          padding: '9px 11px',
+                          borderRadius: '9px',
+                          background: '#FFFFFF',
+                          border: '1px solid #FDE68A'
+                        }}
+                      >
+                        <span style={{ fontWeight: 700, color: '#451A03' }}>{product.name}</span>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          padding: '3px 8px',
+                          borderRadius: '999px',
+                          background: '#FEF3C7',
+                          color: '#92400E',
+                          fontSize: '0.7rem',
+                          fontWeight: 800
+                        }}>
+                          {product.category || 'Uncategorized'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {availablePaymentMethods.length === 0 && (
                 <div role="alert" style={{

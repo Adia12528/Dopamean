@@ -45,6 +45,7 @@ export interface StoreSettings {
   shippingFee: number;
   lowStockThreshold: number;
   shippingNotice?: string;
+  codRules?: CodRule[];
   
   // Contact & Socials
   contactEmail: string;
@@ -131,7 +132,16 @@ export interface Product {
   isFeatured?: boolean;
   isBestSeller?: boolean;
   maxOrderQuantity?: number;
+  codAvailability?: 'inherit' | 'enabled' | 'disabled';
   createdAt: string;
+}
+
+export interface CodRule {
+  id: string;
+  category?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  availability: 'enabled' | 'disabled';
 }
 
 export interface Review {

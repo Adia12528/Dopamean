@@ -24,6 +24,7 @@ import {
   KeyRound,
   ShieldAlert
 } from 'lucide-react';
+import type { CodRule } from '../../types';
 
 const isValidUpiVpa = (value: string) =>
   /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim());
@@ -40,14 +41,14 @@ const COLOR_PRESETS = [
 ];
 
 export const StudioSettings: React.FC = () => {
-  const { settings, updateSettings, resetDatabase, loadSampleTemplate, setViewMode } = useStore();
+  const { settings, products, updateSettings, resetDatabase, loadSampleTemplate, setViewMode } = useStore();
   const minimumServerPasscodeLength = import.meta.env.PROD ? 12 : 6;
   
   const heroFileInputRef = useRef<HTMLInputElement>(null);
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'perks' | 'shipping' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'perks' | 'shipping' | 'cod' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
@@ -73,6 +74,25 @@ export const StudioSettings: React.FC = () => {
 
   const handleChange = <K extends keyof typeof form>(field: K, val: (typeof form)[K]) => {
     setForm(prev => ({ ...prev, [field]: val }));
+  };
+
+  const addCodRule = () => {
+    const rule: CodRule = {
+      id: crypto.randomUUID(),
+      availability: 'disabled'
+    };
+    setForm(prev => ({ ...prev, codRules: [...(prev.codRules || []), rule] }));
+  };
+
+  const updateCodRule = (id: string, changes: Partial<CodRule>) => {
+    setForm(prev => ({
+      ...prev,
+      codRules: (prev.codRules || []).map(rule => rule.id === id ? { ...rule, ...changes } : rule)
+    }));
+  };
+
+  const removeCodRule = (id: string) => {
+    setForm(prev => ({ ...prev, codRules: (prev.codRules || []).filter(rule => rule.id !== id) }));
   };
 
   const handleHeroUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -112,6 +132,21 @@ export const StudioSettings: React.FC = () => {
     delete payload.deliveryAgentPasscode;
     delete payload.razorpayKeySecret;
     delete payload.razorpayWebhookSecret;
+    for (const rule of payload.codRules || []) {
+      const hasPriceCondition = rule.minPrice !== undefined || rule.maxPrice !== undefined;
+      if (!rule.category && !hasPriceCondition) {
+        alert('Each Cash on Delivery rule must target a category, a price range, or both.');
+        return false;
+      }
+      if (
+        (rule.minPrice !== undefined && (!Number.isFinite(rule.minPrice) || rule.minPrice < 0)) ||
+        (rule.maxPrice !== undefined && (!Number.isFinite(rule.maxPrice) || rule.maxPrice < 0)) ||
+        (rule.minPrice !== undefined && rule.maxPrice !== undefined && rule.minPrice > rule.maxPrice)
+      ) {
+        alert('Check the minimum and maximum prices in your Cash on Delivery rules.');
+        return false;
+      }
+    }
     if (payload.paymentUpiEnabled !== false) {
       const upiId = String(payload.upiId || '').trim();
       if (!isValidUpiVpa(upiId)) {
@@ -224,6 +259,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
     { id: 'perks' as const, label: 'Trust Badges & Perks', icon: <ShieldCheck size={16} /> },
     { id: 'shipping' as const, label: 'Shipping & Inventory', icon: <Truck size={16} /> },
+    { id: 'cod' as const, label: 'COD Eligibility Rules', icon: <Truck size={16} /> },
     { id: 'whatsapp' as const, label: 'WhatsApp Messages', icon: <MessageCircle size={16} /> },
     { id: 'payments' as const, label: 'Payment Gateways & UPI', icon: <CreditCard size={16} /> },
     { id: 'contact' as const, label: 'Contact & Socials', icon: <MessageCircle size={16} /> },
@@ -1193,6 +1229,145 @@ export const StudioSettings: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* CASH ON DELIVERY ELIGIBILITY RULES */}
+          {activeSection === 'cod' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: 'clamp(18px, 4vw, 28px)',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Truck size={20} color="var(--accent-terracotta)" />
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                    Cash on Delivery Eligibility
+                  </h3>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', fontSize: '0.82rem', fontWeight: 700 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.paymentCodEnabled !== false}
+                      onChange={e => handleChange('paymentCodEnabled', e.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
+                    />
+                    COD globally enabled
+                  </label>
+                  <button
+                    type="button"
+                    onClick={addCodRule}
+                    className="btn-secondary"
+                    style={{ padding: '9px 14px', fontSize: '0.82rem' }}
+                  >
+                    + Add COD rule
+                  </button>
+                </div>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '16px', lineHeight: 1.55 }}>
+                Control COD by individual product, existing product category, and selling-price range. Categories are managed in the product editor; rules apply automatically as products or prices change.
+              </p>
+              <div style={{ padding: '13px 15px', borderRadius: '12px', background: '#F8FAFC', border: '1px solid #E2E8F0', color: '#334155', fontSize: '0.79rem', lineHeight: 1.5, marginBottom: '18px' }}>
+                <strong>How rules combine:</strong> a product’s explicit COD choice wins. Otherwise, if any matching category/price rule denies COD, it is unavailable; with no matching deny rule COD remains allowed (when the global COD method is enabled). If a cart contains even one excluded product, COD is disabled for the entire cart.
+              </div>
+
+              {(form.codRules || []).length === 0 ? (
+                <div style={{ padding: '24px 16px', textAlign: 'center', border: '1px dashed var(--border-medium)', borderRadius: '14px', color: 'var(--text-muted)' }}>
+                  <strong style={{ display: 'block', color: 'var(--text-main)', marginBottom: '5px' }}>No category or price restrictions</strong>
+                  COD is currently allowed for all products unless you change an individual product setting.
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: '12px' }}>
+                  {(form.codRules || []).map((rule, index) => (
+                    <div key={rule.id} style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 175px), 1fr))',
+                      gap: '12px',
+                      alignItems: 'end',
+                      padding: '15px',
+                      border: '1px solid var(--border-medium)',
+                      borderRadius: '14px',
+                      background: 'var(--bg-surface-soft)'
+                    }}>
+                      <div>
+                        <label htmlFor={`cod-rule-category-${rule.id}`} style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, marginBottom: '5px' }}>
+                          Category
+                        </label>
+                        <select
+                          id={`cod-rule-category-${rule.id}`}
+                          value={rule.category || ''}
+                          onChange={e => updateCodRule(rule.id, { category: e.target.value || undefined })}
+                          style={{ width: '100%', minHeight: '42px', padding: '8px 10px', borderRadius: '9px', border: '1px solid var(--border-medium)', background: '#FFFFFF', fontSize: '0.84rem' }}
+                        >
+                          <option value="">Any category</option>
+                          {Array.from(new Set(products.map(product => product.category).filter(Boolean))).sort().map(category => (
+                            <option key={category} value={category}>{category}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor={`cod-rule-min-${rule.id}`} style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, marginBottom: '5px' }}>
+                          Minimum price ({form.currency})
+                        </label>
+                        <input
+                          id={`cod-rule-min-${rule.id}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="No minimum"
+                          value={rule.minPrice ?? ''}
+                          onChange={e => updateCodRule(rule.id, { minPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
+                          style={{ width: '100%', minHeight: '42px', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '9px', border: '1px solid var(--border-medium)', fontSize: '0.84rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={`cod-rule-max-${rule.id}`} style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, marginBottom: '5px' }}>
+                          Maximum price ({form.currency})
+                        </label>
+                        <input
+                          id={`cod-rule-max-${rule.id}`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="No maximum"
+                          value={rule.maxPrice ?? ''}
+                          onChange={e => updateCodRule(rule.id, { maxPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
+                          style={{ width: '100%', minHeight: '42px', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '9px', border: '1px solid var(--border-medium)', fontSize: '0.84rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor={`cod-rule-action-${rule.id}`} style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, marginBottom: '5px' }}>
+                          COD for matches
+                        </label>
+                        <select
+                          id={`cod-rule-action-${rule.id}`}
+                          value={rule.availability}
+                          onChange={e => updateCodRule(rule.id, { availability: e.target.value as CodRule['availability'] })}
+                          style={{ width: '100%', minHeight: '42px', padding: '8px 10px', borderRadius: '9px', border: '1px solid var(--border-medium)', background: '#FFFFFF', fontSize: '0.84rem' }}
+                        >
+                          <option value="disabled">Do not allow COD</option>
+                          <option value="enabled">Allow COD</option>
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeCodRule(rule.id)}
+                        aria-label={`Remove COD rule ${index + 1}`}
+                        style={{ minHeight: '42px', padding: '8px 12px', borderRadius: '9px', border: '1px solid #FECACA', background: '#FEF2F2', color: '#B91C1C', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Remove rule
+                      </button>
+                      <div style={{ gridColumn: '1 / -1', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                        Leave category and both prices blank to match all products. For a price band, enter one or both limits. Matching rules that deny COD take precedence over other rules.
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

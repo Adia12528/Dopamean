@@ -290,6 +290,20 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                     </div>
                   </div>
 
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '12px', fontSize: '0.78rem', fontWeight: 600 }}>
+                    <span>Cash on Delivery</span>
+                    <select
+                      aria-label={`Cash on Delivery setting for ${p.title}`}
+                      value={p.codAvailability || 'inherit'}
+                      onChange={e => updateProduct(p.id, { codAvailability: e.target.value as Product['codAvailability'] })}
+                      style={{ minHeight: '36px', maxWidth: '190px', padding: '6px 9px', borderRadius: '8px', border: '1px solid var(--border-medium)', background: '#FFFFFF', fontSize: '0.76rem' }}
+                    >
+                      <option value="inherit">Use COD rules</option>
+                      <option value="enabled">Allow COD</option>
+                      <option value="disabled">Disable COD</option>
+                    </select>
+                  </label>
+
                   {/* Price & actions */}
                   <div style={{
                     display: 'flex',
@@ -368,6 +382,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                 <th style={{ padding: '14px 20px' }}>Category</th>
                 <th style={{ padding: '14px 20px' }}>Price</th>
                 <th style={{ padding: '14px 20px' }}>Yarn Specs</th>
+                <th style={{ padding: '14px 20px' }}>Cash on Delivery</th>
                 <th style={{ padding: '14px 20px' }}>Stock Level</th>
                 <th style={{ padding: '14px 20px', textAlign: 'right' }}>Actions</th>
               </tr>
@@ -396,6 +411,18 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                   </td>
                   <td style={{ padding: '14px 20px', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
                     {p.yarnType}
+                  </td>
+                  <td style={{ padding: '14px 20px' }}>
+                    <select
+                      aria-label={`Cash on Delivery setting for ${p.title}`}
+                      value={p.codAvailability || 'inherit'}
+                      onChange={e => updateProduct(p.id, { codAvailability: e.target.value as Product['codAvailability'] })}
+                      style={{ minHeight: '36px', maxWidth: '190px', padding: '6px 9px', borderRadius: '8px', border: '1px solid var(--border-medium)', background: '#FFFFFF', fontSize: '0.76rem' }}
+                    >
+                      <option value="inherit">Use COD rules</option>
+                      <option value="enabled">Allow COD</option>
+                      <option value="disabled">Disable COD</option>
+                    </select>
                   </td>
                   <td style={{ padding: '14px 20px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

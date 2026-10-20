@@ -44,6 +44,7 @@ const buildInitialFormState = (editProduct?: Product | null) => {
       tagsInput: 'Handmade, Floral, Crochet',
       isBestSeller: false,
       isFeatured: true,
+      codAvailability: 'inherit' as const,
     };
   }
 
@@ -68,6 +69,7 @@ const buildInitialFormState = (editProduct?: Product | null) => {
     tagsInput: editProduct.tags ? editProduct.tags.join(', ') : 'Handmade, Floral',
     isBestSeller: !!editProduct.isBestSeller,
     isFeatured: editProduct.isFeatured !== false,
+    codAvailability: editProduct.codAvailability || 'inherit',
   };
 };
 
@@ -96,6 +98,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
   const [tagsInput, setTagsInput] = useState(initialForm.tagsInput);
   const [isBestSeller, setIsBestSeller] = useState(initialForm.isBestSeller);
   const [isFeatured, setIsFeatured] = useState(initialForm.isFeatured);
+  const [codAvailability, setCodAvailability] = useState<'inherit' | 'enabled' | 'disabled'>(initialForm.codAvailability);
 
   const [isMainUploading, setIsMainUploading] = useState(false);
   const [isSecondaryUploading, setIsSecondaryUploading] = useState(false);
@@ -183,7 +186,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       description: description.trim(),
       tags,
       isBestSeller,
-      isFeatured
+      isFeatured,
+      codAvailability
     };
 
     if (editProduct) {
@@ -673,6 +677,30 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
                   Customers can order at most this many pieces per item. Leave blank for unlimited.
                 </span>
+              </div>
+            </div>
+
+            <div style={{
+              padding: '16px',
+              borderRadius: '14px',
+              border: '1px solid var(--border-medium)',
+              background: 'var(--bg-surface-soft)'
+            }}>
+              <label htmlFor="product-cod-availability" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                Cash on Delivery for this product
+              </label>
+              <select
+                id="product-cod-availability"
+                value={codAvailability}
+                onChange={(e) => setCodAvailability(e.target.value as 'inherit' | 'enabled' | 'disabled')}
+                style={{ width: '100%', maxWidth: '420px', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', fontSize: '0.9rem', background: '#FFFFFF' }}
+              >
+                <option value="inherit">Use category and price rules</option>
+                <option value="enabled">Allow COD for this product</option>
+                <option value="disabled">Do not allow COD for this product</option>
+              </select>
+              <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '5px', lineHeight: 1.45 }}>
+                Product-level choice overrides category and price rules.
               </div>
             </div>
 

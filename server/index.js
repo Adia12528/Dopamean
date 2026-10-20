@@ -788,6 +788,35 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
       }
       changes.upiId = upiId;
     }
+    if (changes.codRules !== undefined) {
+      if (!Array.isArray(changes.codRules) || changes.codRules.length > 100) {
+        return res.status(400).json({ error: 'Cash on Delivery rules must be a list of at most 100 rules.' });
+      }
+      for (const rule of changes.codRules) {
+        const category = String(rule?.category || '').trim();
+        const hasMin = rule?.minPrice !== undefined && rule.minPrice !== '';
+        const hasMax = rule?.maxPrice !== undefined && rule.maxPrice !== '';
+        const minPrice = hasMin ? Number(rule.minPrice) : undefined;
+        const maxPrice = hasMax ? Number(rule.maxPrice) : undefined;
+        if (
+          !rule?.id ||
+          !['enabled', 'disabled'].includes(rule.availability) ||
+          (!category && !hasMin && !hasMax) ||
+          (hasMin && (!Number.isFinite(minPrice) || minPrice < 0)) ||
+          (hasMax && (!Number.isFinite(maxPrice) || maxPrice < 0)) ||
+          (hasMin && hasMax && minPrice > maxPrice)
+        ) {
+          return res.status(400).json({ error: 'Each Cash on Delivery rule needs a category or price range, a valid status, and a valid price range.' });
+        }
+      }
+      changes.codRules = changes.codRules.map(rule => ({
+        id: String(rule.id),
+        category: String(rule.category || '').trim() || undefined,
+        minPrice: rule.minPrice === undefined || rule.minPrice === '' ? undefined : Number(rule.minPrice),
+        maxPrice: rule.maxPrice === undefined || rule.maxPrice === '' ? undefined : Number(rule.maxPrice),
+        availability: rule.availability
+      }));
+    }
     const updated = await db.updateSettings(changes);
     const sanitized = { ...updated };
     delete sanitized.adminPasscode;
@@ -980,7 +1009,7 @@ app.post('/api/orders', orderLimit, async (req, res) => {
     const newOrder = await db.createOrder(req.body);
     res.status(201).json(newOrder);
   } catch (err) {
-    const clientErrors = ['INVALID_CUSTOMER', 'EMPTY_ORDER', 'INVALID_QUANTITY', 'PRODUCT_NOT_FOUND', 'INSUFFICIENT_STOCK', 'INVALID_PROMO', 'INVALID_PAYMENT_METHOD'];
+    const clientErrors = ['INVALID_CUSTOMER', 'EMPTY_ORDER', 'INVALID_QUANTITY', 'PRODUCT_NOT_FOUND', 'INSUFFICIENT_STOCK', 'INVALID_PROMO', 'INVALID_PAYMENT_METHOD', 'COD_NOT_AVAILABLE_FOR_ITEMS'];
     if (clientErrors.includes(err.message)) return res.status(400).json({ error: err.message });
     console.error('Create order error:', err);
     res.status(500).json({ error: 'Failed to create order' });

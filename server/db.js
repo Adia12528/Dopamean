@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { DEFAULT_SETTINGS } from './default-settings.js';
+import { isProductCodEligible } from './cod-policy.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -508,10 +509,14 @@ const sqliteDb = {
       }
 
       const products = [];
+      const settings = db.getSettings();
       let subtotal = 0;
       for (const [productId, quantity] of quantities) {
         const product = db.getProductById(productId);
         if (!product) throw new Error('PRODUCT_NOT_FOUND');
+        if (paymentMethod === 'cod' && !isProductCodEligible(product, settings.codRules || [])) {
+          throw new Error('COD_NOT_AVAILABLE_FOR_ITEMS');
+        }
         if (!Number.isSafeInteger(product.stock) || product.stock < quantity) throw new Error('INSUFFICIENT_STOCK');
         const item = {
           productId,
@@ -544,7 +549,6 @@ const sqliteDb = {
         promoCodeApplied = offer.code;
       }
 
-      const settings = db.getSettings();
       const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299));
       const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40));
       const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
