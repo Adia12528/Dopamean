@@ -1984,15 +1984,25 @@ input, textarea, select {
   body { overflow-x: clip; }
   .container { width: 100%; max-width: 100%; padding-inline: 14px; }
 
-  .nav-brand-wrapper { min-width: 0; max-width: calc(100% - 132px); gap: 7px !important; }
+  header > .container {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+    gap: 8px;
+    padding-top: 9px !important;
+    padding-bottom: 9px !important;
+  }
+
+  .nav-brand-wrapper { width: 100%; min-width: 0; max-width: 100%; gap: 7px !important; }
   .nav-brand-wrapper > div:last-child { min-width: 0; }
   .nav-brand-wrapper > div:last-child > div > span:first-child {
-    display: inline-block; max-width: 36vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: inline-block; max-width: 100%; overflow: visible; text-overflow: clip; white-space: nowrap;
   }
-  .nav-actions-wrapper { max-width: 100%; gap: 5px !important; }
-  .nav-actions-wrapper > button { min-height: 40px; padding: 7px 9px !important; }
+  .nav-actions-wrapper { width: 100%; max-width: 100%; margin-left: 0; justify-content: space-between; gap: 6px !important; }
+  .nav-actions-wrapper > button { flex: 1 1 0; min-width: 44px; min-height: 44px; justify-content: center; padding: 7px 6px !important; }
   .nav-actions-wrapper .btn-primary { padding: 8px 10px !important; }
-  .nav-search-wrapper { flex: 1 0 100% !important; order: 3; max-width: none !important; }
+  .nav-search-wrapper { width: 100%; min-height: 44px; flex: 1 0 100% !important; order: 3; max-width: none !important; }
+  .nav-search-wrapper input { min-height: 44px !important; }
 
   .mobile-modal-overlay {
     align-items: flex-start !important;
@@ -2209,10 +2219,10 @@ input, textarea, select {
 }
 
 @media (max-width: 380px) {
-  .nav-brand-wrapper { max-width: calc(100% - 118px); }
-  .nav-brand-wrapper > div:last-child > div > span:first-child { max-width: 30vw; font-size: 1.08rem !important; }
-  .nav-actions-wrapper { gap: 3px !important; }
-  .nav-actions-wrapper > button { padding-inline: 7px !important; }
+  .nav-brand-wrapper { max-width: 100%; }
+  .nav-brand-wrapper > div:last-child > div > span:first-child { max-width: 100%; font-size: 1.08rem !important; }
+  .nav-actions-wrapper { gap: 4px !important; }
+  .nav-actions-wrapper > button { padding-inline: 5px !important; }
   .nav-actions-wrapper > button:last-child span { display: none; }
   .nav-actions-wrapper > button:last-child { width: 40px; justify-content: center; }
   .mobile-modal-overlay { padding-inline: 6px !important; }
