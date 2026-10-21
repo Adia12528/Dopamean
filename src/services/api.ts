@@ -168,6 +168,30 @@ export const api = {
     return res.json();
   },
 
+  uploadUpiPaymentProof: async (orderId: string, file: File, userToken: string): Promise<Order> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch(`${BASE_URL}/api/orders/${encodeURIComponent(orderId)}/payment-proof`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${userToken}` },
+      body: formData
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to upload payment screenshot');
+    }
+    return res.json();
+  },
+
+  getUpiPaymentProof: async (orderId: string): Promise<Blob> => {
+    const res = await adminFetch(`${BASE_URL}/api/orders/${encodeURIComponent(orderId)}/payment-proof`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to load payment screenshot');
+    }
+    return res.blob();
+  },
+
   updateOrderStatus: async (
     orderId: string, 
     status: Order['status'], 

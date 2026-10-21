@@ -62,7 +62,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Top action bar */}
-      <div style={{
+      <div className="dashboard-action-bar" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -74,9 +74,9 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
         border: '1px solid var(--border-medium)',
         boxShadow: 'var(--shadow-sm)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1 }}>
+        <div className="dashboard-product-filters" style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', flex: 1 }}>
           {/* Search bar */}
-          <div style={{ position: 'relative', minWidth: '240px', flex: 1, maxWidth: '360px' }}>
+          <div className="dashboard-product-search" style={{ position: 'relative', minWidth: '240px', flex: 1, maxWidth: '360px' }}>
             <Search size={16} style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--text-subtle)' }} />
             <input
               type="text"
@@ -113,7 +113,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
           </select>
 
           {/* View toggle */}
-          <div style={{ display: 'flex', border: '1px solid var(--border-medium)', borderRadius: '10px', overflow: 'hidden' }}>
+          <div className="dashboard-view-switcher" style={{ display: 'flex', border: '1px solid var(--border-medium)', borderRadius: '10px', overflow: 'hidden' }}>
             <button
               onClick={() => setViewStyle('grid')}
               style={{
@@ -142,7 +142,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
         {/* Add Product Button */}
         <button
           onClick={onOpenAddModal}
-          className="btn-primary"
+          className="btn-primary dashboard-primary-action"
           style={{ padding: '10px 20px' }}
         >
           <Plus size={18} />
@@ -152,7 +152,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
 
       {/* Product Content: Grid or Table */}
       {filtered.length === 0 ? (
-        <div style={{
+        <div className="dashboard-product-grid" style={{
           textAlign: 'center',
           padding: '60px 20px',
           backgroundColor: '#FFFFFF',
@@ -247,7 +247,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                     <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
                       In Studio Stock:
                     </span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="dashboard-stock-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <button
                         onClick={() => handleStockDelta(p, -1)}
                         style={{
@@ -321,7 +321,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                       {settings.currency}{p.price}
                     </span>
 
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div className="dashboard-product-actions" style={{ display: 'flex', gap: '8px' }}>
                       <button
                         onClick={() => onEditProduct(p)}
                         style={{

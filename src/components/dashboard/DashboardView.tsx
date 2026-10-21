@@ -84,7 +84,7 @@ export const DashboardView: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="dashboard-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
               onClick={() => setViewMode('store')}
               className="btn-secondary"

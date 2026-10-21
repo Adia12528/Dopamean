@@ -113,6 +113,7 @@ export interface StoreSettings {
   paymentUpiEnabled?: boolean;
   upiId?: string;
   upiPayeeName?: string;
+  upiQrImage?: string;
   paymentCodEnabled?: boolean;
   paymentPayuEnabled?: boolean;
   payuTestMode?: boolean;
@@ -233,6 +234,8 @@ export interface Order {
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   upiRefNumber?: string;
+  paymentProofKey?: string;
+  paymentProofStorage?: 'supabase' | 'local';
   timeline?: OrderTimelineEvent[];
   createdAt: string;
 }

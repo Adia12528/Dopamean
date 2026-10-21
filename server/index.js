@@ -81,6 +81,10 @@ const UPLOADS_DIR = path.join(__dirname, 'uploads');
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
+const PAYMENT_PROOFS_DIR = path.join(__dirname, 'payment-proofs');
+if (!fs.existsSync(PAYMENT_PROOFS_DIR)) {
+  fs.mkdirSync(PAYMENT_PROOFS_DIR, { recursive: true });
+}
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -607,76 +611,114 @@ app.get('/api/users/my-orders', requireUser, async (req, res) => {
 // ==========================================
 // IMAGE UPLOAD API (Supabase Storage with Local Disk Fallback)
 // ==========================================
+const imageContentTypes = {
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp'
+};
+
+function uploadError(statusCode, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+async function storePublicImage(file) {
+  const extension = getImageExtension(file.buffer);
+  if (!extension) throw uploadError(400, 'Unsupported or invalid image file.');
+  const filename = `crochet_${crypto.randomUUID()}${extension}`;
+  const contentType = imageContentTypes[extension];
+
+  if (supabaseAdmin) {
+    try {
+      const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'media';
+      const { error: uploadErrorResult } = await supabaseAdmin.storage
+        .from(bucketName)
+        .upload(filename, file.buffer, { contentType, upsert: true });
+      if (!uploadErrorResult) {
+        const { data: urlData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filename);
+        if (urlData?.publicUrl) {
+          return { url: urlData.publicUrl, filename, size: file.size, storage: 'supabase' };
+        }
+      } else if (isProduction) {
+        console.error('Supabase storage upload failed:', uploadErrorResult.message);
+        throw uploadError(502, 'Image storage is temporarily unavailable.');
+      } else {
+        console.warn('Supabase storage upload failed, falling back to local disk:', uploadErrorResult.message);
+      }
+    } catch (error) {
+      if (error.statusCode) throw error;
+      if (isProduction) {
+        console.error('Supabase storage error:', error);
+        throw uploadError(502, 'Image storage is temporarily unavailable.');
+      }
+      console.warn('Supabase storage error, falling back to local disk:', error?.message || error);
+    }
+  }
+
+  if (isProduction) throw uploadError(503, 'Persistent image storage is not configured.');
+  fs.writeFileSync(path.join(UPLOADS_DIR, filename), file.buffer, { flag: 'wx' });
+  return { url: `/uploads/${filename}`, filename, size: file.size, storage: 'local' };
+}
+
+async function storePrivatePaymentProof(file) {
+  const extension = getImageExtension(file.buffer);
+  if (!extension) throw uploadError(400, 'Unsupported or invalid image file.');
+  const filename = `upi_${crypto.randomUUID()}${extension}`;
+  const contentType = imageContentTypes[extension];
+
+  if (supabaseAdmin) {
+    try {
+      const bucketName = process.env.SUPABASE_PAYMENT_PROOFS_BUCKET || 'payment-proofs';
+      const { error } = await supabaseAdmin.storage
+        .from(bucketName)
+        .upload(filename, file.buffer, { contentType, upsert: false });
+      if (error) {
+        if (isProduction) {
+          console.error('Private payment proof storage upload failed:', error.message);
+          throw uploadError(502, 'Payment screenshot storage is temporarily unavailable.');
+        }
+        console.warn('Private payment proof storage failed, falling back to local disk:', error.message);
+      } else {
+        return { key: filename, storage: 'supabase' };
+      }
+    } catch (error) {
+      if (error.statusCode) throw error;
+      if (isProduction) {
+        console.error('Private payment proof storage error:', error);
+        throw uploadError(502, 'Payment screenshot storage is temporarily unavailable.');
+      }
+      console.warn('Private payment proof storage error, falling back to local disk:', error?.message || error);
+    }
+  }
+
+  if (isProduction) throw uploadError(503, 'Private payment proof storage is not configured.');
+  fs.writeFileSync(path.join(PAYMENT_PROOFS_DIR, filename), file.buffer, { flag: 'wx' });
+  return { key: filename, storage: 'local' };
+}
+
+function isStoredImageUrl(value) {
+  const imageUrl = String(value || '').trim();
+  if (/^\/uploads\/[A-Za-z0-9_-]+\.(?:jpe?g|png|gif|webp)$/i.test(imageUrl)) return true;
+  try {
+    const parsed = new URL(imageUrl);
+    return parsed.protocol === 'https:' && /\.(?:jpe?g|png|gif|webp)$/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
 app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file uploaded' });
     }
-    const extension = getImageExtension(req.file.buffer);
-    if (!extension) return res.status(400).json({ error: 'Unsupported or invalid image file.' });
-    const filename = `crochet_${crypto.randomUUID()}${extension}`;
-    const contentType = {
-      '.jpg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp'
-    }[extension];
-
-    // 1. Try Supabase Cloud Storage first (permanent CDN for production)
-    if (supabaseAdmin) {
-      try {
-        const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'media';
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from(bucketName)
-          .upload(filename, req.file.buffer, {
-            contentType,
-            upsert: true
-          });
-
-        if (!uploadError) {
-          const { data: urlData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filename);
-          if (urlData?.publicUrl) {
-            return res.json({
-              success: true,
-              url: urlData.publicUrl,
-              filename,
-              size: req.file.size,
-              storage: 'supabase'
-            });
-          }
-        } else {
-          if (isProduction) {
-            console.error('Supabase storage upload failed:', uploadError.message);
-            return res.status(502).json({ error: 'Image storage is temporarily unavailable.' });
-          }
-          console.warn('Supabase storage upload failed, falling back to local disk:', uploadError.message);
-        }
-      } catch (storageErr) {
-        if (isProduction) {
-          console.error('Supabase storage error:', storageErr);
-          return res.status(502).json({ error: 'Image storage is temporarily unavailable.' });
-        }
-        console.warn('Supabase storage error, falling back to local disk:', storageErr?.message || storageErr);
-      }
-    }
-
-    if (isProduction) {
-      return res.status(503).json({ error: 'Persistent image storage is not configured.' });
-    }
-
-    // 2. Local disk fallback
-    fs.writeFileSync(path.join(UPLOADS_DIR, filename), req.file.buffer, { flag: 'wx' });
-    const imageUrl = `/uploads/${filename}`;
-    res.json({
-      success: true,
-      url: imageUrl,
-      filename,
-      size: req.file.size,
-      storage: 'local'
-    });
+    const stored = await storePublicImage(req.file);
+    res.json({ success: true, ...stored });
   } catch (err) {
     console.error('Image upload error:', err);
-    res.status(500).json({ error: 'Failed to upload image' });
+    res.status(err.statusCode || 500).json({ error: err.message || 'Failed to upload image' });
   }
 });
 
@@ -846,12 +888,16 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     if (next.paymentUpiEnabled !== false && (
       changes.paymentUpiEnabled === true ||
       changes.upiId !== undefined ||
-      changes.upiPayeeName !== undefined
+      changes.upiPayeeName !== undefined ||
+      changes.upiQrImage !== undefined
     )) {
       const upiId = String(next.upiId || '').trim();
       const isValidUpiVpa = /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(upiId);
-      if (!isValidUpiVpa || !String(next.upiPayeeName || '').trim()) {
-        return res.status(400).json({ error: 'Add a valid UPI ID/VPA and payee name before enabling UPI. Razorpay payment links are not UPI IDs.' });
+      if (!isValidUpiVpa) {
+        return res.status(400).json({ error: 'Add a valid UPI ID/VPA before enabling UPI. Razorpay payment links are not UPI IDs.' });
+      }
+      if (!isStoredImageUrl(next.upiQrImage)) {
+        return res.status(400).json({ error: 'Upload a valid UPI QR image before enabling Direct UPI.' });
       }
       changes.upiId = upiId;
     }
@@ -1063,7 +1109,10 @@ app.get('/api/orders/track/lookup', lookupLimit, async (req, res) => {
     delete publicCustomer.address;
     delete publicCustomer.city;
     delete publicCustomer.pincode;
-    res.json([{ ...order, customer: publicCustomer }]);
+    const publicOrder = { ...order, customer: publicCustomer };
+    delete publicOrder.paymentProofKey;
+    delete publicOrder.paymentProofStorage;
+    res.json([publicOrder]);
   } catch (err) {
     res.status(500).json({ error: 'Failed to track order' });
   }
@@ -1073,7 +1122,17 @@ app.post('/api/orders', orderLimit, requireUser, async (req, res) => {
   try {
     const settings = await db.getSettings();
     const method = req.body?.paymentMethod || 'cod';
-    if (method === 'upi' && settings.paymentUpiEnabled === false) return res.status(400).json({ error: 'UPI payments are currently unavailable.' });
+    if (method === 'upi') {
+      const upiId = String(settings.upiId || '').trim();
+      const isValidUpiVpa = /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(upiId);
+      if (settings.paymentUpiEnabled === false || !isValidUpiVpa || !isStoredImageUrl(settings.upiQrImage)) {
+        return res.status(400).json({ error: 'Direct UPI payments are not configured yet.' });
+      }
+      const upiRefNumber = String(req.body?.upiRefNumber || '').trim();
+      if (!upiRefNumber || upiRefNumber.length > 24) {
+        return res.status(400).json({ error: 'Enter your UPI transaction reference / UTR number.' });
+      }
+    }
     if (method === 'cod' && settings.paymentCodEnabled === false) return res.status(400).json({ error: 'Cash on Delivery is currently unavailable.' });
     if (method === 'payu') return res.status(400).json({ error: 'Use the PayU checkout endpoint to start a PayU payment.' });
     const rzpKeyId = (settings.razorpayKeyId || process.env.RAZORPAY_KEY_ID || '').trim();
@@ -1100,6 +1159,73 @@ app.post('/api/orders', orderLimit, requireUser, async (req, res) => {
     if (clientErrors.includes(err.message)) return res.status(400).json({ error: err.message });
     console.error('Create order error:', err);
     res.status(500).json({ error: 'Failed to create order' });
+  }
+});
+
+app.post('/api/orders/:id/payment-proof', requireUser, uploadLimit, upload.single('image'), async (req, res) => {
+  let uploadedProof;
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No payment screenshot was uploaded.' });
+    const order = await db.getOrderById(req.params.id);
+    if (!order || order.customer?.email?.toLowerCase() !== req.user.email?.toLowerCase()) {
+      return res.status(404).json({ error: 'Order not found.' });
+    }
+    if (order.paymentMethod !== 'upi' || order.paymentStatus !== 'pending' || order.status === 'cancelled') {
+      return res.status(400).json({ error: 'A screenshot can only be added to a pending Direct UPI order.' });
+    }
+
+    uploadedProof = await storePrivatePaymentProof(req.file);
+    const updated = await db.updateOrderStatus(order.id, order.status, {
+      paymentProofKey: uploadedProof.key,
+      paymentProofStorage: uploadedProof.storage
+    });
+    if (!updated) return res.status(404).json({ error: 'Order not found.' });
+    res.json(updated);
+  } catch (error) {
+    console.error('UPI payment proof upload failed:', error);
+    res.status(error.statusCode || 500).json({ error: error.message || 'Failed to upload payment screenshot.' });
+  }
+});
+
+app.get('/api/orders/:id/payment-proof', requireAdmin, async (req, res) => {
+  try {
+    const order = await db.getOrderById(req.params.id);
+    if (!order?.paymentProofKey || !order.paymentProofStorage) {
+      return res.status(404).json({ error: 'No payment screenshot is attached to this order.' });
+    }
+    const filename = path.basename(order.paymentProofKey);
+    if (filename !== order.paymentProofKey || !/^upi_[a-f0-9-]+\.(jpg|png|gif|webp)$/.test(filename)) {
+      return res.status(404).json({ error: 'Payment screenshot was not found.' });
+    }
+    const contentType = imageContentTypes[path.extname(filename)];
+    let imageBuffer;
+    if (order.paymentProofStorage === 'supabase') {
+      if (!supabaseAdmin) return res.status(503).json({ error: 'Private payment proof storage is unavailable.' });
+      const bucketName = process.env.SUPABASE_PAYMENT_PROOFS_BUCKET || 'payment-proofs';
+      const { data, error } = await supabaseAdmin.storage.from(bucketName).createSignedUrl(filename, 60);
+      if (error || !data?.signedUrl) {
+        console.error('Could not create private payment proof download URL:', error?.message || 'No signed URL returned.');
+        return res.status(502).json({ error: 'Payment screenshot is temporarily unavailable.' });
+      }
+      const response = await fetch(data.signedUrl);
+      if (!response.ok) {
+        console.error('Could not retrieve private payment proof:', response.status);
+        return res.status(502).json({ error: 'Payment screenshot is temporarily unavailable.' });
+      }
+      imageBuffer = Buffer.from(await response.arrayBuffer());
+    } else if (order.paymentProofStorage === 'local') {
+      imageBuffer = fs.readFileSync(path.join(PAYMENT_PROOFS_DIR, filename));
+    } else {
+      return res.status(404).json({ error: 'Payment screenshot was not found.' });
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', 'inline; filename="upi-payment-proof"');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(imageBuffer);
+  } catch (error) {
+    if (error.code === 'ENOENT') return res.status(404).json({ error: 'Payment screenshot was not found.' });
+    console.error('Could not load UPI payment proof:', error);
+    res.status(500).json({ error: 'Failed to load payment screenshot.' });
   }
 });
 

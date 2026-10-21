@@ -30,17 +30,6 @@ import { forgetPendingPayment, getPendingPaymentReferences, rememberPendingPayme
 const isValidUpiVpa = (value?: string) =>
   Boolean(value && /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim()));
 
-const createUpiPaymentUri = (upiId: string, payeeName: string, amount: number, storeName: string) => {
-  const params = new URLSearchParams({
-    pa: upiId,
-    pn: payeeName,
-    am: amount.toFixed(2),
-    cu: 'INR',
-    tn: `${storeName} Order`
-  });
-  return `upi://pay?${params.toString().replace(/\+/g, '%20')}`;
-};
-
 interface RazorpayOptions {
   key: string;
   amount: number;
@@ -121,14 +110,13 @@ export const CartDrawer: React.FC = () => {
 
   // Payment method selection
   const [selectedPaymentMethod, setPaymentMethod] = useState<'upi' | 'razorpay' | 'payu' | 'cod'>(() =>
-    settings.paymentUpiEnabled !== false && isValidUpiVpa(settings.upiId) ? 'upi'
+    settings.paymentUpiEnabled !== false && isValidUpiVpa(settings.upiId) && Boolean(settings.upiQrImage) ? 'upi'
       : settings.paymentRazorpayEnabled ? 'razorpay'
         : settings.paymentPayuEnabled && settings.payuConfigured ? 'payu'
           : 'cod'
   );
-  const [upiQr, setUpiQr] = useState<{ uri: string; dataUrl: string } | null>(null);
-  const [upiQrError, setUpiQrError] = useState<{ uri: string; error: string } | null>(null);
   const [upiUtrNumber, setUpiUtrNumber] = useState('');
+  const [upiProofFile, setUpiProofFile] = useState<File | null>(null);
   const [hasCopiedUpiId, setHasCopiedUpiId] = useState(false);
 
   const [formOverrides, setFormOverrides] = useState<{
@@ -214,8 +202,7 @@ export const CartDrawer: React.FC = () => {
   const shippingCost = isFreeShipping || subtotal === 0 ? 0 : (settings.shippingFee ?? 40);
   const total = Math.max(0, subtotal - discount + shippingCost);
   const upiId = settings.upiId?.trim() || '';
-  const upiPayeeName = settings.upiPayeeName?.trim() || settings.storeName || '';
-  const hasValidUpiId = settings.paymentUpiEnabled !== false && isValidUpiVpa(upiId);
+  const hasValidUpiId = settings.paymentUpiEnabled !== false && isValidUpiVpa(upiId) && Boolean(settings.upiQrImage?.trim());
   const codUnavailableProducts = cart
     .filter(item => !isProductCodEligible(item.product, settings.codRules || []))
     .map(item => ({
@@ -240,9 +227,6 @@ export const CartDrawer: React.FC = () => {
   const paymentMethod = availablePaymentMethods.includes(selectedPaymentMethod)
     ? selectedPaymentMethod
     : availablePaymentMethods[0] || 'cod';
-  const upiPaymentUri = hasValidUpiId
-    ? createUpiPaymentUri(upiId, upiPayeeName, total, settings.storeName || 'Store')
-    : '';
   const whatsappOrderUrl = (() => {
     if (!isWhatsAppEnabled(settings) || settings.whatsappOrderButtonEnabled === false) return null;
     const phone = settings.whatsappBusinessPhone || settings.contactPhone || '';
@@ -266,30 +250,6 @@ export const CartDrawer: React.FC = () => {
       settings.whatsappCountryCode || '91'
     )
     : null;
-
-  // Generate UPI QR Code URL dynamically whenever paymentMethod is 'upi' or total changes
-  useEffect(() => {
-    if (paymentMethod === 'upi' && isCheckingOut && upiPaymentUri) {
-      let active = true;
-      void import('qrcode')
-        .then(({ default: QRCode }) => QRCode.toDataURL(upiPaymentUri, {
-          width: 220,
-          margin: 1,
-          color: {
-            dark: '#1E293B',
-            light: '#FFFFFF'
-          }
-        }))
-        .then(url => {
-          if (active) setUpiQr({ uri: upiPaymentUri, dataUrl: url });
-        })
-        .catch(error => {
-          console.error('QR code generation failed:', error);
-          if (active) setUpiQrError({ uri: upiPaymentUri, error: 'Could not generate the UPI QR code. Please try again.' });
-        });
-      return () => { active = false; };
-    }
-  }, [paymentMethod, isCheckingOut, upiPaymentUri]);
 
   const paymentIssueOrderId = paymentIssue?.orderId;
 
@@ -379,11 +339,26 @@ export const CartDrawer: React.FC = () => {
       await navigator.clipboard.writeText(upiId);
       setHasCopiedUpiId(true);
       window.setTimeout(() => setHasCopiedUpiId(false), 1800);
-      showToast('UPI ID copied. Open your UPI app and enter the amount.', 'success');
+      showToast('UPI ID copied. Open your UPI app and pay manually.', 'success');
     } catch (error) {
       console.error('Could not copy UPI ID:', error);
       showToast('Copy was blocked by your browser. Select the UPI ID and copy it manually.', 'error');
     }
+  };
+
+  const handleUpiProofSelection = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0] || null;
+    event.currentTarget.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)) {
+      showToast('Choose a PNG, JPG, GIF, or WebP payment screenshot.', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('The payment screenshot must be 5 MB or smaller.', 'error');
+      return;
+    }
+    setUpiProofFile(file);
   };
 
   const handleSafelyRetryPayment = async () => {
@@ -496,6 +471,10 @@ export const CartDrawer: React.FC = () => {
     if (!formData.name || !formData.email || !formData.phone || !formData.address) return;
     if (availablePaymentMethods.length === 0) {
       showToast('Online payment is not configured yet. Please contact the store or try again later.', 'error');
+      return;
+    }
+    if (paymentMethod === 'upi' && !upiUtrNumber.trim()) {
+      showToast('Enter the UPI transaction reference / UTR number before placing your order.', 'error');
       return;
     }
 
@@ -756,17 +735,29 @@ export const CartDrawer: React.FC = () => {
         return;
       }
 
-      // 2. UPI QR / COD / WHATSAPP FLOW
+      // 2. Manual UPI / COD order flow
       const placedOrder = await createOrder(formData, authenticatedUserToken, {
         method: paymentMethod,
-        status: paymentMethod === 'upi' ? 'pending' : 'pending',
-        upiRefNumber: upiUtrNumber.trim() || undefined
+        status: 'pending',
+        upiRefNumber: paymentMethod === 'upi' ? upiUtrNumber.trim() : undefined
       });
 
       if (placedOrder) {
+        let completedOrder = placedOrder;
+        if (paymentMethod === 'upi' && upiProofFile) {
+          try {
+            completedOrder = await api.uploadUpiPaymentProof(placedOrder.id, upiProofFile, authenticatedUserToken);
+            syncOrder(completedOrder);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Could not upload the optional payment screenshot.';
+            showToast(`Your order was placed, but the screenshot was not attached: ${message}`, 'error');
+          }
+        }
         clearCheckoutDraft();
-        setOrderComplete(placedOrder);
+        setOrderComplete(completedOrder);
         setIsCheckingOut(false);
+        setUpiProofFile(null);
+        setUpiUtrNumber('');
         void triggerCelebration();
       }
     } catch (error: unknown) {
@@ -1004,13 +995,17 @@ export const CartDrawer: React.FC = () => {
                 {isOrderPaymentConfirmed ? <CheckCircle2 size={42} /> : <Clock size={42} />}
               </div>
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '6px' }}>
-                {isOrderPaymentConfirmed ? 'Payment received' : 'Order placed'} · #{orderComplete.id}
+                {isOrderPaymentConfirmed
+                  ? `Payment received · #${orderComplete.id}`
+                  : orderComplete.paymentMethod === 'upi'
+                    ? `Payment Verification Pending · #${orderComplete.id}`
+                    : `Order placed · #${orderComplete.id}`}
               </h2>
               <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, maxWidth: '380px' }}>
                 {isOrderPaymentConfirmed ? (
                   <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your payment is verified and your order is being prepared.</>
                 ) : orderComplete.paymentMethod === 'upi' ? (
-                  <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your order is recorded, but manual UPI payment is not automatically verified. The store will verify your payment before marking this order as paid.{orderComplete.upiRefNumber ? ' Your UPI reference has been saved with the order.' : ' If you already paid, keep your UPI transaction reference available.'}</>
+                  <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your UPI transaction reference has been saved. The studio will verify it against its bank statement before marking your payment as paid.</>
                 ) : orderComplete.paymentMethod === 'cod' ? (
                   <>Thank you, <strong>{orderComplete.customer.name}</strong>! Your order is placed with Cash on Delivery. No payment has been collected; pay the courier when your parcel arrives.</>
                 ) : (
@@ -1342,7 +1337,7 @@ export const CartDrawer: React.FC = () => {
                         UPI Direct
                       </div>
                       <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
-                        Scan the QR, copy the UPI ID, or open a UPI app on your phone.
+                        Pay manually using the studio’s UPI ID or scan its uploaded QR code.
                       </div>
                     </div>
                   </label>}
@@ -1512,104 +1507,91 @@ export const CartDrawer: React.FC = () => {
                 </div>
               )}
 
-              {/* UPI QR Display Card */}
               {paymentMethod === 'upi' && (
                 <div style={{
                   backgroundColor: '#F8FAFC',
                   borderRadius: '16px',
                   border: '1px solid #CBD5E1',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  textAlign: 'center'
+                  padding: '16px'
                 }}>
-                  <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1E293B', marginBottom: '4px' }}>
-                    Pay {settings.currency}{total.toFixed(2)} with UPI
-                  </div>
-                  <div style={{ fontSize: '0.76rem', color: '#64748B', marginBottom: '12px' }}>
-                    Choose the option that works for your device
+                  <div style={{ textAlign: 'center', marginBottom: '14px' }}>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: '#1E293B' }}>
+                      Pay {settings.currency}{total.toFixed(2)} with UPI
+                    </div>
+                    <div style={{ fontSize: '0.76rem', color: '#64748B', marginTop: '4px' }}>
+                      Payment is verified manually by the studio after you submit the order.
+                    </div>
                   </div>
 
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 230px), 1fr))',
-                    gap: '16px',
-                    alignItems: 'center',
-                    width: '100%'
+                  <div className="upi-mobile-guidance" style={{
+                    display: 'none',
+                    gap: '8px',
+                    alignItems: 'flex-start',
+                    padding: '12px',
+                    marginBottom: '14px',
+                    borderRadius: '12px',
+                    border: '1px solid #FED7AA',
+                    background: '#FFF7ED',
+                    color: '#9A3412',
+                    fontSize: '0.82rem',
+                    lineHeight: 1.5
                   }}>
-                    <div style={{
+                    <Smartphone size={18} style={{ flexShrink: 0, marginTop: '2px' }} />
+                    <div>
+                      <strong>Pay via UPI ID on this phone</strong>
+                      <div>Copy the UPI ID, open your UPI app, and pay manually. Use the QR code if you are paying from another device.</div>
+                    </div>
+                  </div>
+
+                  <div className="upi-payment-layout" style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                    gap: '14px',
+                    alignItems: 'stretch'
+                  }}>
+                    <div className="upi-payment-qr" style={{
                       display: 'flex',
-                      flexDirection: 'column',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      padding: '14px',
-                      background: '#FFFFFF',
+                      minWidth: 0,
+                      padding: '12px',
                       border: '1px solid #E2E8F0',
-                      borderRadius: '14px'
+                      borderRadius: '14px',
+                      background: '#FFFFFF'
                     }}>
-                  {upiQrError?.uri === upiPaymentUri ? (
-                    <div role="alert" style={{ width: '100%', color: '#B91C1C', fontSize: '0.8rem' }}>
-                      {upiQrError.error}
-                    </div>
-                  ) : upiQr?.uri === upiPaymentUri ? (
-                    <img
-                      src={upiQr.dataUrl}
-                      alt="UPI QR Code"
-                      style={{
-                        width: 'min(180px, 100%)',
-                        aspectRatio: '1',
-                        borderRadius: '12px',
-                        border: '1px solid #E2E8F0',
-                        backgroundColor: '#FFFFFF',
-                        padding: '6px',
-                        boxSizing: 'border-box'
-                      }}
-                    />
-                  ) : (
-                    <div style={{ width: 'min(180px, 100%)', aspectRatio: '1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      Generating QR...
-                    </div>
-                  )}
-                    {upiQr?.uri === upiPaymentUri && (
-                      <a
-                        href={upiQr.dataUrl}
-                        download="upi-payment.png"
+                      <img
+                        src={getAssetUrl(settings.upiQrImage)}
+                        alt="Studio-provided UPI payment QR code"
                         style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          marginTop: '8px',
-                          color: '#334155',
-                          fontSize: '0.76rem',
-                          fontWeight: 700,
-                          textDecoration: 'none'
+                          display: 'block',
+                          width: 'min(300px, 100%)',
+                          aspectRatio: '1',
+                          objectFit: 'contain',
+                          imageRendering: 'pixelated'
                         }}
-                      >
-                        <Download size={14} /> Download QR
-                      </a>
-                    )}
-                  </div>
+                      />
+                    </div>
 
                     <div style={{
                       display: 'flex',
                       flexDirection: 'column',
+                      justifyContent: 'center',
                       gap: '10px',
+                      minWidth: 0,
                       padding: '14px',
-                      background: '#FFFFFF',
                       border: '1px solid #E2E8F0',
                       borderRadius: '14px',
-                      textAlign: 'left'
+                      background: '#FFFFFF'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.88rem', fontWeight: 800, color: '#1E293B' }}>
                         <Landmark size={17} color="var(--accent-terracotta)" />
-                        Pay manually from any UPI app
+                        Pay via UPI ID
                       </div>
                       <div style={{ fontSize: '0.76rem', lineHeight: 1.45, color: '#64748B' }}>
-                        On desktop, open your UPI app on another device and enter these details. On mobile, use the app button below.
+                        Copy this ID and pay {settings.currency}{total.toFixed(2)} in your UPI app. QR scanning is available from another device.
                       </div>
                       <label htmlFor="checkout-upi-id" style={{ fontSize: '0.74rem', fontWeight: 700, color: '#475569' }}>
-                        Pay to (UPI ID)
+                        UPI ID
                       </label>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
                         <input
@@ -1654,62 +1636,59 @@ export const CartDrawer: React.FC = () => {
                           <span>{hasCopiedUpiId ? 'Copied' : 'Copy'}</span>
                         </button>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '8px', fontSize: '0.78rem' }}>
-                        <div><span style={{ color: '#64748B' }}>Payee</span><br /><strong>{upiPayeeName}</strong></div>
-                        <div><span style={{ color: '#64748B' }}>Amount</span><br /><strong>{settings.currency}{total.toFixed(2)}</strong></div>
-                      </div>
-                      <a
-                        href={upiPaymentUri || undefined}
-                        aria-disabled={!upiPaymentUri}
-                        onClick={event => {
-                          if (!upiPaymentUri) event.preventDefault();
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '8px',
-                          width: '100%',
-                          boxSizing: 'border-box',
-                          padding: '12px 14px',
-                          borderRadius: '10px',
-                          backgroundColor: 'var(--accent-terracotta)',
-                          color: '#FFFFFF',
-                          fontWeight: 800,
-                          fontSize: '0.86rem',
-                          textDecoration: 'none'
-                        }}
-                      >
-                        <Smartphone size={17} />
-                        Open UPI app on this phone
-                      </a>
                     </div>
                   </div>
 
-                  <div style={{ width: '100%', marginTop: '12px', padding: '11px 12px', borderRadius: '10px', background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontSize: '0.76rem', lineHeight: 1.45 }}>
-                    After paying, enter the UPI reference number below and confirm your order. UPI payment is not automatically verified; the store will verify it before marking the order paid.
+                  <div style={{ marginTop: '12px', padding: '11px 12px', borderRadius: '10px', background: '#FFFBEB', border: '1px solid #FDE68A', color: '#92400E', fontSize: '0.76rem', lineHeight: 1.45 }}>
+                    After paying, enter the transaction reference / UTR shown in your UPI app. The order will remain <strong>Payment Verification Pending</strong> until the studio verifies the payment.
                   </div>
 
-                  <div style={{ width: '100%', marginTop: '12px' }}>
-                    <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 600, color: '#334155', textAlign: 'left', marginBottom: '4px' }}>
-                      UPI reference / UTR number (optional)
+                  <div style={{ marginTop: '12px' }}>
+                    <label htmlFor="checkout-upi-utr" style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                      UPI transaction reference / UTR *
                     </label>
                     <input
+                      id="checkout-upi-utr"
                       type="text"
+                      required
                       placeholder="Enter the reference shown in your UPI app"
-                      inputMode="numeric"
                       autoComplete="off"
                       maxLength={24}
                       value={upiUtrNumber}
                       onChange={(e) => setUpiUtrNumber(e.target.value)}
                       style={{
                         width: '100%',
-                        padding: '8px 12px',
+                        boxSizing: 'border-box',
+                        padding: '9px 12px',
                         borderRadius: '8px',
                         border: '1px solid #CBD5E1',
-                        fontSize: '0.82rem'
+                        fontSize: '0.86rem'
                       }}
                     />
+                  </div>
+
+                  <div style={{ marginTop: '12px' }}>
+                    <label htmlFor="checkout-upi-proof" style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
+                      Payment screenshot (optional)
+                    </label>
+                    <input
+                      id="checkout-upi-proof"
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      onChange={handleUpiProofSelection}
+                      style={{ width: '100%', fontSize: '0.8rem' }}
+                    />
+                    {upiProofFile && (
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginTop: '6px', fontSize: '0.76rem', color: '#475569' }}>
+                        <span style={{ overflowWrap: 'anywhere' }}>{upiProofFile.name}</span>
+                        <button type="button" onClick={() => setUpiProofFile(null)} style={{ border: 0, background: 'transparent', color: '#B91C1C', cursor: 'pointer' }}>
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    <p style={{ fontSize: '0.72rem', color: '#64748B', margin: '5px 0 0' }}>
+                      Image files up to 5 MB. The screenshot is stored privately and only the studio can open it.
+                    </p>
                   </div>
                 </div>
               )}
@@ -1776,7 +1755,7 @@ export const CartDrawer: React.FC = () => {
                       : paymentMethod === 'payu'
                       ? 'Continue to PayU'
                       : paymentMethod === 'upi'
-                      ? 'I have paid — place order'
+                      ? 'I have paid — submit for verification'
                       : 'Confirm Cash on Delivery Order'}
                   </span>
                 </button>

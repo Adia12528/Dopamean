@@ -127,7 +127,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
       }}
     >
       <div
-        className="mobile-modal-panel"
+        className="mobile-modal-panel dashboard-admin-modal"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -143,7 +143,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
         }}
       >
         {/* Header */}
-        <div style={{
+        <div className="dashboard-modal-header" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -313,7 +313,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
           </div>
 
           {/* OFFER DETAILS */}
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
+          <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
                 Offer Campaign Title *
@@ -380,7 +380,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
           </div>
 
           {/* DISCOUNT CODE & TYPE */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '14px' }}>
+          <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr', gap: '14px' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
                 Coupon Promo Code *
@@ -479,7 +479,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'center' }}>
+          <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '16px', alignItems: 'center' }}>
             <div>
               <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
                 Expiration Date
@@ -519,7 +519,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
           </div>
 
           {/* Action Row */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+          <div className="dashboard-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
             <button
               type="button"
               onClick={onClose}

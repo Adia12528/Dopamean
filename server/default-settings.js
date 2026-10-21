@@ -69,6 +69,7 @@
   paymentUpiEnabled: true,
   upiId: '',
   upiPayeeName: 'Deepa Soni (Cozy Loops)',
+  upiQrImage: '',
   paymentCodEnabled: true,
   paymentPayuEnabled: false,
   payuTestMode: true,

@@ -27,7 +27,7 @@ import {
 import type { CodRule, ProductCardBadge } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
 
-type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline';
+type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi';
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
 
 const isValidUpiVpa = (value: string) =>
@@ -50,18 +50,22 @@ export const StudioSettings: React.FC = () => {
   
   const heroFileInputRef = useRef<HTMLInputElement>(null);
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
+  const upiQrFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
+  const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
+  const [upiQrUploadError, setUpiQrUploadError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [scopedSaveStates, setScopedSaveStates] = useState<Record<ScopedSettingSection, ScopedSettingSaveState>>({
     productCards: { isSaving: false, error: '' },
     lowStock: { isSaving: false, error: '' },
     trustCards: { isSaving: false, error: '' },
     testimonials: { isSaving: false, error: '' },
-    deliveryTimeline: { isSaving: false, error: '' }
+    deliveryTimeline: { isSaving: false, error: '' },
+    upi: { isSaving: false, error: '' }
   });
   const [validationErrors, setValidationErrors] = useState<Partial<Record<'storeName' | 'heroTitle' | 'currency' | 'upiId', string>>>({});
   const [codRuleErrors, setCodRuleErrors] = useState<Record<string, string>>({});
@@ -116,13 +120,19 @@ export const StudioSettings: React.FC = () => {
     deliveryStageDeliveredLabel: settings.deliveryStageDeliveredLabel || 'Delivered'
   };
   const isDeliveryTimelineDirty = JSON.stringify(deliveryTimelineFormValues) !== JSON.stringify(deliveryTimelineSavedValues);
+  const isUpiDetailsDirty = (
+    String(form.upiId || '').trim() !== String(settings.upiId || '').trim() ||
+    (form.upiQrImage || '') !== (settings.upiQrImage || '') ||
+    (form.paymentUpiEnabled !== false) !== (settings.paymentUpiEnabled !== false)
+  );
 
   const getUnsavedScopedSections = (): { id: ScopedSettingSection; label: string }[] => [
     ...(isBadgePriorityDirty ? [{ id: 'productCards' as const, label: 'Product Card Badge Rules' }] : []),
     ...(isLowStockThresholdDirty ? [{ id: 'lowStock' as const, label: 'Low Stock Threshold' }] : []),
     ...(isTrustCardsDirty ? [{ id: 'trustCards' as const, label: 'Trust Cards' }] : []),
     ...(isTestimonialsDirty ? [{ id: 'testimonials' as const, label: 'Testimonials' }] : []),
-    ...(isDeliveryTimelineDirty ? [{ id: 'deliveryTimeline' as const, label: 'Delivery Timeline' }] : [])
+    ...(isDeliveryTimelineDirty ? [{ id: 'deliveryTimeline' as const, label: 'Delivery Timeline' }] : []),
+    ...(isUpiDetailsDirty ? [{ id: 'upi' as const, label: 'Direct UPI' }] : [])
   ];
 
   const confirmLeavingUnsavedScopedSections = () => {
@@ -150,7 +160,9 @@ export const StudioSettings: React.FC = () => {
           ? 'Trust Cards'
           : section === 'testimonials'
             ? 'Testimonials'
-            : 'Delivery Timeline';
+            : section === 'deliveryTimeline'
+              ? 'Delivery Timeline'
+              : 'Direct UPI';
     const otherUnsavedSections = getUnsavedScopedSections().filter(item => item.id !== section);
     if (otherUnsavedSections.length > 0) {
       const otherSectionNames = otherUnsavedSections.map(item => item.label).join(' and ');
@@ -168,7 +180,30 @@ export const StudioSettings: React.FC = () => {
           ? trustCardFormValues
           : section === 'testimonials'
             ? { showTestimonialsSection: form.showTestimonialsSection === true }
-            : deliveryTimelineFormValues;
+            : section === 'deliveryTimeline'
+              ? deliveryTimelineFormValues
+              : {
+                paymentUpiEnabled: form.paymentUpiEnabled !== false,
+                upiId: String(form.upiId || '').trim(),
+                upiQrImage: form.upiQrImage || ''
+              };
+
+    if (section === 'upi') {
+      if (!isValidUpiVpa(String(form.upiId || ''))) {
+        setScopedSaveStates(prev => ({
+          ...prev,
+          upi: { isSaving: false, error: 'Enter a valid UPI ID/VPA, such as name@bank.' }
+        }));
+        return;
+      }
+      if (!form.upiQrImage) {
+        setScopedSaveStates(prev => ({
+          ...prev,
+          upi: { isSaving: false, error: 'Upload your UPI QR image before saving.' }
+        }));
+        return;
+      }
+    }
 
     setScopedSaveStates(prev => ({
       ...prev,
@@ -186,6 +221,28 @@ export const StudioSettings: React.FC = () => {
         ...prev,
         [section]: { isSaving: false, error: message }
       }));
+    }
+  };
+
+  const handleUpiQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setUpiQrUploadError('Choose a PNG, JPG, GIF, or WebP image file.');
+      return;
+    }
+    try {
+      setUpiQrUploadError('');
+      setIsUpiQrUploading(true);
+      const url = await api.uploadImage(file);
+      handleChange('upiQrImage', url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Could not upload the UPI QR image.';
+      setUpiQrUploadError(message);
+    } finally {
+      setIsUpiQrUploading(false);
     }
   };
 
@@ -229,7 +286,7 @@ export const StudioSettings: React.FC = () => {
             cursor: !isDirty || saveState.isSaving ? 'not-allowed' : 'pointer'
           }}
         >
-          {saveState.isSaving ? <span>Saving…</span> : <><Save size={16} /><span>Save section</span></>}
+          {saveState.isSaving ? <span>Saving…</span> : <><Save size={16} /><span>{section === 'upi' ? 'Save Direct UPI' : 'Save section'}</span></>}
         </button>
       </div>
     );
@@ -358,6 +415,9 @@ export const StudioSettings: React.FC = () => {
     delete payload.deliveryStageShippedLabel;
     delete payload.deliveryStageOutForDeliveryLabel;
     delete payload.deliveryStageDeliveredLabel;
+    delete payload.paymentUpiEnabled;
+    delete payload.upiId;
+    delete payload.upiQrImage;
     const requiredFieldErrors: typeof validationErrors = {};
     if (!String(form.storeName || '').trim()) requiredFieldErrors.storeName = 'Enter the store or studio name.';
     if (!String(form.heroTitle || '').trim()) requiredFieldErrors.heroTitle = 'Enter the hero headline.';
@@ -391,18 +451,7 @@ export const StudioSettings: React.FC = () => {
     }
     setCodRuleErrors(nextCodRuleErrors);
     if (Object.keys(nextCodRuleErrors).length > 0) return false;
-    if (payload.paymentUpiEnabled !== false) {
-      const upiId = String(payload.upiId || '').trim();
-      if (!isValidUpiVpa(upiId)) {
-        alert('Enter a valid UPI ID/VPA (for example, name@okaxis). A Razorpay payment link is not a UPI ID.');
-        return false;
-      }
-      if (!String(payload.upiPayeeName || '').trim()) {
-        alert('Enter the payee name shown to customers in their UPI app.');
-        return false;
-      }
-      payload.upiId = upiId;
-    }
+    delete payload.upiPayeeName;
     if (payload.whatsappEnabled !== false) {
       const whatsappPhone = String(payload.whatsappBusinessPhone || payload.contactPhone || '');
       const phoneDigits = whatsappPhone.replace(/\D/g, '');
@@ -529,7 +578,8 @@ export const StudioSettings: React.FC = () => {
     { id: 'lowStock' as const, label: 'Low Stock Threshold', icon: <Info size={16} /> },
     { id: 'cod' as const, label: 'COD Eligibility Rules', icon: <Truck size={16} /> },
     { id: 'whatsapp' as const, label: 'WhatsApp Messages', icon: <MessageCircle size={16} /> },
-    { id: 'payments' as const, label: 'Payment Gateways & UPI', icon: <CreditCard size={16} /> },
+    { id: 'payments' as const, label: 'Payment Gateways', icon: <CreditCard size={16} /> },
+    { id: 'upi' as const, label: 'Direct UPI', icon: <QrCode size={16} /> },
     { id: 'contact' as const, label: 'Contact & Socials', icon: <MessageCircle size={16} /> },
     { id: 'footer' as const, label: 'Footer & Copyright', icon: <Sliders size={16} /> },
     { id: 'security' as const, label: 'Security & Access Passcodes', icon: <Lock size={16} /> },
@@ -576,7 +626,7 @@ export const StudioSettings: React.FC = () => {
           </p>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div className="dashboard-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <button
             type="button"
             onClick={() => {
@@ -589,7 +639,7 @@ export const StudioSettings: React.FC = () => {
             <span>Live Store Preview</span>
           </button>
 
-          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && (
+          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && activeSection !== 'upi' && (
             <button
               type="button"
               onClick={() => handleSave()}
@@ -604,14 +654,14 @@ export const StudioSettings: React.FC = () => {
       </div>
 
       {/* Main Two-Column Layout: Sidebar Nav + Form Section */}
-      <div style={{
+      <div className="studio-settings-layout" style={{
         display: 'grid',
         gridTemplateColumns: 'minmax(240px, 280px) 1fr',
         gap: '24px',
         alignItems: 'start'
       }}>
         {/* Navigation Sidebar */}
-        <div style={{
+        <div className="studio-settings-nav" style={{
           backgroundColor: '#FFFFFF',
           borderRadius: '20px',
           padding: '16px',
@@ -659,7 +709,7 @@ export const StudioSettings: React.FC = () => {
         {/* Dynamic Section Editor */}
         <form
           onSubmit={(e) => {
-            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline') {
+            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline' || activeSection === 'upi') {
               e.preventDefault();
               void saveScopedSection(activeSection);
               return;
@@ -2032,7 +2082,119 @@ export const StudioSettings: React.FC = () => {
             </div>
           )}
 
-          {/* 7. PAYMENT GATEWAYS & UPI */}
+          {/* DIRECT UPI SETTINGS */}
+          {activeSection === 'upi' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <QrCode size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Direct UPI Payment Details
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Upload the QR image generated by your UPI or banking app. Customers will see this image and your UPI ID; this store does not generate or modify payment QR codes.
+              </p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.86rem', fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.paymentUpiEnabled !== false}
+                    onChange={(e) => handleChange('paymentUpiEnabled', e.target.checked)}
+                    style={{ width: '17px', height: '17px', accentColor: 'var(--accent-terracotta)' }}
+                  />
+                  <span>{form.paymentUpiEnabled !== false ? 'Direct UPI is enabled' : 'Direct UPI is disabled'}</span>
+                </label>
+
+                <div>
+                  <label htmlFor="studio-upi-id" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    UPI ID *
+                  </label>
+                  <input
+                    id="studio-upi-id"
+                    type="text"
+                    required
+                    autoComplete="off"
+                    value={form.upiId || ''}
+                    onChange={(e) => handleChange('upiId', e.target.value)}
+                    placeholder="e.g. name@bank"
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: '#FFFFFF',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                    Customers can copy this ID and pay manually from their UPI app.
+                  </p>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '8px' }}>
+                    UPI QR code image *
+                  </label>
+                  <input
+                    ref={upiQrFileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={(e) => void handleUpiQrUpload(e)}
+                    style={{ display: 'none' }}
+                  />
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    disabled={isUpiQrUploading}
+                    onClick={() => upiQrFileInputRef.current?.click()}
+                    style={{ padding: '10px 16px', fontSize: '0.84rem', opacity: isUpiQrUploading ? 0.65 : 1 }}
+                  >
+                    <Upload size={16} />
+                    <span>{isUpiQrUploading ? 'Uploading QR image…' : form.upiQrImage ? 'Replace QR image' : 'Upload QR image'}</span>
+                  </button>
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '7px 0 0' }}>
+                    PNG, JPG, GIF, or WebP. Your QR image is uploaded using the same secure image storage as product photos.
+                  </p>
+                  {upiQrUploadError && (
+                    <p role="alert" style={{ margin: '8px 0 0', fontSize: '0.8rem', color: '#B91C1C' }}>
+                      {upiQrUploadError}
+                    </p>
+                  )}
+                </div>
+
+                {form.upiQrImage && (
+                  <div style={{
+                    width: 'min(100%, 300px)',
+                    padding: '12px',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: '14px',
+                    background: '#FFFFFF'
+                  }}>
+                    <img
+                      src={getAssetUrl(form.upiQrImage)}
+                      alt="Preview of the uploaded Direct UPI QR code"
+                      style={{ display: 'block', width: '100%', aspectRatio: '1', objectFit: 'contain' }}
+                    />
+                    <p style={{ margin: '8px 0 0', textAlign: 'center', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                      QR image preview
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {renderScopedSaveControls('upi', isUpiDetailsDirty)}
+            </div>
+          )}
+
+          {/* 7. PAYMENT GATEWAYS */}
           {activeSection === 'payments' && (
             <div style={{
               backgroundColor: '#FFFFFF',
@@ -2044,93 +2206,14 @@ export const StudioSettings: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
                 <CreditCard size={20} color="var(--accent-terracotta)" />
                 <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
-                  Payment Gateways & UPI Settlement Settings
+                  Payment Gateways & Cash on Delivery
                 </h3>
               </div>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
-                Configure your payment methods for the customer checkout. You can accept payments via your personal UPI (Google Pay, PhonePe, Paytm), Razorpay online gateway, or Cash on Delivery.
+                Configure Razorpay and PayU online payments, along with Cash on Delivery. Set up manual Direct UPI separately.
               </p>
 
-              {/* CARD 1: INSTANT UPI QR CODE */}
-              <div style={{
-                backgroundColor: 'var(--bg-surface-soft)',
-                border: '1.5px solid var(--border-medium)',
-                borderRadius: '16px',
-                padding: '20px',
-                marginBottom: '20px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <QrCode size={20} color="var(--accent-terracotta)" />
-                    <div>
-                      <h4 style={{ fontSize: '0.98rem', fontWeight: 700, margin: 0, color: 'var(--text-main)' }}>
-                        Instant UPI Payment & QR Code (Recommended)
-                      </h4>
-                      <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '2px 0 0' }}>
-                        Zero transaction fees. Generates automatic QR code for PhonePe, Google Pay, Paytm, and BHIM.
-                      </p>
-                    </div>
-                  </div>
-
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>
-                    <input
-                      type="checkbox"
-                      checked={form.paymentUpiEnabled !== false}
-                      onChange={(e) => handleChange('paymentUpiEnabled', e.target.checked)}
-                      style={{ width: '16px', height: '16px', accentColor: 'var(--accent-terracotta)' }}
-                    />
-                    <span>{form.paymentUpiEnabled !== false ? 'Enabled' : 'Disabled'}</span>
-                  </label>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
-                      Settlement UPI ID (VPA) *
-                    </label>
-                    <input
-                      type="text"
-                      required={form.paymentUpiEnabled !== false}
-                      value={form.upiId || ''}
-                      onChange={(e) => handleChange('upiId', e.target.value)}
-                      placeholder="e.g. name@okaxis"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        borderRadius: '10px',
-                        border: '1px solid var(--border-medium)',
-                        backgroundColor: '#FFFFFF',
-                        fontSize: '0.88rem'
-                      }}
-                    />
-                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '5px 0 0' }}>
-                      UPI payments and checkout QR codes are sent directly to this UPI account. Enter a UPI ID/VPA, not a Razorpay.me link.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
-                      Payee Name (Shown in UPI app) *
-                    </label>
-                    <input
-                      type="text"
-                      value={form.upiPayeeName || ''}
-                      onChange={(e) => handleChange('upiPayeeName', e.target.value)}
-                      placeholder="e.g. Deepa Soni (Cozy Loops)"
-                      style={{
-                        width: '100%',
-                        padding: '10px 14px',
-                        borderRadius: '10px',
-                        border: '1px solid var(--border-medium)',
-                        backgroundColor: '#FFFFFF',
-                        fontSize: '0.88rem'
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* CARD 2: RAZORPAY GATEWAY */}
+              {/* CARD 1: RAZORPAY GATEWAY */}
               <div style={{
                 backgroundColor: 'var(--bg-surface-soft)',
                 border: '1.5px solid var(--border-medium)',

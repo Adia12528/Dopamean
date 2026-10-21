@@ -570,6 +570,7 @@ const sqliteDb = {
         status: 'pending',
         paymentMethod,
         paymentStatus: 'pending',
+        upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined,
         trackingNumber: '',
         timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }],
         createdAt
@@ -668,10 +669,23 @@ const sqliteDb = {
     } else if (status === 'delivered') {
       defaultNote = 'Parcel successfully delivered to recipient. Thank you for supporting handmade craftsmanship! 🌸';
     }
+    if (extraFields.paymentProofKey) {
+      defaultNote = 'Customer uploaded an optional UPI payment screenshot for verification.';
+    } else if (
+      current.paymentMethod === 'upi' &&
+      current.paymentStatus !== 'paid' &&
+      extraFields.paymentStatus === 'paid'
+    ) {
+      defaultNote = 'UPI payment verified by the studio against the transaction reference and bank statement.';
+    }
 
     const timeline = current.timeline || [];
     timeline.push({
-      status: status === 'out_for_delivery' ? 'OUT FOR DELIVERY' : (status === 'confirmed' ? 'ORDER CONFIRMED' : `STATUS: ${status.toUpperCase()}`),
+      status: extraFields.paymentProofKey
+        ? 'UPI PAYMENT PROOF SUBMITTED'
+        : current.paymentMethod === 'upi' && current.paymentStatus !== 'paid' && extraFields.paymentStatus === 'paid'
+          ? 'UPI PAYMENT VERIFIED'
+          : status === 'out_for_delivery' ? 'OUT FOR DELIVERY' : (status === 'confirmed' ? 'ORDER CONFIRMED' : `STATUS: ${status.toUpperCase()}`),
       timestamp: new Date().toISOString(),
       note: defaultNote
     });

@@ -240,7 +240,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       }}
     >
       <div
-        className="mobile-modal-panel"
+        className="mobile-modal-panel dashboard-admin-modal"
         onClick={(e) => e.stopPropagation()}
         style={{
           backgroundColor: '#FFFFFF',
@@ -256,7 +256,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
         }}
       >
         {/* Modal Header */}
-        <div style={{
+        <div className="dashboard-modal-header" style={{
           padding: '20px 28px',
           borderBottom: '1px solid var(--border-medium)',
           display: 'flex',
@@ -308,7 +308,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
           }}>
 
             {/* TOP ROW: PRIMARY PHOTO & LIVE PREVIEW */}
-            <div style={{
+            <div className="dashboard-form-grid" style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
               gap: '24px',
@@ -524,7 +524,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
             </div>
 
             {/* BASIC DETAILS: TITLE, TAGLINE, CATEGORY */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
+            <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
                   Product Title *
@@ -750,7 +750,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
             </div>
 
             {/* ARTISANAL SPECS */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
+            <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
                   Yarn Composition & Materials
@@ -831,7 +831,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
             </div>
 
             {/* TAGS & FEATURE TOGGLES */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
+            <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
                   Tags (comma separated)
@@ -883,7 +883,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
           </div>
 
           {/* Modal Footer / Save Action */}
-          <div style={{
+          <div className="dashboard-modal-footer" style={{
             padding: '16px 28px',
             borderTop: '1px solid var(--border-medium)',
             display: 'flex',

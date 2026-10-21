@@ -458,16 +458,19 @@ input, textarea, select {
 }
 
 .catalog-price-inputs {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 7px;
 }
 
 .catalog-price-inputs label {
   min-width: 0;
-  flex: 1;
 }
 
+.catalog-price-inputs .catalog-input {
+  width: 100%;
+}
 .catalog-stock-filter {
   display: flex;
   min-height: 40px;
@@ -896,6 +899,68 @@ input, textarea, select {
   animation: pulseSubtle 2.5s infinite ease-in-out;
 }
 
+.dashboard-content,
+.dashboard-content > *,
+.dashboard-content :where(div, section, form, article) {
+  min-width: 0;
+}
+
+.dashboard-content :where(button, .btn-primary, .btn-secondary, .btn-outline) {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.dashboard-content :where(.btn-primary, .btn-secondary, .btn-outline) {
+  white-space: normal;
+  text-align: center;
+}
+
+.dashboard-header-actions,
+.dashboard-button-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dashboard-tabs > button {
+  flex: 0 0 auto;
+  min-height: 40px;
+}
+
+.upi-payment-qr img {
+  max-width: 100%;
+}
+
+.dashboard-order-transition-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: 100%;
+}
+
+.dashboard-product-grid,
+.dashboard-offers-grid,
+.dashboard-shortcuts-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)) !important;
+}
+
+.studio-settings-layout {
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr) !important;
+}
+
+.studio-settings-nav {
+  min-width: 0;
+}
+
+.dashboard-modal-footer {
+  flex-wrap: wrap;
+}
+
+.dashboard-modal-footer > button {
+  min-width: 120px;
+}
+
 /* ==========================================================================
    Responsive Adaptations (Mobile, Tablet, Desktop)
    ========================================================================== */
@@ -1031,6 +1096,178 @@ input, textarea, select {
   .dashboard-tabs { scrollbar-width: thin; }
   .dashboard-content, .dashboard-content > * { min-width: 0; max-width: 100%; }
   .dashboard-title-copy { min-width: 0; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 800px) {
+  .dashboard-header-actions {
+    width: 100%;
+  }
+
+  .dashboard-header-actions > button,
+  .dashboard-action-bar > .dashboard-primary-action {
+    flex: 1 1 180px;
+  }
+
+  .studio-settings-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .studio-settings-nav {
+    position: static !important;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .studio-settings-nav > button {
+    width: 100%;
+    text-align: left;
+  }
+}
+
+@media (max-width: 640px) {
+  .upi-mobile-guidance {
+    display: flex !important;
+  }
+
+  .upi-payment-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .dashboard-order-transition-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .dashboard-content [style*="minmax("] {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .dashboard-action-bar {
+    align-items: stretch !important;
+    padding: 14px !important;
+  }
+
+  .dashboard-product-filters {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .dashboard-product-search {
+    min-width: 100% !important;
+    max-width: none !important;
+  }
+
+  .dashboard-product-filters > select {
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 1 160px;
+  }
+
+  .dashboard-action-bar > .dashboard-primary-action {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dashboard-shortcuts-grid,
+  .dashboard-product-grid,
+  .dashboard-offers-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .dashboard-product-grid > *,
+  .dashboard-offers-grid > * {
+    min-width: 0;
+  }
+
+  .dashboard-stock-actions {
+    gap: 6px !important;
+  }
+
+  .dashboard-stock-actions > input {
+    max-width: 52px;
+  }
+
+  .dashboard-product-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .dashboard-offer-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .dashboard-offer-actions > button:first-child {
+    flex: 1 1 180px;
+    justify-content: center;
+    white-space: normal;
+  }
+
+  .dashboard-recent-orders-header,
+  .dashboard-recent-order-row {
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .dashboard-order-filters,
+  .dashboard-order-filters > label {
+    min-width: 0;
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-order-filters select {
+    max-width: 100%;
+  }
+
+  .dashboard-button-row > button {
+    flex: 1 1 140px;
+  }
+
+  .dashboard-modal-footer {
+    justify-content: stretch !important;
+    padding: 12px 16px !important;
+  }
+
+  .dashboard-modal-footer > button {
+    flex: 1 1 140px;
+  }
+
+  .mobile-modal-panel .dashboard-form-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+    min-width: 0;
+  }
+
+  .dashboard-admin-modal {
+    padding: 18px !important;
+  }
+
+  .dashboard-admin-modal .dashboard-modal-footer {
+    margin-inline: -18px;
+    margin-bottom: -18px;
+  }
+
+  .dashboard-admin-modal > form > div:first-child {
+    padding: 16px !important;
+  }
+
+  .dashboard-modal-header {
+    gap: 12px;
+    padding: 16px !important;
+  }
+
+  .dashboard-modal-header > div:first-child {
+    min-width: 0;
+  }
+
+  .dashboard-modal-header > button {
+    flex: 0 0 auto;
+  }
+
+  .dashboard-modal-header h2,
+  .dashboard-modal-header h3 {
+    overflow-wrap: anywhere;
+  }
 }
 
 @media (max-width: 380px) {

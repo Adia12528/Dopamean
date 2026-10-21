@@ -23,7 +23,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({ onOpenAddModal, on
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Top Banner & Action */}
-      <div style={{
+      <div className="dashboard-action-bar" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -46,7 +46,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({ onOpenAddModal, on
 
         <button
           onClick={onOpenAddModal}
-          className="btn-primary"
+          className="btn-primary dashboard-primary-action"
           style={{ padding: '10px 20px' }}
         >
           <Plus size={18} />
@@ -73,7 +73,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({ onOpenAddModal, on
           </button>
         </div>
       ) : (
-        <div style={{
+        <div className="dashboard-offers-grid" style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
           gap: '24px'
@@ -212,7 +212,7 @@ export const OffersManager: React.FC<OffersManagerProps> = ({ onOpenAddModal, on
                     </span>
                   </div>
 
-                  <div style={{
+                  <div className="dashboard-offer-actions" style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',

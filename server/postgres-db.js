@@ -184,7 +184,7 @@ export const postgresDb = {
       }
       const threshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299)); const shippingAmount = subtotal === 0 || subtotal >= threshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40)); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
       const id = `ORD-${crypto.randomUUID()}`; const createdAt = new Date().toISOString();
-      const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
+      const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined, trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
       await insertOrder(client, order); for (const entry of products) await saveProduct(client, { ...entry.product, stock: entry.remainingStock });
       await client.query('COMMIT'); return order;
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
@@ -212,9 +212,16 @@ export const postgresDb = {
     else if (status === 'shipped') { const courier = extras.courierPartner || current.courierPartner || 'Courier'; const awb = extras.trackingNumber || current.trackingNumber; defaultNote = awb ? `Parcel dispatched via ${courier}. AWB: ${awb}` : `Parcel handed over to ${courier}.`; }
     else if (status === 'out_for_delivery') defaultNote = extras.deliveryNotes || 'Delivery partner has picked up parcel and is out for doorstep delivery.';
     else if (status === 'delivered') defaultNote = 'Parcel successfully delivered to recipient. Thank you for supporting handmade craftsmanship! 🌸';
+    if (extras.paymentProofKey) defaultNote = 'Customer uploaded an optional UPI payment screenshot for verification.';
+    else if (current.paymentMethod === 'upi' && current.paymentStatus !== 'paid' && extras.paymentStatus === 'paid') defaultNote = 'UPI payment verified by the studio against the transaction reference and bank statement.';
     let nextPaymentStatus = extras.paymentStatus || current.paymentStatus;
     if (status === 'delivered' && current.paymentMethod === 'cod' && nextPaymentStatus === 'pending') nextPaymentStatus = 'paid';
-    const updated = { ...current, ...extras, status, paymentStatus: nextPaymentStatus, timeline: [...(current.timeline || []), { status: status === 'out_for_delivery' ? 'OUT FOR DELIVERY' : (status === 'confirmed' ? 'ORDER CONFIRMED' : `STATUS: ${status.toUpperCase()}`), timestamp: new Date().toISOString(), note: defaultNote }] };
+    const timelineStatus = extras.paymentProofKey
+      ? 'UPI PAYMENT PROOF SUBMITTED'
+      : current.paymentMethod === 'upi' && current.paymentStatus !== 'paid' && extras.paymentStatus === 'paid'
+        ? 'UPI PAYMENT VERIFIED'
+        : status === 'out_for_delivery' ? 'OUT FOR DELIVERY' : (status === 'confirmed' ? 'ORDER CONFIRMED' : `STATUS: ${status.toUpperCase()}`);
+    const updated = { ...current, ...extras, status, paymentStatus: nextPaymentStatus, timeline: [...(current.timeline || []), { status: timelineStatus, timestamp: new Date().toISOString(), note: defaultNote }] };
     if (status === 'shipped' && !updated.shippedAt) updated.shippedAt = new Date().toISOString();
     if (status === 'delivered' && !updated.deliveredAt) updated.deliveredAt = new Date().toISOString();
     await pool.query('UPDATE orders SET status=$2,payment_status=$3,tracking_number=$4,data=$5::jsonb WHERE id=$1', [id, status, updated.paymentStatus || current.paymentStatus, updated.trackingNumber || null, JSON.stringify(updated)]);

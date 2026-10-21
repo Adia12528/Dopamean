@@ -208,7 +208,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
       </div>
 
       {/* Quick Launchpad & Shortcuts */}
-      <div style={{
+      <div className="dashboard-shortcuts-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
         gap: '20px'
@@ -297,7 +297,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
         border: '1px solid var(--border-medium)',
         boxShadow: 'var(--shadow-sm)'
       }}>
-        <div style={{
+        <div className="dashboard-recent-orders-header" style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -326,6 +326,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
           {orders.slice(0, 3).map(order => (
             <div
               key={order.id}
+              className="dashboard-recent-order-row"
               style={{
                 display: 'flex',
                 alignItems: 'center',

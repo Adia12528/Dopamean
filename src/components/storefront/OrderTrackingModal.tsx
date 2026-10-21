@@ -287,7 +287,9 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                       {settings.currency}{order.total}
                     </div>
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                      {order.paymentMethod ? order.paymentMethod.toUpperCase() : 'COD'} • {order.paymentStatus ? order.paymentStatus.toUpperCase() : 'PENDING'}
+                      {order.paymentMethod === 'upi' && paymentStatus !== 'paid'
+                        ? 'UPI • PAYMENT VERIFICATION PENDING'
+                        : `${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'COD'} • ${order.paymentStatus ? order.paymentStatus.toUpperCase() : 'PENDING'}`}
                     </div>
                   </div>
                 </div>
@@ -306,7 +308,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                       lineHeight: 1.45
                     }}
                   >
-                    <strong>Payment status: {paymentStatus.replace('_', ' ').toUpperCase()}.</strong> {paymentNotice}
+                    <strong>{order.paymentMethod === 'upi' && paymentStatus === 'pending' ? 'Payment Verification Pending.' : `Payment status: ${paymentStatus.replace('_', ' ').toUpperCase()}.`}</strong> {paymentNotice}
                   </div>
                 )}
 

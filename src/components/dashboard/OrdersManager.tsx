@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import type { Order, StoreSettings } from '../../types';
 import { useStore } from '../../context/StoreContext';
-import { getAssetUrl } from '../../services/api';
+import { api, getAssetUrl } from '../../services/api';
 import { createOrderWhatsAppMessage, createWhatsAppUrl, isWhatsAppEnabled, isWhatsAppStageEnabled, normalizeWhatsAppPhone } from '../../lib/whatsapp';
 import { 
   Package, 
@@ -43,6 +43,7 @@ export const OrdersManager: React.FC = () => {
     autoMarkCodPaidOnDelivered: settings.autoMarkCodPaidOnDelivered ?? true
   });
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [openingPaymentProofOrderId, setOpeningPaymentProofOrderId] = useState<string | null>(null);
 
   // Modal States
   const [cancellingOrder, setCancellingOrder] = useState<Order | null>(null);
@@ -261,12 +262,49 @@ export const OrdersManager: React.FC = () => {
 
   // 1. Confirm Order (Pending -> Confirmed / Ready to Ship)
   const handleConfirmOrder = async (order: Order) => {
+    if (order.paymentMethod === 'upi' && order.paymentStatus !== 'paid') {
+      showToast('Verify the UPI transaction in your bank statement before confirming this order.', 'error');
+      return;
+    }
     setIsProcessingAction(true);
     try {
       await updateOrderStatus(order.id, 'confirmed');
       showToast(`Order #${order.id} confirmed! Moved to Confirmed (Ready to Ship) section. 🧶`, 'success');
     } finally {
       setIsProcessingAction(false);
+    }
+  };
+
+  const handleVerifyUpiPayment = async (order: Order) => {
+    if (order.paymentMethod !== 'upi' || order.paymentStatus === 'paid') return;
+    const reference = order.upiRefNumber ? ` UTR ${order.upiRefNumber}` : '';
+    if (!window.confirm(`Confirm that UPI payment${reference} is visible in your bank or UPI statement for ${settings.currency}${order.total.toFixed(2)}?`)) return;
+    setIsProcessingAction(true);
+    try {
+      await updateOrderStatus(order.id, order.status, { paymentStatus: 'paid' });
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleOpenPaymentProof = async (orderId: string) => {
+    const proofWindow = window.open('about:blank', '_blank');
+    if (!proofWindow) {
+      showToast('Allow pop-ups to view the payment screenshot.', 'error');
+      return;
+    }
+    proofWindow.opener = null;
+    setOpeningPaymentProofOrderId(orderId);
+    try {
+      const proof = await api.getUpiPaymentProof(orderId);
+      const proofUrl = URL.createObjectURL(proof);
+      proofWindow.location.href = proofUrl;
+      window.setTimeout(() => URL.revokeObjectURL(proofUrl), 60_000);
+    } catch (error) {
+      proofWindow.close();
+      showToast(error instanceof Error ? error.message : 'Could not load the payment screenshot.', 'error');
+    } finally {
+      setOpeningPaymentProofOrderId(null);
     }
   };
 
@@ -369,7 +407,7 @@ export const OrdersManager: React.FC = () => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+    <div className="dashboard-orders" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
       {/* ─────────────────────────────────────────────────────────────
           1. HEADER WITH STUDIO ORDERS & COMMISSION TRACKING TITLE
@@ -403,7 +441,7 @@ export const OrdersManager: React.FC = () => {
             </p>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="dashboard-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
               style={{
@@ -587,7 +625,7 @@ export const OrdersManager: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <div className="dashboard-button-row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(false)}
@@ -854,7 +892,7 @@ export const OrdersManager: React.FC = () => {
           )}
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+        <div className="dashboard-order-filters" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           {/* Payment Filter */}
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-muted)' }}>Payment:</span>
@@ -993,7 +1031,9 @@ export const OrdersManager: React.FC = () => {
                       padding: '2px 8px',
                       borderRadius: '6px'
                     }}>
-                      {order.paymentMethod ? order.paymentMethod.toUpperCase() : 'COD'} • {order.paymentStatus ? order.paymentStatus.toUpperCase() : 'PENDING'}
+                      {order.paymentMethod === 'upi' && order.paymentStatus !== 'paid'
+                        ? 'UPI • PAYMENT VERIFICATION PENDING'
+                        : `${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'COD'} • ${order.paymentStatus ? order.paymentStatus.toUpperCase() : 'PENDING'}`}
                     </span>
 
                     {order.promoCodeApplied && (
@@ -1050,6 +1090,62 @@ export const OrdersManager: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {order.paymentMethod === 'upi' && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    padding: '12px 14px',
+                    border: `1px solid ${order.paymentStatus === 'paid' ? '#BBF7D0' : '#FDE68A'}`,
+                    borderRadius: '12px',
+                    background: order.paymentStatus === 'paid' ? '#F0FDF4' : '#FFFBEB'
+                  }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: order.paymentStatus === 'paid' ? '#166534' : '#92400E' }}>
+                        {order.paymentStatus === 'paid' ? 'UPI payment verified' : 'Payment Verification Pending'}
+                      </div>
+                      <div style={{ marginTop: '4px', fontSize: '0.78rem', color: '#475569', overflowWrap: 'anywhere' }}>
+                        UTR / transaction reference: <strong>{order.upiRefNumber || 'Not provided'}</strong>
+                      </div>
+                    </div>
+                    <div className="dashboard-button-row">
+                      {order.paymentStatus !== 'paid' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleVerifyUpiPayment(order)}
+                          disabled={isProcessingAction}
+                          style={{
+                            padding: '8px 12px',
+                            border: 0,
+                            borderRadius: '9px',
+                            background: '#15803D',
+                            color: '#FFFFFF',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            cursor: isProcessingAction ? 'wait' : 'pointer',
+                            opacity: isProcessingAction ? 0.65 : 1
+                          }}
+                        >
+                          Verify UPI Payment
+                        </button>
+                      )}
+                      {order.paymentProofKey && (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={openingPaymentProofOrderId === order.id}
+                          onClick={() => void handleOpenPaymentProof(order.id)}
+                          style={{ padding: '8px 12px', fontSize: '0.78rem' }}
+                        >
+                          {openingPaymentProofOrderId === order.id ? 'Opening screenshot…' : 'View payment screenshot'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* ── CARD MIDDLE: ITEMS & CUSTOMER / SHIPPING DETAILS ── */}
                 <div style={{
@@ -1324,7 +1420,7 @@ export const OrdersManager: React.FC = () => {
                   </div>
 
                   {/* Right-side Step-by-Step Transition Buttons */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div className="dashboard-order-transition-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     
                     {/* STAGE 1: PENDING ORDERS (Cancel Option with Reason + Confirm Button) */}
                     {order.status === 'pending' && (
@@ -1374,7 +1470,8 @@ export const OrdersManager: React.FC = () => {
 
                         <button
                           onClick={() => handleConfirmOrder(order)}
-                          disabled={isProcessingAction}
+                          disabled={isProcessingAction || (order.paymentMethod === 'upi' && order.paymentStatus !== 'paid')}
+                          title={order.paymentMethod === 'upi' && order.paymentStatus !== 'paid' ? 'Verify UPI payment before confirming this order.' : undefined}
                           style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -1386,12 +1483,13 @@ export const OrdersManager: React.FC = () => {
                             color: '#FFFFFF',
                             fontSize: '0.84rem',
                             fontWeight: 700,
-                            cursor: 'pointer',
+                            cursor: isProcessingAction || (order.paymentMethod === 'upi' && order.paymentStatus !== 'paid') ? 'not-allowed' : 'pointer',
+                            opacity: isProcessingAction || (order.paymentMethod === 'upi' && order.paymentStatus !== 'paid') ? 0.55 : 1,
                             boxShadow: 'var(--shadow-sm)'
                           }}
                         >
                           <Check size={16} />
-                          <span>Confirm Order</span>
+                          <span>{order.paymentMethod === 'upi' && order.paymentStatus !== 'paid' ? 'Verify UPI first' : 'Confirm Order'}</span>
                         </button>
                       </>
                     )}
@@ -1753,7 +1851,7 @@ export const OrdersManager: React.FC = () => {
             </div>
 
             {/* Modal Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <div className="dashboard-button-row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
               <button
                 type="button"
                 onClick={() => setCancellingOrder(null)}
@@ -1910,7 +2008,7 @@ export const OrdersManager: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <div className="dashboard-button-row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
               <button
                 type="button"
                 onClick={() => setShippingOrder(null)}
@@ -2045,7 +2143,7 @@ export const OrdersManager: React.FC = () => {
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <div className="dashboard-button-row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
               <button
                 type="button"
                 onClick={() => setOutForDeliveryOrder(null)}
@@ -2163,7 +2261,7 @@ export const OrdersManager: React.FC = () => {
               )}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <div className="dashboard-button-row" style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
               <button
                 type="button"
                 onClick={() => setDeliveringOrder(null)}

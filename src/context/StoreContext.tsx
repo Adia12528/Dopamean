@@ -599,7 +599,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         delivered: 'Delivered',
         cancelled: 'Cancelled'
       };
-      showToast(`Order #${orderId} marked as ${statusLabels[status] || status}`, status === 'cancelled' ? 'info' : 'success');
+      const isUpiPaymentVerification = extras?.paymentStatus === 'paid' &&
+        orders.some(order => order.id === orderId && order.paymentMethod === 'upi');
+      showToast(
+        isUpiPaymentVerification
+          ? `UPI payment for order #${orderId} verified successfully.`
+          : `Order #${orderId} marked as ${statusLabels[status] || status}`,
+        status === 'cancelled' ? 'info' : 'success'
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Failed to update order status';
       showToast(msg, 'error');
