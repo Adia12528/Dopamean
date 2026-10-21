@@ -1,6 +1,8 @@
 import type { Product, Offer, Order, OrderCreatePayload, StoreSettings, Review, UserProfile } from '../types';
 
-const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+const BASE_URL = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
 export const getAssetUrl = (url?: string | null): string => {
   if (!url || !url.startsWith('/uploads/')) return url || '';

@@ -56,6 +56,19 @@ export const StorefrontView: React.FC = () => {
     () => Array.from(new Set(products.map(product => product.yarnType.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
     [products]
   );
+  const featuredCategories = useMemo(
+    () => Array.from(new Set(products.map(product => product.category).filter(Boolean)))
+      .sort((left, right) => left.localeCompare(right))
+      .map(category => ({
+        name: category,
+        items: products
+          .filter(product => product.category === category)
+          .sort((left, right) => Number(Boolean(right.isBestSeller)) - Number(Boolean(left.isBestSeller)) || right.rating - left.rating || right.reviewsCount - left.reviewsCount)
+          .slice(0, 4)
+      }))
+      .filter(group => group.items.length > 0),
+    [products]
+  );
   const minimumPriceValue = minimumPrice === '' ? null : Number(minimumPrice);
   const maximumPriceValue = maximumPrice === '' ? null : Number(maximumPrice);
   const filteredProducts = useMemo(() => {
@@ -143,6 +156,66 @@ export const StorefrontView: React.FC = () => {
 
       {/* Offers Showcase Section */}
       <OffersShowcase />
+
+      {featuredCategories.length > 0 && (
+        <section className="featured-category-section" style={{ padding: '12px 0 20px' }}>
+          <div className="container">
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px', marginBottom: '22px', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.78rem', fontWeight: 700, color: 'var(--accent-sage)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  <Sparkles size={14} />
+                  <span>Shop by Category</span>
+                </div>
+                <h2 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>Curated collections for every style</h2>
+              </div>
+
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setSelectedCategory('All');
+                  const catalogSection = document.getElementById('catalog');
+                  if (catalogSection) catalogSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              >
+                View full collection
+              </button>
+            </div>
+
+            <div className="featured-category-grid">
+              {featuredCategories.map(category => (
+                <div key={category.name} className="featured-category-card">
+                  <div className="featured-category-header">
+                    <div>
+                      <span className="featured-category-kicker">Collection</span>
+                      <h3>{category.name}</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="featured-category-link"
+                      onClick={() => {
+                        setSelectedCategory(category.name);
+                        const catalogSection = document.getElementById('catalog');
+                        if (catalogSection) catalogSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      }}
+                    >
+                      Browse
+                    </button>
+                  </div>
+
+                  <div className="featured-category-items">
+                    {category.items.map(product => (
+                      <div key={product.id} className="featured-category-item">
+                        <ProductCard product={product} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Optional, real customer reviews */}
       <TestimonialsSection />
