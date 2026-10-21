@@ -95,9 +95,10 @@ Use the session pooler for hosted environments that need IPv4 connectivity; use 
 ## Customer Supabase Auth
 
 1. In **Authentication → Providers**, enable email sign-in and keep email confirmation enabled.
-2. In **Authentication → URL Configuration**, set the production Site URL and allow the confirmation route for local development (`http://localhost:5173/auth/confirm` and, if you use it, `http://127.0.0.1:5173/auth/confirm`) and the deployed frontend (for example, `https://your-production-domain/auth/confirm`). The sign-up flow redirects to `/auth/confirm` on the current frontend origin; add each exact origin to the allow-list before testing email confirmation.
-3. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` on the API. Set the same project URL and publishable key as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for the frontend.
-4. Restart the API and rebuild/redeploy the frontend. The API validates customer access tokens and syncs verified account profiles with PostgreSQL.
+2. To enable Google, turn on **Google** under **Authentication → Providers**. Create a Google OAuth web client in Google Cloud Console and add the Supabase callback URL shown in the provider settings (usually `https://<project-ref>.supabase.co/auth/v1/callback`) to its authorized redirect URIs. Paste the client ID and secret into Supabase, not the frontend.
+3. In **Authentication → URL Configuration**, set the production Site URL and allow the frontend return URLs. OAuth returns to the current page, so allow local frontend URLs such as `http://localhost:5173/**` and the deployed frontend (for example, `https://your-production-domain/**`). For email confirmation, also allow `http://localhost:5173/auth/confirm` and, if used, `http://127.0.0.1:5173/auth/confirm`, plus the deployed frontend's `/auth/confirm` URL.
+4. Set `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` on the API. Set the same project URL and publishable key as `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for the frontend.
+5. Restart the API and rebuild/redeploy the frontend. The API validates customer access tokens and syncs verified account profiles with PostgreSQL.
 
 Existing customer passwords use the previous application's hash format and cannot be imported into Supabase Auth. Customers need to create an Auth account with their existing email and choose a new password; profile and order history are reconnected by email after verification.
 

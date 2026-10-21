@@ -11,6 +11,13 @@ export function getEmailConfirmationRedirectUrl(): string {
   return new URL('/auth/confirm', window.location.origin).toString();
 }
 
+export function getOAuthRedirectUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const pathname = window.location.pathname.replace(/\/+$/, '');
+  const targetPath = (pathname === '/auth/confirm') ? '/' : (pathname || '/');
+  return new URL(targetPath, window.location.origin).toString();
+}
+
 export function getSupabaseClient(): Promise<SupabaseClient | null> {
   if (!supabaseAuthEnabled || !url || !publishableKey) return Promise.resolve(null);
   if (!clientPromise) {

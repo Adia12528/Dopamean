@@ -325,7 +325,7 @@ async function requireUser(req, res, next) {
         const user = await db.syncAuthUser({
           id: data.user.id,
           email: data.user.email,
-          name: data.user.user_metadata?.name || '',
+          name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.user_metadata?.user_name || '',
           phone: data.user.user_metadata?.phone || ''
         });
         req.user = user;
@@ -560,7 +560,7 @@ app.post('/api/users/login', loginLimit, async (req, res) => {
             user = await db.syncAuthUser({
               id: supaData.user.id,
               email: supaData.user.email,
-              name: supaData.user.user_metadata?.name || supaData.user.email.split('@')[0] || 'Customer',
+              name: supaData.user.user_metadata?.full_name || supaData.user.user_metadata?.name || supaData.user.email.split('@')[0] || 'Customer',
               phone: supaData.user.user_metadata?.phone || ''
             });
           }
