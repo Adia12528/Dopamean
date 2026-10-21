@@ -52,6 +52,9 @@ export const ProductDetailModal: React.FC = () => {
       }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Quick view ${product.title}`}
         className="mobile-modal-panel product-modal-panel"
         onClick={(e) => e.stopPropagation()}
         style={{

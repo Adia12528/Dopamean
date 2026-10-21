@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
 import { HeroBanner } from './HeroBanner';
@@ -7,16 +7,40 @@ import { TestimonialsSection } from './TestimonialsSection';
 import { PendingPaymentRecoveryBanner } from './PendingPaymentRecoveryBanner';
 import { CategoryFilter } from './CategoryFilter';
 import { ProductCard } from './ProductCard';
-import { Sparkles } from 'lucide-react';
+import { ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
 
+type CatalogSort = 'price-ascending' | 'price-descending' | 'newest' | 'bestselling' | 'rating';
+
+const PRODUCTS_PER_PAGE = 12;
+
 export const StorefrontView: React.FC = () => {
-  const { products, selectedCategory, searchQuery, setSearchQuery, setViewMode, setDashboardTab, settings, loadSampleTemplate, isAdmin, isLoading } = useStore();
+  const { products, selectedCategory, setSelectedCategory, searchQuery, setSearchQuery, setViewMode, setDashboardTab, settings, loadSampleTemplate, isAdmin, isLoading } = useStore();
+  const [sortOption, setSortOption] = useState<CatalogSort>('bestselling');
+  const [minimumPrice, setMinimumPrice] = useState('');
+  const [maximumPrice, setMaximumPrice] = useState('');
+  const [minimumRating, setMinimumRating] = useState(0);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [selectedYarnType, setSelectedYarnType] = useState('all');
+  const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
+  const [pagination, setPagination] = useState({ criteriaKey: '', page: 1 });
+  const pageCriteria = JSON.stringify([
+    selectedCategory,
+    searchQuery,
+    minimumPrice,
+    maximumPrice,
+    minimumRating,
+    inStockOnly,
+    selectedYarnType,
+    sortOption
+  ]);
 
   const exactProducts = useMemo(() => {
     const categoryProducts = selectedCategory === 'All'
       ? products
       : products.filter(product => product.category === selectedCategory);
+    if (!searchQuery.trim()) return categoryProducts;
     return findExactProductMatches(categoryProducts, searchQuery);
   }, [products, selectedCategory, searchQuery]);
   const closeMatchProducts = useMemo(
@@ -25,8 +49,88 @@ export const StorefrontView: React.FC = () => {
       : [],
     [products, searchQuery, exactProducts.length]
   );
-  const filteredProducts = exactProducts.length > 0 ? exactProducts : closeMatchProducts;
+  const searchResultProducts = exactProducts.length > 0 ? exactProducts : closeMatchProducts;
   const isShowingCloseMatches = searchQuery.trim().length > 0 && exactProducts.length === 0 && closeMatchProducts.length > 0;
+  const yarnTypes = useMemo(
+    () => Array.from(new Set(products.map(product => product.yarnType.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
+    [products]
+  );
+  const minimumPriceValue = minimumPrice === '' ? null : Number(minimumPrice);
+  const maximumPriceValue = maximumPrice === '' ? null : Number(maximumPrice);
+  const filteredProducts = useMemo(() => {
+    const matches = searchResultProducts.filter(product =>
+      (minimumPriceValue === null || !Number.isFinite(minimumPriceValue) || product.price >= minimumPriceValue) &&
+      (maximumPriceValue === null || !Number.isFinite(maximumPriceValue) || product.price <= maximumPriceValue) &&
+      product.rating >= minimumRating &&
+      (!inStockOnly || product.stock > 0) &&
+      (selectedYarnType === 'all' || product.yarnType === selectedYarnType)
+    );
+
+    return matches.sort((left, right) => {
+      if (sortOption === 'price-ascending') return left.price - right.price;
+      if (sortOption === 'price-descending') return right.price - left.price;
+      if (sortOption === 'newest') {
+        const leftDate = Date.parse(left.createdAt);
+        const rightDate = Date.parse(right.createdAt);
+        return (Number.isFinite(rightDate) ? rightDate : 0) - (Number.isFinite(leftDate) ? leftDate : 0);
+      }
+      if (sortOption === 'rating') return right.rating - left.rating || right.reviewsCount - left.reviewsCount;
+      return Number(Boolean(right.isBestSeller)) - Number(Boolean(left.isBestSeller)) ||
+        right.reviewsCount - left.reviewsCount ||
+        right.rating - left.rating;
+    });
+  }, [searchResultProducts, minimumPriceValue, maximumPriceValue, minimumRating, inStockOnly, selectedYarnType, sortOption]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredProducts.length / PRODUCTS_PER_PAGE));
+  const visiblePage = Math.min(pagination.criteriaKey === pageCriteria ? pagination.page : 1, pageCount);
+  const visibleProducts = filteredProducts.slice((visiblePage - 1) * PRODUCTS_PER_PAGE, visiblePage * PRODUCTS_PER_PAGE);
+  const hasActiveFilters = selectedCategory !== 'All' ||
+    Boolean(searchQuery.trim()) ||
+    minimumPrice !== '' ||
+    maximumPrice !== '' ||
+    minimumRating > 0 ||
+    inStockOnly ||
+    selectedYarnType !== 'all';
+  const activeFilterCount = [
+    selectedCategory !== 'All',
+    Boolean(searchQuery.trim()),
+    minimumPrice !== '',
+    maximumPrice !== '',
+    minimumRating > 0,
+    inStockOnly,
+    selectedYarnType !== 'all'
+  ].filter(Boolean).length;
+
+  useEffect(() => {
+    if (!isFilterPanelOpen) return;
+
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (event.target instanceof Node && !filterPanelRef.current?.contains(event.target)) {
+        setIsFilterPanelOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsFilterPanelOpen(false);
+    };
+
+    document.addEventListener('pointerdown', closeOnOutsideClick);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isFilterPanelOpen]);
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('All');
+    setMinimumPrice('');
+    setMaximumPrice('');
+    setMinimumRating(0);
+    setInStockOnly(false);
+    setSelectedYarnType('all');
+    setSortOption('bestselling');
+  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -87,8 +191,12 @@ export const StorefrontView: React.FC = () => {
               gap: '12px'
             }}>
               <span>
-                {isShowingCloseMatches ? 'Showing similar products' : 'Showing'}{' '}
-                <strong>{filteredProducts.length}</strong> creations
+                {isLoading ? 'Loading creations…' : (
+                  <>
+                    {isShowingCloseMatches ? 'Similar products: ' : 'Showing '}
+                    <strong>{visibleProducts.length}</strong> of <strong>{filteredProducts.length}</strong> creations
+                  </>
+                )}
                 {isShowingCloseMatches && selectedCategory !== 'All' ? ' across all collections' : ''}
               </span>
               {searchQuery.trim() && (
@@ -119,16 +227,165 @@ export const StorefrontView: React.FC = () => {
             </div>
           </div>
 
-          {/* Category Filter Pills */}
-          {isLoading ? (
-            <div aria-hidden="true" style={{ display: 'flex', gap: '8px', overflow: 'hidden', paddingBottom: '8px', marginBottom: '28px' }}>
-              {[72, 104, 88, 96].map((width, index) => (
-                <div key={index} className="catalog-skeleton" style={{ width, height: '36px', borderRadius: '999px', flexShrink: 0 }} />
-              ))}
-            </div>
-          ) : (
-            <CategoryFilter />
-          )}
+          <div className="catalog-controls-row">
+            {/* Category Filter Pills */}
+            {isLoading ? (
+              <div aria-hidden="true" style={{ display: 'flex', gap: '8px', overflow: 'hidden', paddingBottom: '8px', marginBottom: '28px' }}>
+                {[72, 104, 88, 96].map((width, index) => (
+                  <div key={index} className="catalog-skeleton" style={{ width, height: '36px', borderRadius: '999px', flexShrink: 0 }} />
+                ))}
+              </div>
+            ) : (
+              <CategoryFilter />
+            )}
+
+            {!isLoading && (
+              <div className="catalog-filter-menu" ref={filterPanelRef}>
+                <button
+                  type="button"
+                  className="catalog-filter-trigger"
+                  aria-expanded={isFilterPanelOpen}
+                  aria-controls="catalog-filter-panel"
+                  onClick={() => setIsFilterPanelOpen(open => !open)}
+                >
+                  <SlidersHorizontal size={17} />
+                  <span>Filters &amp; Sort</span>
+                  {activeFilterCount > 0 && (
+                    <span className="catalog-filter-count" aria-label={`${activeFilterCount} active filters`}>
+                      {activeFilterCount}
+                    </span>
+                  )}
+                  <ChevronDown size={16} className={isFilterPanelOpen ? 'catalog-filter-chevron is-open' : 'catalog-filter-chevron'} />
+                </button>
+
+                {isFilterPanelOpen && (
+                  <div id="catalog-filter-panel" className="catalog-filter-panel" role="region" aria-label="Filter and sort products">
+                    <div className="catalog-filter-panel-header">
+                      <div>
+                        <h3>Filter &amp; Sort</h3>
+                        <p>Refine the collection to find your favorite piece.</p>
+                      </div>
+                      <button
+                        type="button"
+                        className="catalog-filter-close"
+                        aria-label="Close filters"
+                        onClick={() => setIsFilterPanelOpen(false)}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+
+                    <div className="catalog-filter-options">
+                <label className="catalog-filter-control">
+                  <span>Sort by</span>
+                  <select
+                    value={sortOption}
+                    onChange={event => setSortOption(event.target.value as CatalogSort)}
+                    className="catalog-select"
+                  >
+                    <option value="price-ascending">Price: Low to High</option>
+                    <option value="price-descending">Price: High to Low</option>
+                    <option value="newest">Newest</option>
+                    <option value="bestselling">Bestselling</option>
+                    <option value="rating">Rating</option>
+                  </select>
+                </label>
+
+                <fieldset className="catalog-filter-control catalog-price-filter">
+                  <legend>Price range</legend>
+                  <div className="catalog-price-inputs">
+                    <label>
+                      <span className="catalog-visually-hidden">Minimum price</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputMode="decimal"
+                        placeholder="Min"
+                        aria-label="Minimum price"
+                        value={minimumPrice}
+                        onChange={event => setMinimumPrice(event.target.value)}
+                        className="catalog-input"
+                      />
+                    </label>
+                    <span aria-hidden="true">–</span>
+                    <label>
+                      <span className="catalog-visually-hidden">Maximum price</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputMode="decimal"
+                        placeholder="Max"
+                        aria-label="Maximum price"
+                        value={maximumPrice}
+                        onChange={event => setMaximumPrice(event.target.value)}
+                        className="catalog-input"
+                      />
+                    </label>
+                  </div>
+                </fieldset>
+
+                <label className="catalog-filter-control">
+                  <span>Rating</span>
+                  <select
+                    value={minimumRating}
+                    onChange={event => setMinimumRating(Number(event.target.value))}
+                    className="catalog-select"
+                  >
+                    <option value={0}>Any rating</option>
+                    <option value={3}>3+ stars</option>
+                    <option value={4}>4+ stars</option>
+                    <option value={4.5}>4.5+ stars</option>
+                  </select>
+                </label>
+
+                {yarnTypes.length > 0 && (
+                  <label className="catalog-filter-control">
+                    <span>Material</span>
+                    <select
+                      value={selectedYarnType}
+                      onChange={event => setSelectedYarnType(event.target.value)}
+                      className="catalog-select"
+                    >
+                      <option value="all">All materials</option>
+                      {yarnTypes.map(yarnType => <option key={yarnType} value={yarnType}>{yarnType}</option>)}
+                    </select>
+                  </label>
+                )}
+
+                <label className="catalog-stock-filter">
+                  <input
+                    type="checkbox"
+                    checked={inStockOnly}
+                    onChange={event => setInStockOnly(event.target.checked)}
+                  />
+                  <span>In stock</span>
+                </label>
+                    </div>
+
+                    <div className="catalog-filter-panel-footer">
+                      <button
+                        type="button"
+                        className="catalog-clear-filters"
+                        onClick={clearFilters}
+                        disabled={!hasActiveFilters && sortOption === 'bestselling'}
+                      >
+                        Clear all
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary catalog-done-button"
+                        onClick={() => setIsFilterPanelOpen(false)}
+                      >
+                        Show {filteredProducts.length} {filteredProducts.length === 1 ? 'result' : 'results'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Product Grid */}
           {isLoading ? (
@@ -174,9 +431,9 @@ export const StorefrontView: React.FC = () => {
             }}>
               <span style={{ fontSize: '3rem' }}>🧶</span>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, marginTop: '12px', color: 'var(--text-main)' }}>
-                {products.length === 0 
-                  ? (isAdmin ? 'Your Catalog is Ready!' : 'New Creations Coming Soon!') 
-                  : searchQuery.trim() ? 'No close matches found' : 'No matches found'}
+                {products.length === 0
+                  ? (isAdmin ? 'Your Catalog is Ready!' : 'New Creations Coming Soon!')
+                  : searchQuery.trim() ? 'No close matches found' : 'No products match these filters'}
               </h3>
               <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginTop: '4px', marginBottom: '20px' }}>
                 {products.length === 0
@@ -187,9 +444,9 @@ export const StorefrontView: React.FC = () => {
                     ? 'Try a shorter or different product name, or clear your search to browse the full collection.'
                     : 'Try adjusting your search terms or selecting another category.'}
               </p>
-              {searchQuery.trim() && (
-                <button type="button" onClick={() => setSearchQuery('')} className="btn-secondary">
-                  Clear search and browse all products
+              {products.length > 0 && hasActiveFilters && (
+                <button type="button" onClick={clearFilters} className="btn-secondary">
+                  Clear filters and browse all products
                 </button>
               )}
               
@@ -215,15 +472,40 @@ export const StorefrontView: React.FC = () => {
               )}
             </div>
           ) : (
-            <div style={{
+            <div
+              key={`${pageCriteria}:${visiblePage}`}
+              className="catalog-results-grid"
+              style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 260px), 1fr))',
               gap: 'clamp(14px, 3vw, 24px)'
             }}>
-              {filteredProducts.map(product => (
+              {visibleProducts.map(product => (
                 <ProductCard key={product.id} product={product} />
               ))}
             </div>
+          )}
+
+          {!isLoading && pageCount > 1 && (
+            <nav className="catalog-pagination" aria-label="Product pages">
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={visiblePage === 1}
+                onClick={() => setPagination({ criteriaKey: pageCriteria, page: Math.max(1, visiblePage - 1) })}
+              >
+                Previous
+              </button>
+              <span>Page {visiblePage} of {pageCount}</span>
+              <button
+                type="button"
+                className="btn-secondary"
+                disabled={visiblePage === pageCount}
+                onClick={() => setPagination({ criteriaKey: pageCriteria, page: Math.min(pageCount, visiblePage + 1) })}
+              >
+                Next
+              </button>
+            </nav>
           )}
         </div>
       </section>

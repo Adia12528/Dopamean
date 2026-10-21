@@ -43,7 +43,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         position: 'relative'
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.transform = 'translateY(-6px)';
+        e.currentTarget.style.transform = 'translateY(-4px) scale(1.01)';
         e.currentTarget.style.boxShadow = 'var(--shadow-lg)';
         e.currentTarget.style.borderColor = 'rgba(200, 90, 50, 0.25)';
       }}
@@ -129,28 +129,17 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Quick View Button on Hover */}
         <button
+          type="button"
+          className="product-card-quick-view"
+          aria-label={`Quick view ${product.title}`}
           onClick={(e) => {
             e.stopPropagation();
             setSelectedProductForModal(product);
           }}
-          style={{
-            position: 'absolute',
-            bottom: '12px',
-            right: '12px',
-            background: 'rgba(255, 255, 255, 0.94)',
-            color: 'var(--text-main)',
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: 'var(--shadow-sm)',
-            transition: 'var(--transition-smooth)'
-          }}
-          title="Quick preview"
+          title="Quick View"
         >
           <Eye size={15} />
+          <span>Quick View</span>
         </button>
       </div>
 
