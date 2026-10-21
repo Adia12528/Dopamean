@@ -28,7 +28,7 @@ import {
 import type { CodRule, ProductCardBadge } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
 
-type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies';
+type ScopedSettingSection = 'introSplash' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies';
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
 
 const isValidUpiVpa = (value: string) =>
@@ -54,13 +54,14 @@ export const StudioSettings: React.FC = () => {
   const upiQrFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'introSplash' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
   const [upiQrUploadError, setUpiQrUploadError] = useState('');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [scopedSaveStates, setScopedSaveStates] = useState<Record<ScopedSettingSection, ScopedSettingSaveState>>({
+    introSplash: { isSaving: false, error: '' },
     productCards: { isSaving: false, error: '' },
     lowStock: { isSaving: false, error: '' },
     trustCards: { isSaving: false, error: '' },
@@ -74,6 +75,9 @@ export const StudioSettings: React.FC = () => {
   const normalizedFormBadgePriority = normalizeProductCardBadgePriority(form.productCardBadgePriority);
   const normalizedSavedBadgePriority = normalizeProductCardBadgePriority(settings.productCardBadgePriority);
   const isBadgePriorityDirty = JSON.stringify(normalizedFormBadgePriority) !== JSON.stringify(normalizedSavedBadgePriority);
+  const isIntroSplashDirty =
+    (form.introSplashEnabled !== false) !== (settings.introSplashEnabled !== false) ||
+    Number(form.introSplashDurationMs ?? 2500) !== Number(settings.introSplashDurationMs ?? 2500);
   const isLowStockThresholdDirty = Number(form.lowStockThreshold ?? 5) !== Number(settings.lowStockThreshold ?? 5);
   const trustCardFormValues = {
     trustBadge1Icon: form.trustBadge1Icon,
@@ -142,6 +146,7 @@ export const StudioSettings: React.FC = () => {
   const isStorePoliciesDirty = JSON.stringify(storePolicyFormValues) !== JSON.stringify(savedStorePolicyValues);
 
   const getUnsavedScopedSections = (): { id: ScopedSettingSection; label: string }[] => [
+    ...(isIntroSplashDirty ? [{ id: 'introSplash' as const, label: 'Intro Splash' }] : []),
     ...(isBadgePriorityDirty ? [{ id: 'productCards' as const, label: 'Product Card Badge Rules' }] : []),
     ...(isLowStockThresholdDirty ? [{ id: 'lowStock' as const, label: 'Low Stock Threshold' }] : []),
     ...(isTrustCardsDirty ? [{ id: 'trustCards' as const, label: 'Trust Cards' }] : []),
@@ -168,7 +173,9 @@ export const StudioSettings: React.FC = () => {
 
   const saveScopedSection = async (section: ScopedSettingSection) => {
     if (scopedSaveStates[section].isSaving) return;
-    const sectionLabel = section === 'productCards'
+    const sectionLabel = section === 'introSplash'
+      ? 'Intro Splash'
+      : section === 'productCards'
       ? 'Product Card Badge Rules'
       : section === 'lowStock'
         ? 'Low Stock Threshold'
@@ -193,7 +200,12 @@ export const StudioSettings: React.FC = () => {
     const nextPolicyVersion = section === 'policies'
       ? Math.max(0, Number(settings.storePolicyVersion) || 0) + 1
       : undefined;
-    const payload = section === 'productCards'
+    const payload = section === 'introSplash'
+      ? {
+        introSplashEnabled: form.introSplashEnabled !== false,
+        introSplashDurationMs: Math.min(3000, Math.max(2000, Number(form.introSplashDurationMs) || 2500))
+      }
+      : section === 'productCards'
       ? { productCardBadgePriority: normalizedFormBadgePriority }
       : section === 'lowStock'
         ? { lowStockThreshold: Math.max(0, Math.floor(Number(form.lowStockThreshold) || 0)) }
@@ -604,6 +616,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'theme' as const, label: 'Theme & Colors', icon: <Palette size={16} /> },
     { id: 'header' as const, label: 'Brand & Announcement', icon: <Sparkles size={16} /> },
     { id: 'hero' as const, label: 'Hero Banner', icon: <ImageIcon size={16} /> },
+    { id: 'introSplash' as const, label: 'Intro Splash', icon: <Eye size={16} /> },
     { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
     { id: 'trustCards' as const, label: 'Trust Cards', icon: <ShieldCheck size={16} /> },
     { id: 'testimonials' as const, label: 'Testimonials', icon: <Sparkles size={16} /> },
@@ -745,7 +758,7 @@ export const StudioSettings: React.FC = () => {
         {/* Dynamic Section Editor */}
         <form
           onSubmit={(e) => {
-            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline' || activeSection === 'upi' || activeSection === 'policies') {
+            if (activeSection === 'introSplash' || activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline' || activeSection === 'upi' || activeSection === 'policies') {
               e.preventDefault();
               void saveScopedSection(activeSection);
               return;
@@ -754,6 +767,49 @@ export const StudioSettings: React.FC = () => {
           }}
           style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
         >
+
+          {activeSection === 'introSplash' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Eye size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Intro Splash Screen
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px', lineHeight: 1.5 }}>
+                Show your brand introduction once per visitor session. The storefront data loads behind it before the timed fade begins.
+              </p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.9rem', fontWeight: 700 }}>
+                <input
+                  type="checkbox"
+                  checked={form.introSplashEnabled !== false}
+                  onChange={event => handleChange('introSplashEnabled', event.target.checked)}
+                />
+                Enable the intro splash
+              </label>
+              <label htmlFor="intro-splash-duration" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginTop: '20px', marginBottom: '8px' }}>
+                Display duration
+              </label>
+              <select
+                id="intro-splash-duration"
+                value={form.introSplashDurationMs ?? 2500}
+                onChange={event => handleChange('introSplashDurationMs', Number(event.target.value))}
+                disabled={form.introSplashEnabled === false}
+                style={{ width: '100%', maxWidth: '320px', minHeight: '44px', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', backgroundColor: '#FFFFFF', fontSize: '0.9rem' }}
+              >
+                <option value={2000}>2 seconds</option>
+                <option value={2500}>2.5 seconds</option>
+                <option value={3000}>3 seconds</option>
+              </select>
+              {renderScopedSaveControls('introSplash', isIntroSplashDirty)}
+            </div>
+          )}
           
           {/* 1. THEME & COLORS */}
           {activeSection === 'theme' && (

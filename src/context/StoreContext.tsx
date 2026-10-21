@@ -30,6 +30,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   heroBadge: '🌸 100% Handcrafted with Love',
   heroTitle: 'Cozy Loops by Deepa',
   heroSubtitle: '100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories.',
+  introSplashEnabled: true,
+  introSplashDurationMs: 2500,
   announcementText: '100% Handmade with Love 🌸 Free Shipping on orders above ₹299',
   currency: '₹',
   freeShippingThreshold: 299,
@@ -92,6 +94,7 @@ interface StoreContextType {
   selectedCategory: string;
   isCartOpen: boolean;
   selectedProductForModal: Product | null;
+  selectedOfferForModal: Offer | null;
   toastMessage: { text: string; type: 'success' | 'info' | 'error' } | null;
   isLoading: boolean;
   isAdmin: boolean;
@@ -116,6 +119,7 @@ interface StoreContextType {
   setIsCartOpen: (open: boolean) => void;
   setCartOwner: (ownerId: string | null) => void;
   setSelectedProductForModal: (p: Product | null) => void;
+  setSelectedOfferForModal: (offer: Offer | null) => void;
   showToast: (text: string, type?: 'success' | 'info' | 'error') => void;
 
   updateSettings: (newSettings: Partial<StoreSettings>) => Promise<void>;
@@ -192,8 +196,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<Product | null>(null);
+  const [selectedOfferForModal, setSelectedOfferForModalState] = useState<Offer | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const setProductModal = (product: Product | null) => {
+    setSelectedProductForModal(product);
+    if (product) setSelectedOfferForModalState(null);
+  };
+
+  const setOfferModal = (offer: Offer | null) => {
+    setSelectedOfferForModalState(offer);
+    if (offer) setSelectedProductForModal(null);
+  };
 
   const showToast = useCallback((text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToastMessage({ text, type });
@@ -230,15 +245,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Fetch initial data from the configured backend database
   const loadData = useCallback(async () => {
     try {
-      const [fetchedSettings, fetchedProducts, fetchedOffers, fetchedOrders] = await Promise.all([
+      const [fetchedSettings, fetchedProducts] = await Promise.all([
         api.getSettings().catch(() => DEFAULT_SETTINGS),
-        api.getProducts().catch(() => []),
-        api.getOffers().catch(() => []),
-        api.getOrders().catch(() => [])
+        api.getProducts().catch(() => [])
       ]);
 
       setSettings(fetchedSettings);
       setProducts(fetchedProducts);
+      setIsLoading(false);
+
+      const [fetchedOffers, fetchedOrders] = await Promise.all([
+        api.getOffers().catch(() => []),
+        api.getOrders().catch(() => [])
+      ]);
       setOffers(fetchedOffers);
       setOrders(fetchedOrders);
     } catch {
@@ -714,6 +733,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         selectedCategory,
         isCartOpen,
         selectedProductForModal,
+        selectedOfferForModal,
         toastMessage,
         isLoading,
         isAdmin,
@@ -736,7 +756,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedCategory,
         setIsCartOpen,
         setCartOwner,
-        setSelectedProductForModal,
+        setSelectedProductForModal: setProductModal,
+        setSelectedOfferForModal: setOfferModal,
         showToast,
 
         updateSettings,

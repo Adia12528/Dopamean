@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
+import { buildProductCategorySections } from '../../lib/productCategorySections';
 import { 
   Plus, 
   Search, 
@@ -31,6 +32,8 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
       p.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCat && matchesSearch;
   });
+  const categorySections = buildProductCategorySections(filtered);
+  const isCategoryOverview = categoryFilter === 'All' && !searchTerm.trim();
 
   const handleStockDelta = (product: Product, delta: number) => {
     const newStock = Math.max(0, product.stock + delta);
@@ -111,6 +114,18 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
+          {categoryFilter !== 'All' && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => {
+                setCategoryFilter('All');
+                setSearchTerm('');
+              }}
+            >
+              Back to categories
+            </button>
+          )}
 
           {/* View toggle */}
           <div className="dashboard-view-switcher" style={{ display: 'flex', border: '1px solid var(--border-medium)', borderRadius: '10px', overflow: 'hidden' }}>
@@ -165,12 +180,22 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
         </div>
       ) : viewStyle === 'grid' ? (
         /* GRID VIEW */
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(290px, 1fr))',
-          gap: '20px'
-        }}>
-          {filtered.map(p => (
+        <div className="dashboard-product-categories">
+          {categorySections.map(section => (
+            <section className="dashboard-product-category" key={section.category}>
+              <div className="dashboard-product-category-header">
+                <div>
+                  <h3>{section.category}</h3>
+                  <span>{section.products.length} {section.products.length === 1 ? 'product' : 'products'}</span>
+                </div>
+                {isCategoryOverview && section.products.length > section.previewProducts.length && (
+                  <button type="button" className="btn-secondary" onClick={() => setCategoryFilter(section.category)}>
+                    View all
+                  </button>
+                )}
+              </div>
+              <div className="dashboard-product-category-grid">
+          {(isCategoryOverview ? section.previewProducts : section.products).map(p => (
             <div
               key={p.id}
               style={{
@@ -364,6 +389,9 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                 </div>
               </div>
             </div>
+          ))}
+              </div>
+            </section>
           ))}
         </div>
       ) : (

@@ -31,6 +31,8 @@ export interface StoreSettings {
   heroPrimaryBtnText?: string;
   heroSecondaryBtnText?: string;
   heroImage: string;
+  introSplashEnabled?: boolean;
+  introSplashDurationMs?: number;
   
   showAnnouncement?: boolean;
   announcementText: string;

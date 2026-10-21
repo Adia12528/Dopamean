@@ -10,6 +10,7 @@ import { CategoryFilter } from './CategoryFilter';
 import { ProductCard } from './ProductCard';
 import { ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
+import { buildProductCategorySections } from '../../lib/productCategorySections';
 
 type CatalogSort = 'price-ascending' | 'price-descending' | 'newest' | 'bestselling' | 'rating';
 
@@ -24,6 +25,7 @@ export const StorefrontView: React.FC = () => {
   const [inStockOnly, setInStockOnly] = useState(false);
   const [selectedYarnType, setSelectedYarnType] = useState('all');
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [isFullCatalogOpen, setIsFullCatalogOpen] = useState(false);
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const [pagination, setPagination] = useState({ criteriaKey: '', page: 1 });
   const pageCriteria = JSON.stringify([
@@ -56,19 +58,7 @@ export const StorefrontView: React.FC = () => {
     () => Array.from(new Set(products.map(product => product.yarnType.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
     [products]
   );
-  const featuredCategories = useMemo(
-    () => Array.from(new Set(products.map(product => product.category).filter(Boolean)))
-      .sort((left, right) => left.localeCompare(right))
-      .map(category => ({
-        name: category,
-        items: products
-          .filter(product => product.category === category)
-          .sort((left, right) => Number(Boolean(right.isBestSeller)) - Number(Boolean(left.isBestSeller)) || right.rating - left.rating || right.reviewsCount - left.reviewsCount)
-          .slice(0, 4)
-      }))
-      .filter(group => group.items.length > 0),
-    [products]
-  );
+  const featuredCategories = useMemo(() => buildProductCategorySections(products), [products]);
   const minimumPriceValue = minimumPrice === '' ? null : Number(minimumPrice);
   const maximumPriceValue = maximumPrice === '' ? null : Number(maximumPrice);
   const filteredProducts = useMemo(() => {
@@ -105,6 +95,7 @@ export const StorefrontView: React.FC = () => {
     minimumRating > 0 ||
     inStockOnly ||
     selectedYarnType !== 'all';
+  const shouldShowFullCatalog = isFullCatalogOpen || hasActiveFilters || (!isLoading && products.length === 0);
   const activeFilterCount = [
     selectedCategory !== 'All',
     Boolean(searchQuery.trim()),
@@ -136,6 +127,7 @@ export const StorefrontView: React.FC = () => {
   }, [isFilterPanelOpen]);
 
   const clearFilters = () => {
+    setIsFullCatalogOpen(false);
     setSearchQuery('');
     setSelectedCategory('All');
     setMinimumPrice('');
@@ -144,6 +136,14 @@ export const StorefrontView: React.FC = () => {
     setInStockOnly(false);
     setSelectedYarnType('all');
     setSortOption('bestselling');
+  };
+
+  const openFullCatalog = (category = 'All') => {
+    setSelectedCategory(category);
+    setIsFullCatalogOpen(true);
+    window.requestAnimationFrame(() => {
+      document.getElementById('full-catalog')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   return (
@@ -158,7 +158,7 @@ export const StorefrontView: React.FC = () => {
       <OffersShowcase />
 
       {featuredCategories.length > 0 && (
-        <section className="featured-category-section" style={{ padding: '12px 0 20px' }}>
+        <section id="catalog" className="featured-category-section" style={{ padding: '12px 0 20px' }}>
           <div className="container">
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px', marginBottom: '22px', flexWrap: 'wrap' }}>
               <div>
@@ -171,12 +171,8 @@ export const StorefrontView: React.FC = () => {
 
               <button
                 type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  setSelectedCategory('All');
-                  const catalogSection = document.getElementById('catalog');
-                  if (catalogSection) catalogSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
+                className="btn-primary"
+                onClick={() => openFullCatalog()}
               >
                 View full collection
               </button>
@@ -184,33 +180,29 @@ export const StorefrontView: React.FC = () => {
 
             <div className="featured-category-grid">
               {featuredCategories.map(category => (
-                <div key={category.name} className="featured-category-card">
+                  <section key={category.category} className="featured-category-card">
                   <div className="featured-category-header">
                     <div>
                       <span className="featured-category-kicker">Collection</span>
-                      <h3>{category.name}</h3>
+                      <h3>{category.category}</h3>
                     </div>
                     <button
                       type="button"
-                      className="featured-category-link"
-                      onClick={() => {
-                        setSelectedCategory(category.name);
-                        const catalogSection = document.getElementById('catalog');
-                        if (catalogSection) catalogSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                      }}
+                        className="btn-primary featured-category-link"
+                        onClick={() => openFullCatalog(category.category)}
                     >
-                      Browse
+                        View all
                     </button>
                   </div>
 
                   <div className="featured-category-items">
-                    {category.items.map(product => (
+                    {category.previewProducts.map(product => (
                       <div key={product.id} className="featured-category-item">
                         <ProductCard product={product} />
                       </div>
                     ))}
                   </div>
-                </div>
+                  </section>
               ))}
             </div>
           </div>
@@ -221,7 +213,8 @@ export const StorefrontView: React.FC = () => {
       <TestimonialsSection />
 
       {/* Main Catalog Section */}
-      <section id="catalog" style={{ padding: '30px 0 60px' }}>
+      {shouldShowFullCatalog && (
+      <section id="full-catalog" style={{ padding: '30px 0 60px' }}>
         <div className="container">
           {/* Header Row */}
           <div style={{
@@ -299,6 +292,9 @@ export const StorefrontView: React.FC = () => {
                   + Add item (Admin)
                 </button>
               )}
+              <button type="button" className="btn-secondary" onClick={clearFilters}>
+                Back to categories
+              </button>
             </div>
           </div>
 
@@ -584,6 +580,7 @@ export const StorefrontView: React.FC = () => {
           )}
         </div>
       </section>
+      )}
 
       {/* Craftsmanship & Maker Ethos Section (Customizable by Super Admin) */}
       {settings.showAboutSection !== false && (

@@ -12,9 +12,10 @@ import { InvoiceModal } from './components/storefront/InvoiceModal';
 import { Footer } from './components/common/Footer';
 import { AdminLoginModal } from './components/auth/AdminLoginModal';
 import { UserAuthModal } from './components/auth/UserAuthModal';
+import { getAssetUrl } from './services/api';
 
-const MIN_SPLASH_MS = 2400;
-const MAX_SPLASH_MS = 5000;
+const DEFAULT_SPLASH_DURATION_MS = 2500;
+const SPLASH_FADE_MS = 360;
 const SPLASH_SEEN_KEY = 'dopamean_intro_seen';
 
 const MainApp: React.FC = () => {
@@ -30,56 +31,61 @@ const MainApp: React.FC = () => {
 
   const [isSplashVisible, setIsSplashVisible] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
-    return !window.sessionStorage.getItem(SPLASH_SEEN_KEY);
+    return settings.introSplashEnabled !== false && !window.sessionStorage.getItem(SPLASH_SEEN_KEY);
   });
-  const splashStartRef = useRef<number | null>(null);
+  const [isSplashMounted, setIsSplashMounted] = useState(isSplashVisible);
+  const shouldShowSplash = isSplashVisible && settings.introSplashEnabled !== false;
+  const splashStartedAt = useRef<number | null>(null);
 
-  const hideSplash = useMemo(() => () => {
-    if (typeof window !== 'undefined') {
+  const hideSplash = useMemo(() => (markAsSeen = true) => {
+    if (markAsSeen && typeof window !== 'undefined') {
       window.sessionStorage.setItem(SPLASH_SEEN_KEY, '1');
     }
     setIsSplashVisible(false);
   }, []);
 
   useEffect(() => {
-    if (!isSplashVisible) return;
-    splashStartRef.current = Date.now();
+    if (!shouldShowSplash) return;
+    splashStartedAt.current ??= Date.now();
+    const configuredDuration = Number(settings.introSplashDurationMs) || DEFAULT_SPLASH_DURATION_MS;
+    const duration = Math.min(3000, Math.max(2000, configuredDuration));
+    const remainingDuration = Math.max(0, duration - (Date.now() - splashStartedAt.current));
+    const timer = window.setTimeout(() => {
+      if (!isLoading) hideSplash();
+    }, remainingDuration);
+    return () => window.clearTimeout(timer);
+  }, [hideSplash, isLoading, shouldShowSplash, settings.introSplashDurationMs]);
 
-    const capTimer = window.setTimeout(() => hideSplash(), MAX_SPLASH_MS);
-    const minTimer = window.setTimeout(() => {
-      if (splashStartRef.current !== null) {
-        hideSplash();
-      }
-    }, MIN_SPLASH_MS);
-
-    return () => {
-      window.clearTimeout(capTimer);
-      window.clearTimeout(minTimer);
-    };
-  }, [hideSplash, isSplashVisible]);
+  useEffect(() => {
+    if (shouldShowSplash || !isSplashMounted) return;
+    const timer = window.setTimeout(() => {
+      setIsSplashMounted(false);
+    }, SPLASH_FADE_MS);
+    return () => window.clearTimeout(timer);
+  }, [isSplashMounted, shouldShowSplash]);
 
   return (
-    <div className={`app-shell ${isSplashVisible ? 'app-shell-splashing' : ''}`} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {isSplashVisible && (
-        <div className="app-splash" aria-live="polite" aria-busy={isLoading} role="dialog" aria-modal="false">
+    <div className={`app-shell ${shouldShowSplash ? 'app-shell-splashing' : ''}`} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {isSplashMounted && (
+        <div className={`app-splash${shouldShowSplash ? '' : ' is-exiting'}`} aria-live="polite" aria-busy={isLoading} role="dialog" aria-modal="false">
+          <img
+            className="app-splash-image"
+            src={getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp')}
+            alt=""
+            fetchPriority="high"
+            decoding="async"
+          />
           <div className="app-splash-glow" aria-hidden="true" />
           <div className="app-splash-panel">
             <span className="app-splash-badge">{settings.heroBadge || settings.storeName || 'Handcrafted with love'}</span>
             <h1>{settings.heroTitle || 'Cozy Loops by Deepa'}</h1>
             <p>{settings.heroSubtitle || 'Handmade pieces made to feel personal, warm, and beautiful.'}</p>
             <div className="app-splash-actions">
-              <button type="button" className="btn-primary" onClick={hideSplash}>
-                Enter Store
-              </button>
-              <button type="button" className="btn-secondary" onClick={hideSplash}>
+              <button type="button" className="btn-primary" onClick={() => hideSplash()}>
                 Skip intro
               </button>
             </div>
           </div>
-          <button type="button" className="app-splash-skip" onClick={hideSplash} aria-label="Skip splash screen">
-            Skip
-          </button>
-          <div className="app-splash-loader" aria-hidden="true" />
         </div>
       )}
 

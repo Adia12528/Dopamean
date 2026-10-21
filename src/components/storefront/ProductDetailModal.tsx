@@ -6,14 +6,90 @@ import {
   Star, 
   ShoppingBag, 
   Clock, 
-  Droplets
+  Droplets,
+  Tag,
+  Copy,
+  Check
 } from 'lucide-react';
 import { ReviewsSection } from './ReviewsSection';
 
 export const ProductDetailModal: React.FC = () => {
-  const { selectedProductForModal, setSelectedProductForModal, addToCart, settings } = useStore();
+  const {
+    selectedProductForModal,
+    setSelectedProductForModal,
+    selectedOfferForModal,
+    setSelectedOfferForModal,
+    applyPromoCode,
+    showToast,
+    addToCart,
+    settings
+  } = useStore();
   const [quantity, setQuantity] = useState(1);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [appliedOfferCode, setAppliedOfferCode] = useState<string | null>(null);
+
+  if (!selectedProductForModal && !selectedOfferForModal) return null;
+
+  if (!selectedProductForModal && selectedOfferForModal) {
+    const offer = selectedOfferForModal;
+    const handleApplyOffer = async () => {
+      try {
+        await navigator.clipboard?.writeText(offer.code);
+      } catch {
+        // Promo can still be applied if clipboard access is unavailable.
+      }
+      const result = applyPromoCode(offer.code);
+      setAppliedOfferCode(result.success ? offer.code : null);
+      showToast(result.message, result.success ? 'success' : 'error');
+    };
+
+    return (
+      <div
+        className="mobile-modal-overlay"
+        onClick={() => setSelectedOfferForModal(null)}
+        style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 'clamp(10px, 3vw, 20px)', backgroundColor: 'rgba(35, 28, 22, 0.65)', backdropFilter: 'blur(8px)', animation: 'fadeIn 0.25s ease-out', boxSizing: 'border-box' }}
+      >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Offer details: ${offer.title}`}
+          className="mobile-modal-panel"
+          onClick={event => event.stopPropagation()}
+          style={{ position: 'relative', width: '100%', maxWidth: '620px', maxHeight: '92vh', overflowY: 'auto', borderRadius: '20px', background: '#FFFFFF', boxShadow: '0 25px 60px rgba(0, 0, 0, 0.25)' }}
+        >
+          <button type="button" onClick={() => setSelectedOfferForModal(null)} aria-label="Close offer details" style={{ position: 'absolute', top: '12px', right: '12px', zIndex: 2, width: '42px', height: '42px', display: 'grid', placeItems: 'center', borderRadius: '50%', background: 'rgba(255,255,255,0.94)', border: '1px solid var(--border-medium)' }}>
+            <X size={20} />
+          </button>
+          {offer.image && (
+            <img src={getAssetUrl(offer.image)} alt="" style={{ display: 'block', width: '100%', maxHeight: '300px', objectFit: 'cover', background: 'var(--bg-surface-soft)' }} />
+          )}
+          <div style={{ padding: 'clamp(20px, 4vw, 32px)' }}>
+            <span className="badge-yarn"><Tag size={13} /> {offer.badge}</span>
+            <h2 style={{ marginTop: '14px', fontSize: '1.7rem', lineHeight: 1.2, color: 'var(--text-main)' }}>{offer.title}</h2>
+            <p style={{ marginTop: '10px', color: 'var(--text-muted)', lineHeight: 1.6 }}>{offer.description}</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginTop: '20px', padding: '16px', borderRadius: '12px', background: 'var(--bg-surface-soft)' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Promo code</div>
+                <strong style={{ fontSize: '1.15rem', color: 'var(--accent-terracotta)' }}>{offer.code}</strong>
+              </div>
+              <strong>{offer.discountType === 'percentage' ? `${offer.discountValue}% off` : `${settings.currency}${offer.discountValue} off`}</strong>
+            </div>
+            {(offer.minOrderValue || offer.endDate) && (
+              <p style={{ marginTop: '12px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {offer.minOrderValue ? `Minimum order: ${settings.currency}${offer.minOrderValue}` : ''}
+                {offer.minOrderValue && offer.endDate ? ' · ' : ''}
+                {offer.endDate ? `Valid until ${offer.endDate}` : ''}
+              </p>
+            )}
+            <button type="button" className="btn-primary" onClick={() => void handleApplyOffer()} style={{ width: '100%', minHeight: '48px', marginTop: '22px' }}>
+              {appliedOfferCode === offer.code ? <Check size={17} /> : <Copy size={17} />}
+              {appliedOfferCode === offer.code ? 'Offer applied' : 'Copy code and apply'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!selectedProductForModal) return null;
 
