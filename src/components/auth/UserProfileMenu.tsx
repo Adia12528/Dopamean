@@ -3,7 +3,7 @@ import { useUser } from '../../context/UserContext';
 import { useStore } from '../../context/StoreContext';
 import { 
   User, LogOut, Package, ChevronDown, MapPin, 
-  Phone, Mail, Pencil, X, CheckCircle2, Loader2 
+  Phone, Mail, Pencil, X, CheckCircle2, Clock, Loader2
 } from 'lucide-react';
 import type { Order } from '../../types';
 
@@ -46,6 +46,16 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
       <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
         {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
       </div>
+      {order.paymentMethod === 'upi' && (
+        <>
+          <span role="status" className={order.paymentStatus === 'paid' ? 'badge-sage' : 'badge-amber'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', textTransform: 'none', letterSpacing: 0 }}>
+            {order.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+            {order.paymentStatus === 'paid' ? 'Payment verified' : 'Payment submitted; awaiting review'}
+          </span>
+          {order.upiRefNumber && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>Payment reference (UTR): {order.upiRefNumber}</span>}
+          {order.upiCheckoutReference && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>UPI payment note: {order.upiCheckoutReference}</span>}
+        </>
+      )}
       <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '9px', marginTop: '3px' }}>
         <p style={{ margin: '0 0 8px', fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-main)' }}>Delivery progress</p>
         <Suspense fallback={<p role="status" style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Loading delivery progress…</p>}>
@@ -136,12 +146,14 @@ const EditProfileForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
 // ─── Main dropdown ────────────────────────────────────────────────────────────
 export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ orderHistoryRequest = 0 }) => {
   const { currentUser, isUserLoggedIn, openUserAuthModal, userLogout, getUserOrders } = useUser();
+  const { showToast } = useStore();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'menu' | 'orders' | 'edit'>('menu');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const previousUpiPaymentStatuses = useRef<Record<string, Order['paymentStatus']>>({});
 
   // Close on outside click
   useEffect(() => {
@@ -157,12 +169,20 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   const refreshOrderStatuses = useCallback(async () => {
     try {
       const myOrders = await getUserOrders();
+      for (const order of myOrders) {
+        if (order.paymentMethod === 'upi' && previousUpiPaymentStatuses.current[order.id] === 'pending' && order.paymentStatus === 'paid') {
+          showToast(`UPI payment for order #${order.id} has been verified.`, 'success');
+        }
+      }
+      previousUpiPaymentStatuses.current = Object.fromEntries(
+        myOrders.filter(order => order.paymentMethod === 'upi').map(order => [order.id, order.paymentStatus])
+      );
       setOrders(myOrders);
       setOrdersError('');
     } catch (error) {
       setOrdersError(error instanceof Error ? error.message : 'Could not load your orders. Please try again.');
     }
-  }, [getUserOrders]);
+  }, [getUserOrders, showToast]);
 
   const handleOrdersClick = useCallback(async () => {
     setView('orders');

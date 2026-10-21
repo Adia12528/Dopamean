@@ -1104,12 +1104,18 @@ export const OrdersManager: React.FC = () => {
                     background: order.paymentStatus === 'paid' ? '#F0FDF4' : '#FFFBEB'
                   }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: order.paymentStatus === 'paid' ? '#166534' : '#92400E' }}>
-                        {order.paymentStatus === 'paid' ? 'UPI payment verified' : 'Payment Verification Pending'}
-                      </div>
+                      <span role="status" className={order.paymentStatus === 'paid' ? 'badge-sage' : 'badge-amber'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textTransform: 'none', letterSpacing: 0 }}>
+                        {order.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                        {order.paymentStatus === 'paid' ? 'Payment verified' : 'Awaiting payment review'}
+                      </span>
                       <div style={{ marginTop: '4px', fontSize: '0.78rem', color: '#475569', overflowWrap: 'anywhere' }}>
-                        UTR / transaction reference: <strong>{order.upiRefNumber || 'Not provided'}</strong>
+                        Payment reference (UTR): <strong>{order.upiRefNumber || 'Not provided'}</strong>
                       </div>
+                      {order.upiCheckoutReference && (
+                        <div style={{ marginTop: '3px', fontSize: '0.74rem', color: '#64748B', overflowWrap: 'anywhere' }}>
+                          UPI payment note: <strong>{order.upiCheckoutReference}</strong>
+                        </div>
+                      )}
                     </div>
                     <div className="dashboard-button-row">
                       {order.paymentStatus !== 'paid' && (
@@ -1117,30 +1123,21 @@ export const OrdersManager: React.FC = () => {
                           type="button"
                           onClick={() => void handleVerifyUpiPayment(order)}
                           disabled={isProcessingAction}
-                          style={{
-                            padding: '8px 12px',
-                            border: 0,
-                            borderRadius: '9px',
-                            background: '#15803D',
-                            color: '#FFFFFF',
-                            fontSize: '0.78rem',
-                            fontWeight: 700,
-                            cursor: isProcessingAction ? 'wait' : 'pointer',
-                            opacity: isProcessingAction ? 0.65 : 1
-                          }}
+                          className="btn-primary"
+                          style={{ padding: '8px 12px', fontSize: '0.78rem', opacity: isProcessingAction ? 0.65 : 1 }}
                         >
-                          Verify UPI Payment
+                          Mark payment verified
                         </button>
                       )}
                       {order.paymentProofKey && (
                         <button
                           type="button"
-                          className="btn-secondary"
                           disabled={openingPaymentProofOrderId === order.id}
                           onClick={() => void handleOpenPaymentProof(order.id)}
+                          className="btn-secondary"
                           style={{ padding: '8px 12px', fontSize: '0.78rem' }}
                         >
-                          {openingPaymentProofOrderId === order.id ? 'Opening screenshot…' : 'View payment screenshot'}
+                          {openingPaymentProofOrderId === order.id ? 'Opening…' : 'View screenshot'}
                         </button>
                       )}
                     </div>

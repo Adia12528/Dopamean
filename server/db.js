@@ -571,6 +571,7 @@ const sqliteDb = {
         paymentMethod,
         paymentStatus: 'pending',
         upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined,
+        upiCheckoutReference: paymentMethod === 'upi' ? String(orderData.upiCheckoutReference || '').trim().slice(0, 80) || undefined : undefined,
         trackingNumber: '',
         timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }],
         createdAt

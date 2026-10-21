@@ -5,6 +5,7 @@ import { HeroBanner } from './HeroBanner';
 import { OffersShowcase } from './OffersShowcase';
 import { TestimonialsSection } from './TestimonialsSection';
 import { PendingPaymentRecoveryBanner } from './PendingPaymentRecoveryBanner';
+import { DirectUpiRecoveryBanner } from './DirectUpiRecoveryBanner';
 import { CategoryFilter } from './CategoryFilter';
 import { ProductCard } from './ProductCard';
 import { ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
@@ -138,6 +139,7 @@ export const StorefrontView: React.FC = () => {
       <HeroBanner />
 
       <PendingPaymentRecoveryBanner />
+      <DirectUpiRecoveryBanner />
 
       {/* Offers Showcase Section */}
       <OffersShowcase />

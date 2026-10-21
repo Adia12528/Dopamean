@@ -117,6 +117,7 @@ interface StoreContextType {
       method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
       status?: 'pending' | 'paid';
       upiRefNumber?: string;
+      upiCheckoutReference?: string;
       razorpayOrderId?: string;
       razorpayPaymentId?: string;
     }
@@ -507,6 +508,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
       status?: 'pending' | 'paid';
       upiRefNumber?: string;
+      upiCheckoutReference?: string;
       razorpayOrderId?: string;
       razorpayPaymentId?: string;
     }
@@ -547,6 +549,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       paymentMethod: paymentInfo?.method || 'cod',
       paymentStatus: paymentInfo?.status || (paymentInfo?.method === 'cod' ? 'pending' : 'pending'),
       upiRefNumber: paymentInfo?.upiRefNumber,
+      upiCheckoutReference: paymentInfo?.method === 'upi' ? paymentInfo.upiCheckoutReference : undefined,
       razorpayOrderId: paymentInfo?.razorpayOrderId,
       razorpayPaymentId: paymentInfo?.razorpayPaymentId,
       status: 'pending'

@@ -234,6 +234,7 @@ export interface Order {
   razorpayOrderId?: string;
   razorpayPaymentId?: string;
   upiRefNumber?: string;
+  upiCheckoutReference?: string;
   paymentProofKey?: string;
   paymentProofStorage?: 'supabase' | 'local';
   timeline?: OrderTimelineEvent[];

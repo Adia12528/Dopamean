@@ -184,7 +184,7 @@ export const postgresDb = {
       }
       const threshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299)); const shippingAmount = subtotal === 0 || subtotal >= threshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40)); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
       const id = `ORD-${crypto.randomUUID()}`; const createdAt = new Date().toISOString();
-      const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined, trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
+      const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined, upiCheckoutReference: paymentMethod === 'upi' ? String(orderData.upiCheckoutReference || '').trim().slice(0, 80) || undefined : undefined, trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
       await insertOrder(client, order); for (const entry of products) await saveProduct(client, { ...entry.product, stock: entry.remainingStock });
       await client.query('COMMIT'); return order;
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }

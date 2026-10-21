@@ -5,6 +5,24 @@ import { getEmailConfirmationRedirectUrl, getOAuthRedirectUrl, getSupabaseClient
 
 const USER_TOKEN_KEY = 'dopamean_user_token';
 
+const getOAuthRedirectError = () => {
+  try {
+    const url = new URL(window.location.href);
+    const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+    const errCode = url.searchParams.get('error') || hashParams.get('error');
+    const errDesc = url.searchParams.get('error_description') || hashParams.get('error_description');
+    if (!errCode && !errDesc) return null;
+
+    let message = (errDesc || errCode || 'Google authentication failed').replace(/\+/g, ' ');
+    if (errCode === 'access_denied' || message.toLowerCase().includes('user cancelled') || message.toLowerCase().includes('declined') || message.toLowerCase().includes('denied')) {
+      message = 'Google sign-in was cancelled. You can sign in anytime or use your email.';
+    }
+    return message;
+  } catch {
+    return null;
+  }
+};
+
 interface UserContextType {
   currentUser: UserProfile | null;
   userToken: string | null;
@@ -32,14 +50,15 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [initialOAuthError] = useState(getOAuthRedirectError);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [userToken, setUserToken] = useState<string | null>(() => {
     try { return localStorage.getItem(USER_TOKEN_KEY); } catch { return null; }
   });
-  const [isUserAuthModalOpen, setIsUserAuthModalOpen] = useState(false);
+  const [isUserAuthModalOpen, setIsUserAuthModalOpen] = useState(Boolean(initialOAuthError));
   const [userAuthModalTab, setUserAuthModalTab] = useState<'signin' | 'signup'>('signin');
   const [isLoadingUser, setIsLoadingUser] = useState(true);
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(initialOAuthError);
   const pendingAuthCallback = useRef<(() => void) | null>(null);
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
@@ -62,29 +81,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let active = true;
 
-    // 1. Detect if OAuth redirect returned with an error (e.g. user cancelled or denied access)
+    // Remove OAuth error parameters after initializing the corresponding UI state.
     try {
       const url = new URL(window.location.href);
-      const searchParams = url.searchParams;
-      const hash = url.hash.replace(/^#/, '');
-      const hashParams = new URLSearchParams(hash);
-
-      const errCode = searchParams.get('error') || hashParams.get('error');
-      const errDesc = searchParams.get('error_description') || hashParams.get('error_description');
-
-      if (errCode || errDesc) {
-        let msg = (errDesc || errCode || 'Google authentication failed').replace(/\+/g, ' ');
-        if (errCode === 'access_denied' || msg.toLowerCase().includes('user cancelled') || msg.toLowerCase().includes('declined') || msg.toLowerCase().includes('denied')) {
-          msg = 'Google sign-in was cancelled. You can sign in anytime or use your email.';
-        }
-        setAuthError(msg);
-        setIsUserAuthModalOpen(true);
-
+      const hashParams = new URLSearchParams(url.hash.replace(/^#/, ''));
+      const hasOAuthError = url.searchParams.has('error') || url.searchParams.has('error_description') || hashParams.has('error') || hashParams.has('error_description');
+      if (hasOAuthError) {
         // Clean query/hash parameters from URL so browser history is clean
-        searchParams.delete('error');
-        searchParams.delete('error_code');
-        searchParams.delete('error_description');
-        const cleanSearch = searchParams.toString() ? `?${searchParams.toString()}` : '';
+        url.searchParams.delete('error');
+        url.searchParams.delete('error_code');
+        url.searchParams.delete('error_description');
+        const cleanSearch = url.searchParams.toString() ? `?${url.searchParams.toString()}` : '';
         window.history.replaceState({}, '', `${url.pathname}${cleanSearch}`);
       }
     } catch {
