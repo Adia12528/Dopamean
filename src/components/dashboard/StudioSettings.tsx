@@ -2202,6 +2202,35 @@ export const StudioSettings: React.FC = () => {
                   Enable WhatsApp links throughout the store and dashboard
                 </label>
 
+                <div style={{ border: '1px solid var(--border-medium)', borderRadius: '12px', padding: '14px', display: 'grid', gap: '12px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.84rem', fontWeight: 700 }}>
+                    <input
+                      type="checkbox"
+                      checked={form.bulkOrderInquiryEnabled !== false}
+                      onChange={event => handleChange('bulkOrderInquiryEnabled', event.target.checked)}
+                      style={{ width: '16px', height: '16px', accentColor: '#25D366' }}
+                    />
+                    Show bulk order inquiries in the storefront footer
+                  </label>
+                  <div style={{ maxWidth: '320px' }}>
+                    <label htmlFor="bulk-order-minimum-quantity" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>
+                      Minimum bulk order quantity
+                    </label>
+                    <input
+                      id="bulk-order-minimum-quantity"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={form.bulkOrderMinimumQuantity ?? 10}
+                      onChange={event => handleChange('bulkOrderMinimumQuantity', Math.max(1, Math.floor(Number(event.target.value) || 1)))}
+                      style={{ width: '100%', minHeight: '44px', padding: '10px 12px', borderRadius: '8px', border: '1px solid var(--border-medium)', fontSize: '16px' }}
+                    />
+                    <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '5px 0 0' }}>
+                      Customers must request at least this many pieces. Inquiries use the WhatsApp business number above.
+                    </p>
+                  </div>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '6px' }}>

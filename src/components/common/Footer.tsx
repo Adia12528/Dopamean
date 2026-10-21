@@ -27,13 +27,24 @@ export const Footer: React.FC = () => {
   const { settings, setIsAdminLoginModalOpen, setSelectedCategory, viewMode, isAdmin } = useStore();
   const [isBulkOrderOpen, setIsBulkOrderOpen] = useState(false);
   const [bulkOrder, setBulkOrder] = useState(EMPTY_BULK_ORDER);
+  const minimumBulkOrderQuantity = Math.max(1, Math.floor(Number(settings.bulkOrderMinimumQuantity ?? 10)));
 
   const handleBulkOrderSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = event.currentTarget;
     const hasBlankValue = Object.values(bulkOrder).some(value => !value.trim());
-    if (!form.checkValidity() || hasBlankValue) {
+    if (hasBlankValue) {
       window.alert('Please fill in every required bulk order detail. The WhatsApp inquiry cannot be sent until all fields are complete.');
+      form.reportValidity();
+      return;
+    }
+    if (Number(bulkOrder.quantity) < minimumBulkOrderQuantity) {
+      window.alert(`Bulk orders require at least ${minimumBulkOrderQuantity} pieces.`);
+      form.reportValidity();
+      return;
+    }
+    if (!form.checkValidity()) {
+      window.alert('Please check the required bulk order details and correct any invalid values.');
       form.reportValidity();
       return;
     }
@@ -204,16 +215,18 @@ export const Footer: React.FC = () => {
         </div>
       </div>
 
-      <section className="container footer-bulk-order">
-        <div>
-          <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>Planning a bulk order?</h4>
-          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Share the quantity, deadline, and contact details to start an inquiry.</p>
-        </div>
-        <button type="button" className="btn-primary" onClick={() => setIsBulkOrderOpen(true)}>
-          <MessageCircle size={17} />
-          <span>Request a bulk order</span>
-        </button>
-      </section>
+      {settings.bulkOrderInquiryEnabled !== false && settings.whatsappEnabled !== false && (
+        <section className="container footer-bulk-order">
+          <div>
+            <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>Planning a bulk order?</h4>
+            <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Minimum {minimumBulkOrderQuantity} pieces. Share your deadline and contact details to start an inquiry.</p>
+          </div>
+          <button type="button" className="btn-primary" onClick={() => setIsBulkOrderOpen(true)}>
+            <MessageCircle size={17} />
+            <span>Request a bulk order</span>
+          </button>
+        </section>
+      )}
 
       {/* Bottom Bar */}
       <div className="container" style={{
@@ -285,7 +298,7 @@ export const Footer: React.FC = () => {
                   <textarea required rows={3} value={bulkOrder.items} onChange={event => setBulkOrder(previous => ({ ...previous, items: event.target.value }))} placeholder="Products, colors, sizes, or customization" />
                 </label>
                 <label>Quantity *
-                  <input required type="number" min="1" step="1" value={bulkOrder.quantity} onChange={event => setBulkOrder(previous => ({ ...previous, quantity: event.target.value }))} placeholder="Number of pieces" />
+                  <input required type="number" min={minimumBulkOrderQuantity} step="1" value={bulkOrder.quantity} onChange={event => setBulkOrder(previous => ({ ...previous, quantity: event.target.value }))} placeholder={`Minimum ${minimumBulkOrderQuantity} pieces`} />
                 </label>
                 <label>Needed by *
                   <input required type="date" value={bulkOrder.neededBy} onChange={event => setBulkOrder(previous => ({ ...previous, neededBy: event.target.value }))} />

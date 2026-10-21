@@ -53,6 +53,8 @@
   whatsappEnabled: true,
   whatsappBusinessPhone: '',
   whatsappCountryCode: '91',
+  bulkOrderInquiryEnabled: true,
+  bulkOrderMinimumQuantity: 10,
   whatsappOrderButtonEnabled: true,
   whatsappOrderReceivedEnabled: true,
   whatsappOrderConfirmedEnabled: true,

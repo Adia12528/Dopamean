@@ -118,6 +118,8 @@ export interface StoreSettings {
   whatsappEnabled?: boolean;
   whatsappBusinessPhone?: string;
   whatsappCountryCode?: string;
+  bulkOrderInquiryEnabled?: boolean;
+  bulkOrderMinimumQuantity?: number;
   whatsappOrderButtonEnabled?: boolean;
   whatsappOrderReceivedEnabled?: boolean;
   whatsappOrderConfirmedEnabled?: boolean;
