@@ -25,11 +25,14 @@ import {
   ShieldAlert,
   FileText
 } from 'lucide-react';
-import type { CodRule, ProductCardBadge } from '../../types';
+import type { CodRule, ProductCardBadge, StoreSettings } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
 
-type ScopedSettingSection = 'introSplash' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies';
+type ScopedSettingSection = 'introSplash' | 'categorySections' | 'launchRail' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies';
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
+const SCOPED_SETTING_SECTIONS: ScopedSettingSection[] = ['introSplash', 'categorySections', 'launchRail', 'productCards', 'lowStock', 'trustCards', 'testimonials', 'deliveryTimeline', 'upi', 'policies'];
+const isScopedSettingSection = (section: string): section is ScopedSettingSection =>
+  SCOPED_SETTING_SECTIONS.includes(section as ScopedSettingSection);
 
 const isValidUpiVpa = (value: string) =>
   /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim());
@@ -54,7 +57,7 @@ export const StudioSettings: React.FC = () => {
   const upiQrFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'introSplash' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
@@ -62,6 +65,8 @@ export const StudioSettings: React.FC = () => {
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [scopedSaveStates, setScopedSaveStates] = useState<Record<ScopedSettingSection, ScopedSettingSaveState>>({
     introSplash: { isSaving: false, error: '' },
+    categorySections: { isSaving: false, error: '' },
+    launchRail: { isSaving: false, error: '' },
     productCards: { isSaving: false, error: '' },
     lowStock: { isSaving: false, error: '' },
     trustCards: { isSaving: false, error: '' },
@@ -78,6 +83,14 @@ export const StudioSettings: React.FC = () => {
   const isIntroSplashDirty =
     (form.introSplashEnabled !== false) !== (settings.introSplashEnabled !== false) ||
     Number(form.introSplashDurationMs ?? 2500) !== Number(settings.introSplashDurationMs ?? 2500);
+  const isCategorySectionsDirty =
+    Number(form.categoryTopStockPreviewCount ?? 4) !== Number(settings.categoryTopStockPreviewCount ?? 4) ||
+    Number(form.categoryOtherPreviewCount ?? 2) !== Number(settings.categoryOtherPreviewCount ?? 2) ||
+    (form.categoryProductSortOrder || 'bestseller-newest') !== (settings.categoryProductSortOrder || 'bestseller-newest');
+  const isLaunchRailDirty =
+    (form.showLaunchRail !== false) !== (settings.showLaunchRail !== false) ||
+    Number(form.launchRailProductsLimit ?? 6) !== Number(settings.launchRailProductsLimit ?? 6) ||
+    (form.launchRailProductSortOrder || 'newest') !== (settings.launchRailProductSortOrder || 'newest');
   const isLowStockThresholdDirty = Number(form.lowStockThreshold ?? 5) !== Number(settings.lowStockThreshold ?? 5);
   const trustCardFormValues = {
     trustBadge1Icon: form.trustBadge1Icon,
@@ -147,6 +160,8 @@ export const StudioSettings: React.FC = () => {
 
   const getUnsavedScopedSections = (): { id: ScopedSettingSection; label: string }[] => [
     ...(isIntroSplashDirty ? [{ id: 'introSplash' as const, label: 'Intro Splash' }] : []),
+    ...(isCategorySectionsDirty ? [{ id: 'categorySections' as const, label: 'Category Sections' }] : []),
+    ...(isLaunchRailDirty ? [{ id: 'launchRail' as const, label: 'New Launches & Offers Rail' }] : []),
     ...(isBadgePriorityDirty ? [{ id: 'productCards' as const, label: 'Product Card Badge Rules' }] : []),
     ...(isLowStockThresholdDirty ? [{ id: 'lowStock' as const, label: 'Low Stock Threshold' }] : []),
     ...(isTrustCardsDirty ? [{ id: 'trustCards' as const, label: 'Trust Cards' }] : []),
@@ -175,6 +190,10 @@ export const StudioSettings: React.FC = () => {
     if (scopedSaveStates[section].isSaving) return;
     const sectionLabel = section === 'introSplash'
       ? 'Intro Splash'
+      : section === 'categorySections'
+        ? 'Category Sections'
+        : section === 'launchRail'
+          ? 'New Launches & Offers Rail'
       : section === 'productCards'
       ? 'Product Card Badge Rules'
       : section === 'lowStock'
@@ -200,11 +219,23 @@ export const StudioSettings: React.FC = () => {
     const nextPolicyVersion = section === 'policies'
       ? Math.max(0, Number(settings.storePolicyVersion) || 0) + 1
       : undefined;
-    const payload = section === 'introSplash'
+    const payload: Partial<StoreSettings> = section === 'introSplash'
       ? {
         introSplashEnabled: form.introSplashEnabled !== false,
         introSplashDurationMs: Math.min(3000, Math.max(2000, Number(form.introSplashDurationMs) || 2500))
       }
+      : section === 'categorySections'
+        ? {
+          categoryTopStockPreviewCount: Math.max(1, Math.min(12, Math.floor(Number(form.categoryTopStockPreviewCount) || 4))),
+          categoryOtherPreviewCount: Math.max(1, Math.min(12, Math.floor(Number(form.categoryOtherPreviewCount) || 2))),
+          categoryProductSortOrder: form.categoryProductSortOrder === 'newest-bestseller' ? 'newest-bestseller' : 'bestseller-newest'
+        }
+        : section === 'launchRail'
+          ? {
+            showLaunchRail: form.showLaunchRail !== false,
+            launchRailProductsLimit: Math.max(1, Math.min(12, Math.floor(Number(form.launchRailProductsLimit) || 6))),
+            launchRailProductSortOrder: form.launchRailProductSortOrder === 'bestselling' ? 'bestselling' : 'newest'
+          }
       : section === 'productCards'
       ? { productCardBadgePriority: normalizedFormBadgePriority }
       : section === 'lowStock'
@@ -617,6 +648,8 @@ export const StudioSettings: React.FC = () => {
     { id: 'header' as const, label: 'Brand & Announcement', icon: <Sparkles size={16} /> },
     { id: 'hero' as const, label: 'Hero Banner', icon: <ImageIcon size={16} /> },
     { id: 'introSplash' as const, label: 'Intro Splash', icon: <Eye size={16} /> },
+    { id: 'categorySections' as const, label: 'Category Sections', icon: <Sliders size={16} /> },
+    { id: 'launchRail' as const, label: 'Launches & Offers Rail', icon: <Sparkles size={16} /> },
     { id: 'story' as const, label: 'Artisan Story', icon: <Heart size={16} /> },
     { id: 'trustCards' as const, label: 'Trust Cards', icon: <ShieldCheck size={16} /> },
     { id: 'testimonials' as const, label: 'Testimonials', icon: <Sparkles size={16} /> },
@@ -688,7 +721,7 @@ export const StudioSettings: React.FC = () => {
             <span>Live Store Preview</span>
           </button>
 
-          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && activeSection !== 'upi' && activeSection !== 'policies' && (
+          {!isScopedSettingSection(activeSection) && (
             <button
               type="button"
               onClick={() => handleSave()}
@@ -758,7 +791,7 @@ export const StudioSettings: React.FC = () => {
         {/* Dynamic Section Editor */}
         <form
           onSubmit={(e) => {
-            if (activeSection === 'introSplash' || activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline' || activeSection === 'upi' || activeSection === 'policies') {
+            if (isScopedSettingSection(activeSection)) {
               e.preventDefault();
               void saveScopedSection(activeSection);
               return;
@@ -808,6 +841,104 @@ export const StudioSettings: React.FC = () => {
                 <option value={3000}>3 seconds</option>
               </select>
               {renderScopedSaveControls('introSplash', isIntroSplashDirty)}
+            </div>
+          )}
+
+          {activeSection === 'categorySections' && (
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '20px', padding: '28px', border: '1px solid var(--border-medium)', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Sliders size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>Storefront Category Sections</h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px', lineHeight: 1.5 }}>
+                Set how many products each category previews and which products lead. A category with one product always shows one; empty categories stay hidden. These values apply to the storefront and Studio product grid.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '16px' }}>
+                <label style={{ display: 'grid', gap: '7px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Most-stocked category preview
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    step="1"
+                    value={form.categoryTopStockPreviewCount ?? 4}
+                    onChange={event => handleChange('categoryTopStockPreviewCount', Math.max(1, Math.min(12, Number(event.target.value) || 1)))}
+                    style={{ minHeight: '44px', padding: '10px 14px', border: '1px solid var(--border-medium)', borderRadius: '10px' }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: '7px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Other multi-product categories
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    step="1"
+                    value={form.categoryOtherPreviewCount ?? 2}
+                    onChange={event => handleChange('categoryOtherPreviewCount', Math.max(1, Math.min(12, Number(event.target.value) || 1)))}
+                    style={{ minHeight: '44px', padding: '10px 14px', border: '1px solid var(--border-medium)', borderRadius: '10px' }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: '7px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Product order
+                  <select
+                    value={form.categoryProductSortOrder || 'bestseller-newest'}
+                    onChange={event => handleChange('categoryProductSortOrder', event.target.value as 'bestseller-newest' | 'newest-bestseller')}
+                    style={{ minHeight: '44px', padding: '10px 14px', border: '1px solid var(--border-medium)', borderRadius: '10px', background: '#FFFFFF' }}
+                  >
+                    <option value="bestseller-newest">Bestsellers, then newest</option>
+                    <option value="newest-bestseller">Newest, then bestsellers</option>
+                  </select>
+                </label>
+              </div>
+              {renderScopedSaveControls('categorySections', isCategorySectionsDirty)}
+            </div>
+          )}
+
+          {activeSection === 'launchRail' && (
+            <div style={{ backgroundColor: '#FFFFFF', borderRadius: '20px', padding: '28px', border: '1px solid var(--border-medium)', boxShadow: 'var(--shadow-sm)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Sparkles size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>New Launches &amp; Offers Rail</h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px', lineHeight: 1.5 }}>
+                Launch items come from products marked Featured in Products &amp; Images; active offers continue to come from Offers &amp; Campaigns.
+              </p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px', fontSize: '0.9rem', fontWeight: 700 }}>
+                <input
+                  type="checkbox"
+                  checked={form.showLaunchRail !== false}
+                  onChange={event => handleChange('showLaunchRail', event.target.checked)}
+                />
+                Show the launch and offers rail
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '16px' }}>
+                <label style={{ display: 'grid', gap: '7px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Maximum featured products
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    step="1"
+                    value={form.launchRailProductsLimit ?? 6}
+                    disabled={form.showLaunchRail === false}
+                    onChange={event => handleChange('launchRailProductsLimit', Math.max(1, Math.min(12, Number(event.target.value) || 1)))}
+                    style={{ minHeight: '44px', padding: '10px 14px', border: '1px solid var(--border-medium)', borderRadius: '10px' }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: '7px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Featured product order
+                  <select
+                    value={form.launchRailProductSortOrder || 'newest'}
+                    disabled={form.showLaunchRail === false}
+                    onChange={event => handleChange('launchRailProductSortOrder', event.target.value as 'newest' | 'bestselling')}
+                    style={{ minHeight: '44px', padding: '10px 14px', border: '1px solid var(--border-medium)', borderRadius: '10px', background: '#FFFFFF' }}
+                  >
+                    <option value="newest">Newest first</option>
+                    <option value="bestselling">Bestsellers first</option>
+                  </select>
+                </label>
+              </div>
+              {renderScopedSaveControls('launchRail', isLaunchRailDirty)}
             </div>
           )}
           
@@ -1764,7 +1895,7 @@ export const StudioSettings: React.FC = () => {
                 </h3>
               </div>
               <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '18px', lineHeight: 1.5 }}>
-                Product cards show no more than two qualifying badges. Set their priority below; the highest-priority badges appear first.
+                Product cards show one qualifying badge. Set which badge takes priority below; the first eligible badge is displayed. Save this section independently from other Studio settings.
               </p>
               <div style={{ display: 'grid', gap: '10px' }}>
                 {normalizeProductCardBadgePriority(form.productCardBadgePriority).map((badge, index, priority) => {
@@ -3213,7 +3344,7 @@ export const StudioSettings: React.FC = () => {
           )}
 
           {/* Legacy sections retain their existing save flow until individually migrated. */}
-          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && (
+          {!isScopedSettingSection(activeSection) && (
             <div style={{
               display: 'flex',
               justifyContent: 'flex-end',

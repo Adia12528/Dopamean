@@ -32,7 +32,11 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
       p.tags.some(t => t.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCat && matchesSearch;
   });
-  const categorySections = buildProductCategorySections(filtered);
+  const categorySections = buildProductCategorySections(filtered, {
+    topStockPreviewCount: settings.categoryTopStockPreviewCount,
+    otherPreviewCount: settings.categoryOtherPreviewCount,
+    sortOrder: settings.categoryProductSortOrder
+  });
   const isCategoryOverview = categoryFilter === 'All' && !searchTerm.trim();
 
   const handleStockDelta = (product: Product, delta: number) => {

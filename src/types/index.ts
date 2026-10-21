@@ -33,6 +33,12 @@ export interface StoreSettings {
   heroImage: string;
   introSplashEnabled?: boolean;
   introSplashDurationMs?: number;
+  categoryTopStockPreviewCount?: number;
+  categoryOtherPreviewCount?: number;
+  categoryProductSortOrder?: 'bestseller-newest' | 'newest-bestseller';
+  showLaunchRail?: boolean;
+  launchRailProductsLimit?: number;
+  launchRailProductSortOrder?: 'newest' | 'bestselling';
   
   showAnnouncement?: boolean;
   announcementText: string;

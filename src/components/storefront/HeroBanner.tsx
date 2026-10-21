@@ -18,10 +18,7 @@ export const HeroBanner: React.FC = () => {
   };
 
   return (
-    <section style={{
-      padding: '30px 0 20px',
-      position: 'relative'
-    }}>
+    <section className="hero-banner-section">
       <div className="container">
         {/* Main Hero Card */}
         <div className="hero-card" style={{
@@ -179,7 +176,7 @@ export const HeroBanner: React.FC = () => {
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                   else setSelectedCategory('Accessories');
                 }}
-                className="btn-secondary"
+                className="btn-primary"
               >
                 <span>{settings.heroSecondaryBtnText || 'View Special Combos'}</span>
               </button>

@@ -58,7 +58,11 @@ export const StorefrontView: React.FC = () => {
     () => Array.from(new Set(products.map(product => product.yarnType.trim()).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
     [products]
   );
-  const featuredCategories = useMemo(() => buildProductCategorySections(products), [products]);
+  const featuredCategories = useMemo(() => buildProductCategorySections(products, {
+    topStockPreviewCount: settings.categoryTopStockPreviewCount,
+    otherPreviewCount: settings.categoryOtherPreviewCount,
+    sortOrder: settings.categoryProductSortOrder
+  }), [products, settings.categoryTopStockPreviewCount, settings.categoryOtherPreviewCount, settings.categoryProductSortOrder]);
   const minimumPriceValue = minimumPrice === '' ? null : Number(minimumPrice);
   const maximumPriceValue = maximumPrice === '' ? null : Number(maximumPrice);
   const filteredProducts = useMemo(() => {
@@ -158,7 +162,7 @@ export const StorefrontView: React.FC = () => {
       <OffersShowcase />
 
       {featuredCategories.length > 0 && (
-        <section id="catalog" className="featured-category-section" style={{ padding: '12px 0 20px' }}>
+        <section id="catalog" className="featured-category-section">
           <div className="container">
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px', marginBottom: '22px', flexWrap: 'wrap' }}>
               <div>
@@ -166,7 +170,7 @@ export const StorefrontView: React.FC = () => {
                   <Sparkles size={14} />
                   <span>Shop by Category</span>
                 </div>
-                <h2 style={{ fontSize: '1.8rem', fontWeight: 700, color: 'var(--text-main)', marginTop: '4px' }}>Curated collections for every style</h2>
+                <h2 className="store-section-title" style={{ fontWeight: 700, marginTop: '4px' }}>Curated collections for every style</h2>
               </div>
 
               <button
@@ -197,7 +201,7 @@ export const StorefrontView: React.FC = () => {
 
                   <div className="featured-category-items">
                     {category.previewProducts.map(product => (
-                      <div key={product.id} className="featured-category-item">
+                      <div key={product.id} className={category.previewProducts.length > 1 && category.previewProducts[0].id === product.id ? 'featured-category-item is-lead' : 'featured-category-item'}>
                         <ProductCard product={product} />
                       </div>
                     ))}
@@ -214,7 +218,7 @@ export const StorefrontView: React.FC = () => {
 
       {/* Main Catalog Section */}
       {shouldShowFullCatalog && (
-      <section id="full-catalog" style={{ padding: '30px 0 60px' }}>
+      <section id="full-catalog" className="store-catalog-section">
         <div className="container">
           {/* Header Row */}
           <div style={{
@@ -239,8 +243,7 @@ export const StorefrontView: React.FC = () => {
                 <Sparkles size={14} />
                 <span>The {settings.storeName} Collection</span>
               </div>
-              <h2 style={{
-                fontSize: '2rem',
+              <h2 className="store-section-title" style={{
                 fontWeight: 700,
                 color: 'var(--text-main)',
                 marginTop: '4px'
@@ -584,9 +587,8 @@ export const StorefrontView: React.FC = () => {
 
       {/* Craftsmanship & Maker Ethos Section (Customizable by Super Admin) */}
       {settings.showAboutSection !== false && (
-        <section style={{
+        <section className="store-about-section" style={{
           backgroundColor: '#FFFFFF',
-          padding: '60px 0',
           borderTop: '1px solid var(--border-medium)',
           borderBottom: '1px solid var(--border-medium)'
         }}>
@@ -601,8 +603,7 @@ export const StorefrontView: React.FC = () => {
                 <span className="badge-yarn" style={{ marginBottom: '14px' }}>
                   {settings.aboutBadge || 'Our Story & Maker Ethos'}
                 </span>
-                <h2 style={{
-                  fontSize: '2.2rem',
+                <h2 className="store-section-title" style={{
                   lineHeight: 1.2,
                   color: 'var(--text-main)',
                   marginBottom: '16px'

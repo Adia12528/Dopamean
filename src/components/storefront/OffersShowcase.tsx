@@ -4,28 +4,32 @@ import { getAssetUrl } from '../../services/api';
 import { Tag, Sparkles, Copy, Check, Clock } from 'lucide-react';
 
 export const OffersShowcase: React.FC = () => {
-  const { offers, products, applyPromoCode, setSelectedProductForModal, setSelectedOfferForModal } = useStore();
+  const { offers, products, settings, applyPromoCode, setSelectedProductForModal, setSelectedOfferForModal } = useStore();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
 
   const activeOffers = offers.filter(o => o.isActive);
-  const newLaunchProducts = useMemo(
-    () => products
-      .filter(product => product.isFeatured === true)
-      .sort((left, right) => {
+  const newLaunchProducts = useMemo(() => {
+    const featuredProducts = products.filter(product => product.isFeatured === true);
+    const sortedProducts = featuredProducts.sort((left, right) => {
+      if (settings.launchRailProductSortOrder === 'bestselling') {
+        const bestsellerDifference = Number(Boolean(right.isBestSeller)) - Number(Boolean(left.isBestSeller));
+        if (bestsellerDifference !== 0) return bestsellerDifference;
+      }
         const leftCreatedAt = Date.parse(left.createdAt);
         const rightCreatedAt = Date.parse(right.createdAt);
         return (Number.isFinite(rightCreatedAt) ? rightCreatedAt : 0) - (Number.isFinite(leftCreatedAt) ? leftCreatedAt : 0);
-      })
-      .slice(0, 6),
-    [products]
-  );
+    });
+    const limit = Math.max(1, Math.min(12, Math.floor(Number(settings.launchRailProductsLimit) || 6)));
+    return sortedProducts.slice(0, limit);
+  }, [products, settings.launchRailProductSortOrder, settings.launchRailProductsLimit]);
   const railItems = [
     ...activeOffers.map(offer => ({ type: 'offer' as const, id: offer.id, offer })),
     ...newLaunchProducts.map(product => ({ type: 'product' as const, id: product.id, product }))
   ];
 
-  if (railItems.length === 0) return null;
+  const shouldShowLaunchRail = settings.showLaunchRail !== false && railItems.length > 0;
+  if (!shouldShowLaunchRail && activeOffers.length === 0) return null;
 
   const handleCopy = (code: string) => {
     navigator.clipboard?.writeText(code).catch(() => undefined);
@@ -34,7 +38,7 @@ export const OffersShowcase: React.FC = () => {
     window.setTimeout(() => setCopiedCode(null), 2500);
   };
 
-  const marqueeItems = [...activeOffers, ...activeOffers];
+  const marqueeItems = activeOffers.length > 1 ? [...activeOffers, ...activeOffers] : activeOffers;
   const renderRailItem = (item: (typeof railItems)[number], duplicate = false) => (
     <button
       key={`${item.type}-${item.id}-${duplicate ? 'copy' : 'main'}`}
@@ -70,7 +74,7 @@ export const OffersShowcase: React.FC = () => {
   return (
     <section className="offers-showcase-section">
       <div className="container">
-        <div
+        {shouldShowLaunchRail && <div
           className={`launch-rail ${isPaused ? 'is-paused' : ''}`}
           onMouseEnter={() => setIsPaused(true)}
           onMouseLeave={() => setIsPaused(false)}
@@ -85,7 +89,7 @@ export const OffersShowcase: React.FC = () => {
               <div className="launch-rail-group" aria-hidden="true">{railItems.map(item => renderRailItem(item, true))}</div>
             </div>
           </div>
-        </div>
+        </div>}
 
         {activeOffers.length > 0 && (
           <>
@@ -96,16 +100,49 @@ export const OffersShowcase: React.FC = () => {
               </div>
             </div>
 
-            <div
-              className={`offers-marquee ${isPaused ? 'is-paused' : ''}`}
-              onMouseEnter={() => setIsPaused(true)}
-              onMouseLeave={() => setIsPaused(false)}
-              onTouchStart={() => setIsPaused(true)}
-              onTouchEnd={() => setIsPaused(false)}
-              onTouchCancel={() => setIsPaused(false)}
-            >
-              <div className="offers-marquee-track" aria-label="Featured offers carousel">
-                {marqueeItems.map((offer, index) => (
+            {activeOffers.length === 1 ? (
+              <article className="single-offer-card">
+                <button
+                  type="button"
+                  className="single-offer-image"
+                  onClick={() => setSelectedOfferForModal(activeOffers[0])}
+                  aria-label={`View offer ${activeOffers[0].title}`}
+                >
+                  <img src={getAssetUrl(activeOffers[0].image)} alt="" loading="lazy" decoding="async" />
+                  <span className="offer-marquee-badge"><Tag size={12} />{activeOffers[0].badge}</span>
+                  <span className="single-offer-discount">
+                    {activeOffers[0].discountType === 'percentage' ? `${activeOffers[0].discountValue}% OFF` : `₹${activeOffers[0].discountValue} OFF`}
+                  </span>
+                </button>
+                <div className="single-offer-details">
+                  <div className="single-offer-copy">
+                    <span className="single-offer-kicker"><Sparkles size={14} /> Featured offer</span>
+                    <button type="button" className="single-offer-title" onClick={() => setSelectedOfferForModal(activeOffers[0])}>
+                      {activeOffers[0].title}
+                    </button>
+                    <p>{activeOffers[0].description}</p>
+                  </div>
+                  <div className="single-offer-meta">
+                    <span><Clock size={14} /> Valid until {activeOffers[0].endDate}</span>
+                    <span className="single-offer-code">Code: <strong>{activeOffers[0].code}</strong></span>
+                  </div>
+                  <button type="button" className="btn-primary single-offer-apply" onClick={() => handleCopy(activeOffers[0].code)}>
+                    {copiedCode === activeOffers[0].code ? <Check size={16} /> : <Copy size={16} />}
+                    {copiedCode === activeOffers[0].code ? 'Applied' : 'Copy code and apply'}
+                  </button>
+                </div>
+              </article>
+            ) : (
+              <div
+                className={`offers-marquee ${isPaused ? 'is-paused' : ''}`}
+                onMouseEnter={() => setIsPaused(true)}
+                onMouseLeave={() => setIsPaused(false)}
+                onTouchStart={() => setIsPaused(true)}
+                onTouchEnd={() => setIsPaused(false)}
+                onTouchCancel={() => setIsPaused(false)}
+              >
+                <div className="offers-marquee-track" aria-label="Featured offers carousel">
+                  {marqueeItems.map((offer, index) => (
                   <button
                     key={`${offer.id}-${index}`}
                     type="button"
@@ -141,10 +178,11 @@ export const OffersShowcase: React.FC = () => {
                         </span>
                       </div>
                     </div>
-                  </button>
-                ))}
-              </div>
-            </div>
+                    </button>
+                    ))}
+                  </div>
+                </div>
+              )}
           </>
         )}
       </div>
