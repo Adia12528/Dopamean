@@ -28,13 +28,16 @@ export const Toast: React.FC = () => {
   return (
     <div style={{
       position: 'fixed',
-      bottom: '24px',
-      right: '24px',
+      top: 'max(12px, env(safe-area-inset-top))',
+      left: '50%',
+      transform: 'translateX(-50%)',
       zIndex: 9999,
       display: 'flex',
       alignItems: 'center',
       gap: '12px',
-      padding: '12px 20px',
+      padding: '12px 16px',
+      width: 'max-content',
+      maxWidth: 'min(92vw, 520px)',
       borderRadius: 'var(--radius-md)',
       backgroundColor: bgColors[toastMessage.type],
       border: `1px solid ${borderColors[toastMessage.type]}`,
@@ -42,7 +45,9 @@ export const Toast: React.FC = () => {
       color: '#1E293B',
       fontSize: '0.9rem',
       fontWeight: 500,
-      animation: 'fadeIn 0.25s ease-out'
+      animation: 'fadeIn 0.25s ease-out',
+      overflowWrap: 'anywhere',
+      pointerEvents: 'none'
     }}>
       {icons[toastMessage.type]}
       <span>{toastMessage.text}</span>

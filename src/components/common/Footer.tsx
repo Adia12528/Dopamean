@@ -1,9 +1,69 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { Lock, Heart, Sparkles } from 'lucide-react';
+import { Lock, Heart, Sparkles, MessageCircle, X } from 'lucide-react';
+import { createWhatsAppUrl } from '../../lib/whatsapp';
+
+interface BulkOrderDetails {
+  items: string;
+  quantity: string;
+  neededBy: string;
+  company: string;
+  contactName: string;
+  designation: string;
+  phone: string;
+}
+
+const EMPTY_BULK_ORDER: BulkOrderDetails = {
+  items: '',
+  quantity: '',
+  neededBy: '',
+  company: '',
+  contactName: '',
+  designation: '',
+  phone: ''
+};
 
 export const Footer: React.FC = () => {
   const { settings, setIsAdminLoginModalOpen, setSelectedCategory, viewMode, isAdmin } = useStore();
+  const [isBulkOrderOpen, setIsBulkOrderOpen] = useState(false);
+  const [bulkOrder, setBulkOrder] = useState(EMPTY_BULK_ORDER);
+
+  const handleBulkOrderSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const hasBlankValue = Object.values(bulkOrder).some(value => !value.trim());
+    if (!form.checkValidity() || hasBlankValue) {
+      window.alert('Please fill in every required bulk order detail. The WhatsApp inquiry cannot be sent until all fields are complete.');
+      form.reportValidity();
+      return;
+    }
+
+    const message = [
+      `Bulk order inquiry for ${settings.storeName || 'the store'}`,
+      '',
+      `Items / requirements: ${bulkOrder.items.trim()}`,
+      `Quantity: ${bulkOrder.quantity.trim()}`,
+      `Needed by: ${new Date(`${bulkOrder.neededBy}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`,
+      `Company: ${bulkOrder.company.trim()}`,
+      `Contact name: ${bulkOrder.contactName.trim()}`,
+      `Designation: ${bulkOrder.designation.trim()}`,
+      `Phone: ${bulkOrder.phone.trim()}`
+    ].join('\n');
+    const whatsappUrl = createWhatsAppUrl(
+      settings.whatsappBusinessPhone || settings.contactPhone || '',
+      message,
+      settings.whatsappCountryCode || '91'
+    );
+
+    if (!whatsappUrl) {
+      window.alert('The store WhatsApp number is unavailable. Please contact the store directly.');
+      return;
+    }
+
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    setIsBulkOrderOpen(false);
+    setBulkOrder(EMPTY_BULK_ORDER);
+  };
 
   // If in dashboard mode, don't clutter with full storefront footer
   if (viewMode === 'dashboard') {
@@ -144,6 +204,17 @@ export const Footer: React.FC = () => {
         </div>
       </div>
 
+      <section className="container footer-bulk-order">
+        <div>
+          <h4 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1rem' }}>Planning a bulk order?</h4>
+          <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>Share the quantity, deadline, and contact details to start an inquiry.</p>
+        </div>
+        <button type="button" className="btn-primary" onClick={() => setIsBulkOrderOpen(true)}>
+          <MessageCircle size={17} />
+          <span>Request a bulk order</span>
+        </button>
+      </section>
+
       {/* Bottom Bar */}
       <div className="container" style={{
         paddingTop: '20px',
@@ -188,6 +259,58 @@ export const Footer: React.FC = () => {
           )}
         </div>
       </div>
+
+      {isBulkOrderOpen && (
+        <div
+          className="mobile-modal-overlay"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) setIsBulkOrderOpen(false);
+          }}
+          style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, background: 'rgba(35, 28, 22, 0.58)' }}
+        >
+          <section className="mobile-modal-panel footer-bulk-order-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-order-title">
+            <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, paddingBottom: 14, borderBottom: '1px solid var(--border-light)' }}>
+              <div>
+                <h2 id="bulk-order-title" style={{ margin: 0, fontSize: '1.25rem' }}>Bulk order inquiry</h2>
+                <p style={{ margin: '4px 0 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>All details are required before sending to WhatsApp.</p>
+              </div>
+              <button type="button" aria-label="Close bulk order form" onClick={() => setIsBulkOrderOpen(false)} style={{ minWidth: 44, minHeight: 44, display: 'grid', placeItems: 'center', color: 'var(--text-muted)' }}>
+                <X size={18} />
+              </button>
+            </header>
+
+            <form noValidate onSubmit={handleBulkOrderSubmit} style={{ display: 'grid', gap: 12, marginTop: 16 }}>
+              <div className="footer-bulk-order-fields">
+                <label>Items / requirements *
+                  <textarea required rows={3} value={bulkOrder.items} onChange={event => setBulkOrder(previous => ({ ...previous, items: event.target.value }))} placeholder="Products, colors, sizes, or customization" />
+                </label>
+                <label>Quantity *
+                  <input required type="number" min="1" step="1" value={bulkOrder.quantity} onChange={event => setBulkOrder(previous => ({ ...previous, quantity: event.target.value }))} placeholder="Number of pieces" />
+                </label>
+                <label>Needed by *
+                  <input required type="date" value={bulkOrder.neededBy} onChange={event => setBulkOrder(previous => ({ ...previous, neededBy: event.target.value }))} />
+                </label>
+                <label>Company / organization *
+                  <input required value={bulkOrder.company} onChange={event => setBulkOrder(previous => ({ ...previous, company: event.target.value }))} placeholder="Company name" />
+                </label>
+                <label>Contact name *
+                  <input required value={bulkOrder.contactName} onChange={event => setBulkOrder(previous => ({ ...previous, contactName: event.target.value }))} placeholder="Your full name" />
+                </label>
+                <label>Designation / post *
+                  <input required value={bulkOrder.designation} onChange={event => setBulkOrder(previous => ({ ...previous, designation: event.target.value }))} placeholder="Your role" />
+                </label>
+                <label>Phone number *
+                  <input required type="tel" inputMode="tel" pattern="[0-9+() -]{7,20}" value={bulkOrder.phone} onChange={event => setBulkOrder(previous => ({ ...previous, phone: event.target.value }))} placeholder="Phone number" />
+                </label>
+              </div>
+              <button type="submit" className="btn-primary" style={{ minHeight: 48, justifyContent: 'center' }}>
+                <MessageCircle size={17} />
+                <span>Send inquiry on WhatsApp</span>
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
     </footer>
   );
 };

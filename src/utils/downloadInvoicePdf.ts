@@ -1,4 +1,5 @@
 import type { Order, StoreSettings } from '../types';
+import { getShortOrderId } from '../lib/shortOrderId';
 
 export async function downloadInvoicePDF(order: Order, settings: StoreSettings): Promise<void> {
   const { default: html2canvas } = await import('html2canvas');
@@ -73,7 +74,7 @@ export async function downloadInvoicePDF(order: Order, settings: StoreSettings):
         <span style="display: inline-block; background-color: #EFF6FF; color: #1D4ED8; font-weight: 700; font-size: 11px; padding: 4px 10px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
           Tax Invoice
         </span>
-        <div style="font-size: 16px; font-weight: 800; color: #0F172A;">#${order.id}</div>
+        <div style="font-size: 16px; font-weight: 800; color: #0F172A;">#${getShortOrderId(order.id)}</div>
         <div style="font-size: 12px; color: #64748B; margin-top: 2px;">Date: ${invoiceDate}</div>
         <div style="margin-top: 4px; font-size: 12px; font-weight: 600; color: ${order.paymentStatus === 'paid' ? '#059669' : '#D97706'};">
           Payment: ${(order.paymentMethod || 'COD').toUpperCase()} (${(order.paymentStatus || 'PENDING').toUpperCase()})

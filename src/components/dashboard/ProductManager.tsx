@@ -102,6 +102,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
 
           {/* Category dropdown */}
           <select
+            className="dashboard-product-category-select"
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
             style={{
@@ -162,6 +163,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
         <button
           onClick={onOpenAddModal}
           className="btn-primary dashboard-primary-action"
+          aria-label="Add new product and photos"
           style={{ padding: '10px 20px' }}
         >
           <Plus size={18} />

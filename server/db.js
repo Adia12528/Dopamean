@@ -589,7 +589,13 @@ const sqliteDb = {
       const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40));
       const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
       const createdAt = new Date().toISOString();
-      const id = createOrderReference(new Date(createdAt));
+      const referenceDate = createdAt.slice(0, 10).replace(/-/g, '');
+      const latestReference = sqlite.prepare(`
+        SELECT MAX(CAST(SUBSTR(id, 14) AS INTEGER)) AS sequence
+        FROM orders
+        WHERE id LIKE ? AND SUBSTR(id, 14) <> '' AND SUBSTR(id, 14) NOT GLOB '*[^0-9]*'
+      `).get(`ORD-${referenceDate}-%`);
+      const id = createOrderReference(new Date(createdAt), Number(latestReference?.sequence || 0) + 1);
       const newOrder = {
         id,
         customer,

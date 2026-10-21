@@ -39,6 +39,7 @@ export const Navbar: React.FC = () => {
 
   const totalCartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
   const activeOffersCount = offers.filter(o => o.isActive).length;
+  const isStudioDashboard = isAdmin && viewMode === 'dashboard';
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [orderHistoryRequest, setOrderHistoryRequest] = useState(0);
   const exactSearchMatches = useMemo(() => findExactProductMatches(products, searchQuery), [products, searchQuery]);
@@ -51,7 +52,7 @@ export const Navbar: React.FC = () => {
   const isSearchSuggestionsVisible = viewMode === 'store' && isSearchFocused && Boolean(searchQuery.trim());
 
   return (
-    <header style={{
+    <header className={isStudioDashboard ? 'studio-dashboard-header' : undefined} style={{
       position: 'sticky',
       top: 0,
       zIndex: 40,
@@ -63,7 +64,7 @@ export const Navbar: React.FC = () => {
     }}>
       {/* Super Admin Control Ribbon (Visible ONLY when logged in as Super Admin) */}
       {isAdmin && (
-        <div style={{
+        <div className="super-admin-ribbon" style={{
           backgroundColor: '#1E293B',
           color: '#F8FAFC',
           padding: '6px 16px',
@@ -130,7 +131,7 @@ export const Navbar: React.FC = () => {
       )}
 
       {/* Top Announcement Bar */}
-      <div style={{
+      <div className="nav-announcement" style={{
         background: 'linear-gradient(90deg, #C85A32, #E07A5F, #C85A32)',
         color: '#FFFFFF',
         fontSize: '0.8rem',
@@ -145,16 +146,16 @@ export const Navbar: React.FC = () => {
         flexWrap: 'wrap'
       }}>
         <Sparkles size={14} />
-        <span>{settings.announcementText || 'Handmade in small batches with love'}</span>
+        <span className="nav-announcement-copy">{settings.announcementText || 'Handmade in small batches with love'}</span>
         {activeOffersCount > 0 && (
-          <span style={{
+          <span className="nav-active-offers" style={{
             background: 'rgba(255, 255, 255, 0.25)',
             padding: '2px 8px',
             borderRadius: '999px',
             fontSize: '0.72rem',
             marginLeft: '6px'
           }}>
-            {activeOffersCount} Active Offers
+            {activeOffersCount} Active Offer{activeOffersCount === 1 ? '' : 's'}
           </span>
         )}
       </div>
@@ -397,6 +398,7 @@ export const Navbar: React.FC = () => {
             }}>
               <button
                 onClick={() => setViewMode('store')}
+                aria-label="Switch to storefront"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -417,6 +419,7 @@ export const Navbar: React.FC = () => {
 
               <button
                 onClick={() => setViewMode('dashboard')}
+                aria-label="Switch to Studio"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -445,7 +448,9 @@ export const Navbar: React.FC = () => {
                   if (isUserLoggedIn) setOrderHistoryRequest(value => value + 1);
                   else setIsTrackingModalOpen(true);
                 }}
+                aria-label={isUserLoggedIn ? 'View your orders' : 'Track an order'}
                 title={isUserLoggedIn ? 'View your order history and delivery progress' : 'Track an order with order ID and checkout email'}
+                className="nav-track-order"
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -486,16 +491,21 @@ export const Navbar: React.FC = () => {
           {isAdmin && viewMode === 'dashboard' ? (
             <button
               onClick={() => setDashboardTab('products')}
-              className="btn-primary"
+              aria-label="Add product"
+              title="Add product"
+              className="btn-primary nav-add-product-shortcut"
               style={{ padding: '8px 16px', fontSize: '0.85rem' }}
             >
-              <Plus size={16} />
-              <span>Add Product</span>
+              <Plus size={18} />
+              <span className="nav-action-label">Add Product</span>
             </button>
           ) : (
             /* Normal User & Storefront Customer: Shopping Cart Drawer Button */
             <button
               onClick={() => setIsCartOpen(true)}
+              aria-label={`Open cart${totalCartCount > 0 ? `, ${totalCartCount} items` : ''}`}
+              title="Open cart"
+              className="nav-cart-button"
               style={{
                 position: 'relative',
                 display: 'flex',
@@ -522,9 +532,9 @@ export const Navbar: React.FC = () => {
               }}
             >
               <ShoppingBag size={18} />
-              <span>Cart</span>
+              <span className="nav-action-label">Cart</span>
               {totalCartCount > 0 && (
-                <span style={{
+                <span className="nav-cart-count" style={{
                   background: 'var(--accent-rose)',
                   color: '#FFFFFF',
                   fontSize: '0.74rem',
@@ -543,7 +553,9 @@ export const Navbar: React.FC = () => {
           {!isAdmin && (
             <button
               onClick={() => setIsAdminLoginModalOpen(true)}
+              aria-label="Open Studio admin sign-in"
               title="Studio Artisan / Super Admin Portal"
+              className="nav-admin-login"
               style={{
                 display: 'flex',
                 alignItems: 'center',

@@ -6,17 +6,17 @@ import {
   CheckCircle2,
   Clock,
   CreditCard,
+  Copy,
   DollarSign,
   Package,
-  Plus,
   RefreshCw,
   ShoppingBag,
   Tag,
   Truck
 } from 'lucide-react';
+import { getShortOrderId } from '../../lib/shortOrderId';
 
 interface DashboardOverviewProps {
-  onOpenAddProduct: () => void;
   onOpenAddOffer: () => void;
 }
 
@@ -33,8 +33,8 @@ const parseOfferBoundary = (dateValue: string, isEnd: boolean) => {
   return Date.parse(dateValue);
 };
 
-export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddProduct, onOpenAddOffer }) => {
-  const { products, offers, orders, setDashboardTab, settings, refreshData, isLoading } = useStore();
+export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddOffer }) => {
+  const { products, offers, orders, setDashboardTab, settings, refreshData, isLoading, showToast } = useStore();
   const [now] = React.useState(() => Date.now());
   const collectedOrders = orders.filter(order => order.paymentStatus === 'paid' && order.status !== 'cancelled');
   const collectedRevenue = collectedOrders.reduce((total, order) => total + order.total, 0);
@@ -61,6 +61,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
   const recentOrders = [...orders]
     .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
     .slice(0, 5);
+
+  const handleCopyOrderId = async (orderId: string) => {
+    try {
+      await navigator.clipboard.writeText(getShortOrderId(orderId));
+      showToast('Order ID copied.', 'success');
+    } catch {
+      showToast('Could not copy the order ID.', 'error');
+    }
+  };
 
   const metrics = [
     {
@@ -115,10 +124,6 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
             <Tag size={15} />
             <span>Add offer</span>
           </button>
-          <button type="button" className="btn-primary" onClick={onOpenAddProduct} style={{ padding: '8px 12px', fontSize: '0.8rem' }}>
-            <Plus size={15} />
-            <span>Add product</span>
-          </button>
         </div>
       </header>
 
@@ -158,7 +163,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
                 <div key={order.id} className="dashboard-recent-order-row" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', gap: '8px 14px', padding: '11px 0', borderBottom: '1px solid var(--border-light)' }}>
                   <div style={{ minWidth: 0 }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 9px' }}>
-                      <strong style={{ fontSize: '0.78rem', color: 'var(--text-main)' }}>#{order.id}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
+                        <strong style={{ minWidth: 0, fontSize: '0.78rem', color: 'var(--text-main)', overflowWrap: 'anywhere' }}>#{getShortOrderId(order.id)}</strong>
+                        <button type="button" aria-label={`Copy order ${getShortOrderId(order.id)}`} title="Copy order ID" onClick={() => void handleCopyOrderId(order.id)} style={{ flex: '0 0 44px', width: 44, minHeight: 44, display: 'grid', placeItems: 'center', color: 'var(--text-muted)' }}>
+                          <Copy size={13} />
+                        </button>
+                      </div>
                       <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem', overflowWrap: 'anywhere' }}>{order.customer.name}</span>
                     </div>
                     <div style={{ marginTop: '3px', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
@@ -167,9 +177,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddP
                   </div>
                   <div style={{ display: 'grid', justifyItems: 'end', gap: '4px' }}>
                     <strong style={{ color: 'var(--text-main)', fontSize: '0.78rem' }}>{settings.currency}{order.total.toFixed(2)}</strong>
-                    <span className={order.paymentStatus === 'paid' ? 'badge-sage' : order.paymentMethod === 'upi' ? 'badge-amber' : 'badge-yarn'} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', maxWidth: '190px', fontSize: '0.64rem', textAlign: 'right', textTransform: 'none', letterSpacing: 0 }}>
-                      {order.paymentStatus === 'paid' ? <CheckCircle2 size={11} /> : order.paymentMethod === 'upi' ? <CreditCard size={11} /> : <Clock size={11} />}
-                      {order.status.replace(/_/g, ' ')} · {order.paymentStatus === 'paid' ? 'paid' : order.paymentMethod === 'upi' && order.paymentStatus === 'pending' ? 'UPI review' : (order.paymentStatus || 'pending').replace(/_/g, ' ')}
+                    <span className={order.status === 'cancelled' ? 'badge-rose' : order.paymentStatus === 'paid' ? 'badge-sage' : order.paymentMethod === 'upi' ? 'badge-amber' : 'badge-yarn'} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', maxWidth: '190px', fontSize: '0.64rem', textAlign: 'right', textTransform: 'none', letterSpacing: 0 }}>
+                      {order.status === 'cancelled' ? <AlertTriangle size={11} /> : order.paymentStatus === 'paid' ? <CheckCircle2 size={11} /> : order.paymentMethod === 'upi' ? <CreditCard size={11} /> : <Clock size={11} />}
+                      {order.status === 'cancelled' ? 'Cancelled' : `${order.status.replace(/_/g, ' ')} · ${order.paymentStatus === 'paid' ? 'paid' : order.paymentMethod === 'upi' && order.paymentStatus === 'pending' ? 'UPI review' : (order.paymentStatus || 'pending').replace(/_/g, ' ')}`}
                     </span>
                   </div>
                 </div>

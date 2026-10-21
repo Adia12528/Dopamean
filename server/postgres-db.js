@@ -95,6 +95,8 @@ export const postgresDb = {
         total numeric(12,2) NOT NULL CHECK(total>=0), payment_method text NOT NULL CHECK(payment_method IN ('cod','upi','razorpay','payu','whatsapp')),
         payment_status text NOT NULL DEFAULT 'pending' CHECK(payment_status IN ('pending','paid','failed','refund_pending','refunded')), tracking_number text,
         data jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+      CREATE TABLE IF NOT EXISTS order_reference_counters (
+        reference_date text PRIMARY KEY, value integer NOT NULL CHECK(value > 0));
       CREATE INDEX IF NOT EXISTS orders_created_idx ON orders(created_at DESC);
       CREATE INDEX IF NOT EXISTS orders_email_idx ON orders(lower(customer_email));
       CREATE TABLE IF NOT EXISTS reviews (
@@ -184,7 +186,14 @@ export const postgresDb = {
         discountAmount = Number((offer.discountType === 'percentage' ? subtotal * Number(offer.discountValue) / 100 : Math.min(subtotal, Number(offer.discountValue))).toFixed(2)); promoCodeApplied = offer.code;
       }
       const threshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299)); const shippingAmount = subtotal === 0 || subtotal >= threshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40)); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
-      const createdAt = new Date().toISOString(); const id = createOrderReference(new Date(createdAt));
+      const createdAt = new Date().toISOString();
+      const referenceDate = createdAt.slice(0, 10).replace(/-/g, '');
+      const { rows: referenceRows } = await client.query(`
+        INSERT INTO order_reference_counters (reference_date, value) VALUES ($1, 1)
+        ON CONFLICT (reference_date) DO UPDATE SET value = order_reference_counters.value + 1
+        RETURNING value
+      `, [referenceDate]);
+      const id = createOrderReference(new Date(createdAt), Number(referenceRows[0].value));
       const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined, upiCheckoutReference: paymentMethod === 'upi' ? String(orderData.upiCheckoutReference || '').trim().slice(0, 80) || undefined : undefined, policyConsent: orderData.policyConsent || undefined, trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
       await insertOrder(client, order); for (const entry of products) await saveProduct(client, { ...entry.product, stock: entry.remainingStock });
       await client.query('COMMIT'); return order;

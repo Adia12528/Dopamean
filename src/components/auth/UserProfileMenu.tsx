@@ -1,11 +1,12 @@
-import React, { Suspense, lazy, useState, useRef, useEffect, useCallback } from 'react';
+import React, { Suspense, lazy, useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { useUser } from '../../context/UserContext';
 import { useStore } from '../../context/StoreContext';
 import { 
-  User, LogOut, Package, ChevronDown, MapPin, 
-  Phone, Mail, Pencil, X, CheckCircle2, Clock, Loader2
+  User, LogOut, Package, ChevronDown, MapPin,
+  Phone, Pencil, X, CheckCircle2, Clock, Loader2, Copy
 } from 'lucide-react';
 import type { Order } from '../../types';
+import { getShortOrderId } from '../../lib/shortOrderId';
 
 const OrderStatusTimeline = lazy(() => import('../storefront/OrderStatusTimeline').then(module => ({ default: module.OrderStatusTimeline })));
 
@@ -25,16 +26,30 @@ const Avatar: React.FC<{ name: string; size?: number }> = ({ name, size = 34 }) 
 
 // ─── Order history card ───────────────────────────────────────────────────────
 const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
-  const { settings } = useStore();
+  const { settings, showToast } = useStore();
   const cur = settings.currency || '₹';
   const statusLabel = order.status.replace(/_/g, ' ');
+  const shortOrderId = getShortOrderId(order.id);
+  const handleCopyOrderId = async () => {
+    try {
+      await navigator.clipboard.writeText(shortOrderId);
+      showToast('Order ID copied.', 'success');
+    } catch {
+      showToast('Could not copy the order ID.', 'error');
+    }
+  };
   return (
     <div style={{
       border: '1px solid var(--border-medium)', borderRadius: 12, padding: '12px 14px',
       display: 'flex', flexDirection: 'column', gap: 6, background: '#FAFAF9'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)' }}>#{order.id}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+          <span style={{ minWidth: 0, overflowWrap: 'anywhere', fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)' }}>#{shortOrderId}</span>
+          <button type="button" aria-label={`Copy order ${shortOrderId}`} title="Copy order ID" onClick={() => void handleCopyOrderId()} style={{ minWidth: 44, minHeight: 44, display: 'grid', placeItems: 'center', flexShrink: 0, color: 'var(--text-muted)' }}>
+            <Copy size={14} />
+          </button>
+        </div>
         <span style={{
           fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
           backgroundColor: 'var(--accent-terracotta-light)', color: 'var(--accent-terracotta)', textTransform: 'capitalize'
@@ -46,7 +61,7 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
       <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
         {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
       </div>
-      {order.paymentMethod === 'upi' && (
+      {order.paymentMethod === 'upi' && order.status !== 'cancelled' && (
         <>
           <span role="status" className={order.paymentStatus === 'paid' ? 'badge-sage' : 'badge-amber'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', textTransform: 'none', letterSpacing: 0 }}>
             {order.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
@@ -153,6 +168,9 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [popoverPosition, setPopoverPosition] = useState({ left: 0, top: 0 });
   const previousUpiPaymentStatuses = useRef<Record<string, Order['paymentStatus']>>({});
   const currentOrderOwnerId = currentUser?.id || '';
   const activeOrderOwnerId = useRef(currentOrderOwnerId);
@@ -174,9 +192,36 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
         setOpen(false); setView('menu');
       }
     };
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        setView('menu');
+      }
+    };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', keyHandler);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', keyHandler);
+    };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const isMobile = window.matchMedia('(max-width: 639px)').matches;
+    if (isMobile) {
+      const previousOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => { document.body.style.overflow = previousOverflow; };
+    }
+
+    const trigger = triggerRef.current?.getBoundingClientRect();
+    const panel = panelRef.current?.getBoundingClientRect();
+    if (!trigger || !panel) return;
+    const left = Math.max(12, Math.min(trigger.right - panel.width, window.innerWidth - panel.width - 12));
+    const top = Math.max(12, Math.min(trigger.bottom + 8, window.innerHeight - panel.height - 12));
+    setPopoverPosition({ left, top });
+  }, [open, view]);
 
   const refreshOrderStatuses = useCallback(async () => {
     const requestOwnerId = currentOrderOwnerId;
@@ -186,7 +231,7 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
       if (activeOrderOwnerId.current !== requestOwnerId) return;
       for (const order of myOrders) {
         if (order.paymentMethod === 'upi' && previousUpiPaymentStatuses.current[order.id] === 'pending' && order.paymentStatus === 'paid') {
-          showToast(`UPI payment for order #${order.id} has been verified.`, 'success');
+          showToast(`UPI payment for order #${getShortOrderId(order.id)} has been verified.`, 'success');
         }
       }
       previousUpiPaymentStatuses.current = Object.fromEntries(
@@ -259,6 +304,9 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
     <div ref={ref} style={{ position: 'relative' }}>
       <button
         onClick={() => { setOpen(!open); if (!open) setView('menu'); }}
+        ref={triggerRef}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         style={{
           display: 'flex', alignItems: 'center', gap: 7, padding: '5px 10px 5px 5px',
           borderRadius: 999, border: '1.5px solid var(--border-medium)',
@@ -275,10 +323,24 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
       </button>
 
       {open && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 200,
+        <div
+          className="user-profile-menu-backdrop"
+          onMouseDown={event => {
+            if (event.target === event.currentTarget) {
+              setOpen(false);
+              setView('menu');
+            }
+          }}
+        >
+        <div
+          ref={panelRef}
+          className="user-profile-menu-panel"
+          role="dialog"
+          aria-label="Your account"
+          style={{
+          position: 'fixed', left: popoverPosition.left, top: popoverPosition.top, zIndex: 200,
           backgroundColor: '#FFFFFF', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
-          border: '1px solid var(--border-medium)', minWidth: 280, maxWidth: 'calc(100vw - 24px)', overflow: 'hidden',
+          border: '1px solid var(--border-medium)', width: 320, minWidth: 280, maxWidth: 'calc(100vw - 24px)', overflow: 'hidden',
           boxSizing: 'border-box',
           animation: 'fadeIn 0.15s ease-out'
         }}>
@@ -293,7 +355,7 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
                 {currentUser!.email}
               </p>
             </div>
-            <button onClick={() => setOpen(false)} style={{ marginLeft: 'auto', color: 'var(--text-subtle)', cursor: 'pointer', flexShrink: 0 }}>
+            <button aria-label="Close account menu" onClick={() => { setOpen(false); setView('menu'); }} style={{ marginLeft: 'auto', color: 'var(--text-subtle)', cursor: 'pointer', flexShrink: 0, minWidth: 44, minHeight: 44, display: 'grid', placeItems: 'center' }}>
               <X size={14} />
             </button>
           </div>
@@ -321,7 +383,6 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
               <>
                 <MenuButton icon={<Package size={15} />} label="My Orders" onClick={handleOrdersClick} />
                 <MenuButton icon={<Pencil size={15} />} label="Edit Profile & Address" onClick={() => setView('edit')} />
-                <MenuButton icon={<Mail size={15} />} label={currentUser!.email} onClick={() => {}} muted />
                 <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 0' }} />
                 <MenuButton icon={<LogOut size={15} />} label="Sign Out" onClick={() => { userLogout(); setOpen(false); }} danger />
               </>
@@ -368,6 +429,7 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
             )}
           </div>
         </div>
+        </div>
       )}
     </div>
   );
@@ -377,6 +439,7 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
 const MenuButton: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean; muted?: boolean }> = ({ icon, label, onClick, danger, muted }) => (
   <button onClick={onClick} style={{
     display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 16px',
+      minHeight: 44,
     fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left',
     color: danger ? '#DC2626' : muted ? 'var(--text-subtle)' : 'var(--text-main)',
     backgroundColor: 'transparent', transition: 'background 0.15s',

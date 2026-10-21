@@ -548,6 +548,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const applyPromoCode = (code: string) => {
     const trimmed = code.trim().toUpperCase();
+    if (trimmed === 'OFFSPRING') {
+      return { success: false, message: 'Invalid or expired promotional code' };
+    }
     const offer = offers.find(o => o.code.toUpperCase() === trimmed && o.isActive);
 
     if (!offer) {

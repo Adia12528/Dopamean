@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { Order } from '../../types';
+import { getShortOrderId } from '../../lib/shortOrderId';
 import { useStore } from '../../context/StoreContext';
 import { Download, X, Package } from 'lucide-react';
 
@@ -113,7 +114,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Package size={18} color="var(--accent-terracotta)" />
             <span style={{ fontWeight: 700, fontSize: '0.92rem', color: '#1E293B' }}>
-              Official Order Invoice #{order.id}
+              Official Order Invoice #{getShortOrderId(order.id)}
             </span>
           </div>
 
@@ -221,7 +222,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
                 Tax Invoice
               </span>
               <div style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0F172A' }}>
-                #{order.id}
+                #{getShortOrderId(order.id)}
               </div>
               <div style={{ fontSize: '0.82rem', color: '#64748B', marginTop: '2px' }}>
                 Date: {invoiceDate}

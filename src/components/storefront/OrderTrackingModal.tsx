@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Order } from '../../types';
+import { getShortOrderId } from '../../lib/shortOrderId';
 import { api, getAssetUrl } from '../../services/api';
 import { useStore } from '../../context/StoreContext';
 import { useUser } from '../../context/UserContext';
@@ -20,7 +21,7 @@ interface OrderTrackingModalProps {
 
 export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, onClose }) => {
   const { settings, setActiveInvoiceOrder } = useStore();
-  const { currentUser } = useUser();
+  const { currentUser, getUserOrders } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchEmailOverride, setSearchEmailOverride] = useState<{ ownerId: string | null; value: string } | null>(null);
   const currentOwnerId = currentUser?.id || null;
@@ -28,20 +29,36 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
     ? searchEmailOverride.value
     : currentUser?.email || '';
   const [orders, setOrders] = useState<Order[]>([]);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
+  useEffect(() => {
+    if (!isOpen || !currentUser) return;
+    let active = true;
+    void getUserOrders()
+      .then(userOrders => {
+        if (active) setRecentOrders(userOrders.slice(0, 5));
+      })
+      .catch(() => {
+        if (active) setRecentOrders([]);
+      });
+    return () => { active = false; };
+  }, [currentUser, getUserOrders, isOpen]);
+
   if (!isOpen) return null;
 
-  const handleTrack = async (e?: React.FormEvent) => {
+  const handleTrack = async (e?: React.FormEvent, selectedOrderId?: string) => {
     if (e) e.preventDefault();
-    if (!searchQuery.trim() || !searchEmail.trim()) return;
+    const orderId = selectedOrderId || searchQuery.trim();
+    if (!orderId || !searchEmail.trim()) return;
 
+    setSearchQuery(orderId);
     setIsLoading(true);
     setErrorMessage('');
     try {
-      const results = await api.trackOrder(searchQuery.trim(), searchEmail.trim());
+      const results = await api.trackOrder(orderId, searchEmail.trim());
       setOrders(results);
       setHasSearched(true);
     } catch (error: unknown) {
@@ -134,7 +151,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               <Search size={18} style={{ position: 'absolute', left: '14px', color: 'var(--text-subtle)', pointerEvents: 'none' }} />
               <input
                 type="text"
-                placeholder="Enter your Order ID..."
+                placeholder="e.g. ORD-20261022-0001"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -157,6 +174,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               required
               placeholder="Checkout email address"
               value={searchEmail}
+              readOnly={Boolean(currentUser)}
               onChange={(e) => setSearchEmailOverride({ ownerId: currentOwnerId, value: e.target.value })}
               style={{
                 width: '100%',
@@ -195,6 +213,29 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
           WebkitOverflowScrolling: 'touch',
           flex: 1
         }}>
+          {currentUser && !searchQuery.trim() && recentOrders.length > 0 && (
+            <section aria-label="Recent orders" style={{ marginBottom: 16 }}>
+              <h3 style={{ margin: '0 0 8px', fontSize: '0.9rem', color: 'var(--text-main)' }}>Recent orders</h3>
+              <div style={{ display: 'grid', gap: 8 }}>
+                {recentOrders.map(order => (
+                  <button
+                    key={order.id}
+                    type="button"
+                    onClick={() => void handleTrack(undefined, order.id)}
+                    disabled={isLoading}
+                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, width: '100%', minWidth: 0, minHeight: 48, padding: '8px 12px', border: '1px solid var(--border-medium)', borderRadius: 10, background: '#FFFFFF', textAlign: 'left' }}
+                  >
+                    <span style={{ minWidth: 0, display: 'grid', gap: 2 }}>
+                      <strong style={{ fontSize: '0.82rem', color: 'var(--text-main)', overflowWrap: 'anywhere' }}>#{getShortOrderId(order.id)}</strong>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </span>
+                    <span style={{ flexShrink: 0, color: 'var(--accent-terracotta)', fontSize: '0.76rem', fontWeight: 700, textTransform: 'capitalize' }}>{order.status.replace(/_/g, ' ')}</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           {errorMessage && (
             <div style={{
               backgroundColor: '#FEF2F2',
@@ -275,7 +316,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                       borderRadius: '999px',
                       letterSpacing: '0.04em'
                     }}>
-                      ORDER #{order.id}
+                      ORDER #{getShortOrderId(order.id)}
                     </span>
                     <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '4px' }}>
                       Placed on {new Date(order.createdAt).toLocaleDateString('en-IN', {

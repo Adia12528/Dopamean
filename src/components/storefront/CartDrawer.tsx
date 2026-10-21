@@ -3,6 +3,7 @@ import { useStore } from '../../context/StoreContext';
 import { useUser } from '../../context/UserContext';
 import { api, getAssetUrl } from '../../services/api';
 import type { Order } from '../../types';
+import { getShortOrderId } from '../../lib/shortOrderId';
 import { 
   X, 
   Trash2, 
@@ -126,6 +127,7 @@ export const CartDrawer: React.FC = () => {
           : 'cod'
   );
   const [upiUtrNumber, setUpiUtrNumber] = useState('');
+  const [upiUtrError, setUpiUtrError] = useState('');
   const [upiProofFile, setUpiProofFile] = useState<File | null>(null);
   const [isUpiConfirmationOpen, setIsUpiConfirmationOpen] = useState(false);
   const [upiCheckoutReference, setUpiCheckoutReference] = useState('');
@@ -381,6 +383,10 @@ export const CartDrawer: React.FC = () => {
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!promoInput.trim()) return;
+    if (promoInput.trim().toUpperCase() === 'OFFSPRING') {
+      setPromoError('This promotional code is not valid.');
+      return;
+    }
     const res = applyPromoCode(promoInput);
     if (!res.success) {
       setPromoError(res.message);
@@ -542,8 +548,8 @@ export const CartDrawer: React.FC = () => {
       showToast('Confirm that your payment details are accurate before submitting.', 'error');
       return;
     }
-    if (paymentMethod === 'upi' && !upiUtrNumber.trim()) {
-      showToast('Enter the UPI transaction reference / UTR number before placing your order.', 'error');
+    if (paymentMethod === 'upi' && !/^\d{12}$/.test(upiUtrNumber)) {
+      setUpiUtrError('Enter the 12-digit UTR shown in your UPI app.');
       return;
     }
 
@@ -1080,10 +1086,10 @@ export const CartDrawer: React.FC = () => {
               </div>
               <h2 style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-main)', marginBottom: '6px' }}>
                 {isOrderPaymentConfirmed
-                  ? `Payment received · #${orderComplete.id}`
+                  ? `Payment received · #${getShortOrderId(orderComplete.id)}`
                   : orderComplete.paymentMethod === 'upi'
                     ? 'Payment submitted'
-                    : `Order placed · #${orderComplete.id}`}
+                    : `Order placed · #${getShortOrderId(orderComplete.id)}`}
               </h2>
               {orderComplete.paymentMethod === 'upi' ? (
                 <div style={{ display: 'grid', justifyItems: 'center', gap: '8px', marginBottom: '24px' }}>
@@ -1091,7 +1097,7 @@ export const CartDrawer: React.FC = () => {
                     <Clock size={14} />
                     Awaiting manual review; timing may vary.
                   </span>
-                  <span className="badge-yarn" style={{ textTransform: 'none', letterSpacing: 0 }}>Order reference: #{orderComplete.id}</span>
+                  <span className="badge-yarn" style={{ textTransform: 'none', letterSpacing: 0 }}>Order reference: #{getShortOrderId(orderComplete.id)}</span>
                 </div>
               ) : (
                 <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', marginBottom: '24px', lineHeight: 1.6, maxWidth: '380px' }}>
@@ -1797,13 +1803,18 @@ export const CartDrawer: React.FC = () => {
                         </label>
                         <input
                           id="checkout-upi-utr"
-                          type="text"
-                          required
-                          placeholder="Enter the number shown in your UPI app"
+                          type="tel"
+                          inputMode="numeric"
+                          placeholder="12-digit UTR"
                           autoComplete="off"
-                          maxLength={24}
+                          maxLength={12}
+                          aria-invalid={Boolean(upiUtrError)}
+                          aria-describedby={upiUtrError ? 'checkout-upi-utr-error' : undefined}
                           value={upiUtrNumber}
-                          onChange={(e) => setUpiUtrNumber(e.target.value)}
+                          onChange={(e) => {
+                            setUpiUtrNumber(e.target.value.replace(/\D/g, '').slice(0, 12));
+                            setUpiUtrError('');
+                          }}
                           style={{
                             width: '100%',
                             boxSizing: 'border-box',
@@ -1813,6 +1824,7 @@ export const CartDrawer: React.FC = () => {
                             fontSize: '0.86rem'
                           }}
                         />
+                        {upiUtrError && <p id="checkout-upi-utr-error" role="alert" style={{ margin: '5px 0 0', color: '#B91C1C', fontSize: '0.76rem' }}>{upiUtrError}</p>}
                       </div>
 
                       <label htmlFor="checkout-upi-attestation" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '12px', fontSize: '0.78rem', lineHeight: 1.45, color: 'var(--text-main)', cursor: 'pointer' }}>

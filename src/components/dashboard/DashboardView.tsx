@@ -13,13 +13,12 @@ import {
   ShoppingBag, 
   Tag, 
   Package, 
-  Store, 
   Sliders, 
   Sparkles
 } from 'lucide-react';
 
 export const DashboardView: React.FC = () => {
-  const { dashboardTab, setDashboardTab, setViewMode, settings } = useStore();
+  const { dashboardTab, setDashboardTab, settings } = useStore();
 
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -46,7 +45,7 @@ export const DashboardView: React.FC = () => {
   ];
 
   return (
-    <div style={{ minHeight: '100vh', padding: '36px 0 60px' }}>
+    <div style={{ minHeight: '100dvh', padding: '36px 0 60px' }}>
       <div className="container">
         {/* Dashboard Title & Top Bar */}
         <div style={{
@@ -84,16 +83,6 @@ export const DashboardView: React.FC = () => {
             </p>
           </div>
 
-          <div className="dashboard-header-actions" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <button
-              onClick={() => setViewMode('store')}
-              className="btn-secondary"
-              style={{ padding: '9px 18px', fontSize: '0.86rem' }}
-            >
-              <Store size={16} />
-              <span>View Customer Storefront</span>
-            </button>
-          </div>
         </div>
 
         {/* Navigation Tabs */}
@@ -137,12 +126,7 @@ export const DashboardView: React.FC = () => {
         {/* Tab Content Panels */}
         <div className="dashboard-content">
         {dashboardTab === 'overview' && (
-          <DashboardOverview
-            onOpenAddProduct={() => {
-              setEditingProduct(null);
-              setIsAddProductOpen(true);
-            }}
-            onOpenAddOffer={() => {
+            <DashboardOverview onOpenAddOffer={() => {
               setEditingOffer(null);
               setIsAddOfferOpen(true);
             }}

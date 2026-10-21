@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import type { Order, StoreSettings } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { api, getAssetUrl } from '../../services/api';
@@ -18,8 +18,10 @@ import {
   ChevronDown, 
   ChevronUp, 
   MessageCircle, 
-  Box
+  Box,
+  Copy
 } from 'lucide-react';
+import { getShortOrderId } from '../../lib/shortOrderId';
 
 type SectionTab = 'pending' | 'confirmed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'all';
 type OrderSort = 'default' | 'newest' | 'oldest' | 'highest_total' | 'lowest_total';
@@ -62,6 +64,11 @@ export const OrdersManager: React.FC = () => {
 
   // Inline Tracking AWB inputs (for quick updates)
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
+  const activeOrderTabRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    activeOrderTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  }, [activeTab]);
 
   // Common cancellation reason presets
   const cancelPresets = [
@@ -269,7 +276,7 @@ export const OrdersManager: React.FC = () => {
     setIsProcessingAction(true);
     try {
       await updateOrderStatus(order.id, 'confirmed');
-      showToast(`Order #${order.id} confirmed! Moved to Confirmed (Ready to Ship) section. 🧶`, 'success');
+      showToast(`Order #${getShortOrderId(order.id)} confirmed! Moved to Confirmed (Ready to Ship) section. 🧶`, 'success');
     } finally {
       setIsProcessingAction(false);
     }
@@ -406,13 +413,24 @@ export const OrdersManager: React.FC = () => {
     return createWhatsAppUrl(order.customer.phone, message, settings.whatsappCountryCode || '91');
   };
 
+  const handleCopyOrderId = async (orderId: string) => {
+    const shortOrderId = getShortOrderId(orderId);
+    try {
+      await navigator.clipboard.writeText(shortOrderId);
+      showToast('Order ID copied.', 'success');
+    } catch {
+      showToast('Could not copy the order ID.', 'error');
+    }
+  };
+
   return (
     <div className="dashboard-orders" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
       {/* ─────────────────────────────────────────────────────────────
           1. HEADER WITH STUDIO ORDERS & COMMISSION TRACKING TITLE
          ───────────────────────────────────────────────────────────── */}
-      <div style={{
+      <div className="dashboard-order-tabs-shell">
+      <div className="dashboard-order-tabs" style={{
         backgroundColor: '#FFFFFF',
         padding: '24px',
         borderRadius: '24px',
@@ -802,6 +820,8 @@ export const OrdersManager: React.FC = () => {
           return (
             <button
               key={tab.id}
+              ref={isActive ? activeOrderTabRef : undefined}
+              className="dashboard-order-tab"
               onClick={() => setActiveTab(tab.id as SectionTab)}
               style={{
                 display: 'inline-flex',
@@ -840,11 +860,12 @@ export const OrdersManager: React.FC = () => {
           );
         })}
       </div>
+      </div>
 
       {/* ─────────────────────────────────────────────────────────────
           5. SEARCH, FILTER & SORT BAR
          ───────────────────────────────────────────────────────────── */}
-      <div style={{
+      <div className="dashboard-order-toolbar" style={{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -852,7 +873,7 @@ export const OrdersManager: React.FC = () => {
         gap: '12px'
       }}>
         {/* Search Input */}
-        <div style={{
+        <div className="dashboard-order-search" style={{
           position: 'relative',
           flex: '1 1 320px',
           maxWidth: '540px'
@@ -950,7 +971,7 @@ export const OrdersManager: React.FC = () => {
           6. ORDERS LISTING ACCORDING TO PIPELINE STAGE
          ───────────────────────────────────────────────────────────── */}
       {filteredOrders.length === 0 ? (
-        <div style={{
+        <div className="dashboard-orders-empty" style={{
           textAlign: 'center',
           padding: '60px 20px',
           backgroundColor: '#FFFFFF',
@@ -1008,10 +1029,15 @@ export const OrdersManager: React.FC = () => {
                   paddingBottom: '14px'
                 }}>
                   {/* Left: ID & Date & Badges */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                      #{order.id}
-                    </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+                      <span style={{ minWidth: 0, overflowWrap: 'anywhere', fontSize: '1.15rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                        #{getShortOrderId(order.id)}
+                      </span>
+                      <button type="button" aria-label={`Copy order ${getShortOrderId(order.id)}`} title="Copy order ID" onClick={() => void handleCopyOrderId(order.id)} style={{ minWidth: 44, minHeight: 44, display: 'grid', placeItems: 'center', flexShrink: 0, color: 'var(--text-muted)' }}>
+                        <Copy size={15} />
+                      </button>
+                    </div>
 
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>
                       {new Date(order.createdAt).toLocaleDateString('en-IN', {
@@ -1023,7 +1049,7 @@ export const OrdersManager: React.FC = () => {
                       })}
                     </span>
 
-                    <span style={{
+                    {order.status !== 'cancelled' && <span style={{
                       fontSize: '0.74rem',
                       fontWeight: 700,
                       color: order.paymentStatus === 'paid' ? '#059669' : '#D97706',
@@ -1034,7 +1060,7 @@ export const OrdersManager: React.FC = () => {
                       {order.paymentMethod === 'upi' && order.paymentStatus !== 'paid'
                         ? 'UPI • PAYMENT VERIFICATION PENDING'
                         : `${order.paymentMethod ? order.paymentMethod.toUpperCase() : 'COD'} • ${order.paymentStatus ? order.paymentStatus.toUpperCase() : 'PENDING'}`}
-                    </span>
+                    </span>}
 
                     {order.promoCodeApplied && (
                       <span style={{
@@ -1091,7 +1117,7 @@ export const OrdersManager: React.FC = () => {
                   </div>
                 </div>
 
-                {order.paymentMethod === 'upi' && (
+                {order.paymentMethod === 'upi' && order.status !== 'cancelled' && (
                   <div style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -1756,7 +1782,7 @@ export const OrdersManager: React.FC = () => {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#B91C1C' }}>
-                    Cancel Order #{cancellingOrder.id}
+                    Cancel Order #{getShortOrderId(cancellingOrder.id)}
                   </h3>
                   <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     Customer: {cancellingOrder.customer.name} ({cancellingOrder.customer.email})
@@ -1935,7 +1961,7 @@ export const OrdersManager: React.FC = () => {
                 </div>
                 <div>
                   <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: 'var(--text-main)' }}>
-                    Dispatch Order #{shippingOrder.id}
+                    Dispatch Order #{getShortOrderId(shippingOrder.id)}
                   </h3>
                   <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                     Destination: {shippingOrder.customer.address || shippingOrder.customer.city || 'India'}
@@ -2094,7 +2120,7 @@ export const OrdersManager: React.FC = () => {
                     Out for Delivery
                   </h3>
                   <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Order #{outForDeliveryOrder.id} • {outForDeliveryOrder.customer.name}
+                    Order #{getShortOrderId(outForDeliveryOrder.id)} • {outForDeliveryOrder.customer.name}
                   </p>
                 </div>
               </div>
@@ -2229,7 +2255,7 @@ export const OrdersManager: React.FC = () => {
                     Confirm Final Delivery
                   </h3>
                   <p style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    Order #{deliveringOrder.id} • {deliveringOrder.customer.name}
+                    Order #{getShortOrderId(deliveringOrder.id)} • {deliveringOrder.customer.name}
                   </p>
                 </div>
               </div>
@@ -2250,7 +2276,7 @@ export const OrdersManager: React.FC = () => {
               color: 'var(--accent-sage)',
               lineHeight: 1.5
             }}>
-              🌸 <strong>Handcrafted Parcel Delivered:</strong> This will mark Order #{deliveringOrder.id} as fulfilled.
+              🌸 <strong>Handcrafted Parcel Delivered:</strong> This will mark Order #{getShortOrderId(deliveringOrder.id)} as fulfilled.
               {deliveringOrder.paymentMethod === 'cod' && (
                 <div style={{ marginTop: '6px', fontWeight: 700, color: '#047857' }}>
                   💵 Cash on Delivery collection of {settings.currency}{deliveringOrder.total.toFixed(2)} will be marked as PAID.
