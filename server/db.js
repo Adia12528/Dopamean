@@ -90,7 +90,7 @@ sqlite.exec(`
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL CHECK (length(trim(name)) > 0),
     email TEXT UNIQUE NOT NULL CHECK (email = trim(email) AND email GLOB '*?@?*.*?'),
-    password_hash TEXT NOT NULL CHECK (length(trim(password_hash)) > 0),
+    password_hash TEXT CHECK (password_hash IS NULL OR length(trim(password_hash)) > 0),
     phone TEXT,
     address TEXT,
     city TEXT,
@@ -99,6 +99,37 @@ sqlite.exec(`
     updated_at TEXT NOT NULL
   );
 `);
+
+const usersTableColumns = sqlite.prepare('PRAGMA table_info(users)').all();
+if (usersTableColumns.find(column => column.name === 'password_hash')?.notnull) {
+  sqlite.exec('BEGIN IMMEDIATE');
+  try {
+    sqlite.exec(`
+      DROP TRIGGER IF EXISTS users_validate_insert;
+      DROP TRIGGER IF EXISTS users_validate_update;
+      CREATE TABLE users_v2 (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL CHECK (length(trim(name)) > 0),
+        email TEXT UNIQUE NOT NULL CHECK (email = trim(email) AND email GLOB '*?@?*.*?'),
+        password_hash TEXT CHECK (password_hash IS NULL OR length(trim(password_hash)) > 0),
+        phone TEXT,
+        address TEXT,
+        city TEXT,
+        pincode TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO users_v2 (id, name, email, password_hash, phone, address, city, pincode, created_at, updated_at)
+        SELECT id, name, email, password_hash, phone, address, city, pincode, created_at, updated_at FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_v2 RENAME TO users;
+    `);
+    sqlite.exec('COMMIT');
+  } catch (error) {
+    sqlite.exec('ROLLBACK');
+    throw error;
+  }
+}
 
 // Migrate pre-existing SQLite orders table if it was created with restrictive check constraints
 try {
@@ -172,10 +203,10 @@ sqlite.exec(`
   CREATE TRIGGER IF NOT EXISTS products_delete_reviews AFTER DELETE ON products
     BEGIN DELETE FROM reviews WHERE product_id = OLD.id; END;
   CREATE TRIGGER IF NOT EXISTS users_validate_insert BEFORE INSERT ON users WHEN
-    length(trim(NEW.name)) = 0 OR length(trim(NEW.password_hash)) = 0 OR NEW.email NOT GLOB '*?@?*.*?'
+    length(trim(NEW.name)) = 0 OR (NEW.password_hash IS NOT NULL AND length(trim(NEW.password_hash)) = 0) OR NEW.email NOT GLOB '*?@?*.*?'
     BEGIN SELECT RAISE(ABORT, 'invalid user'); END;
   CREATE TRIGGER IF NOT EXISTS users_validate_update BEFORE UPDATE ON users WHEN
-    length(trim(NEW.name)) = 0 OR length(trim(NEW.password_hash)) = 0 OR NEW.email NOT GLOB '*?@?*.*?'
+    length(trim(NEW.name)) = 0 OR (NEW.password_hash IS NOT NULL AND length(trim(NEW.password_hash)) = 0) OR NEW.email NOT GLOB '*?@?*.*?'
     BEGIN SELECT RAISE(ABORT, 'invalid user'); END;
   CREATE TRIGGER IF NOT EXISTS offers_validate_insert BEFORE INSERT ON offers WHEN
     NEW.discount_type NOT IN ('percentage','fixed') OR NEW.discount_value < 0 OR (NEW.discount_type = 'percentage' AND NEW.discount_value > 100)
@@ -855,19 +886,20 @@ const sqliteDb = {
   },
 
   syncAuthUser: ({ id, email, name = '', phone = '' }) => {
-    if (!id || !email) throw new Error('AUTH_PROFILE_MISSING');
-    const normalizedEmail = email.trim().toLowerCase();
-    const existing = sqliteDb.getUserByEmail(normalizedEmail);
-    if (existing) {
-      sqlite.prepare('UPDATE users SET name = COALESCE(NULLIF(?, \'\'), name), phone = COALESCE(NULLIF(?, \'\'), phone), updated_at = ? WHERE id = ?')
-        .run(name.trim(), phone.trim(), new Date().toISOString(), existing.id);
-      return sqliteDb.getUserById(existing.id);
-    }
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const normalizedName = String(name || '').trim();
+    const normalizedPhone = String(phone || '').trim();
+    if (!id || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) throw new Error('AUTH_PROFILE_MISSING');
     const now = new Date().toISOString();
     sqlite.prepare(
-      'INSERT INTO users (id, name, email, password_hash, phone, address, city, pincode, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, \'\', \'\', \'\', ?, ?)'
-    ).run(id, name.trim() || normalizedEmail.split('@')[0], normalizedEmail, phone.trim(), now, now);
-    return sqliteDb.getUserById(id);
+      `INSERT INTO users (id, name, email, password_hash, phone, address, city, pincode, created_at, updated_at)
+       VALUES (?, ?, ?, NULL, ?, '', '', '', ?, ?)
+       ON CONFLICT(email) DO UPDATE SET
+         name = COALESCE(NULLIF(?, ''), users.name),
+         phone = COALESCE(NULLIF(?, ''), users.phone),
+         updated_at = excluded.updated_at`
+    ).run(id, normalizedName || normalizedEmail.split('@')[0], normalizedEmail, normalizedPhone, now, now, normalizedName, normalizedPhone);
+    return sqliteDb.getUserByEmail(normalizedEmail);
   },
 
   createUser: ({ name, email, password, phone = '', address = '', city = '', pincode = '' }) => {

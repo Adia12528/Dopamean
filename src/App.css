@@ -17,7 +17,7 @@
   }
 }
 
-.google-auth-button:focus-visible {
+.oauth-auth-button:focus-visible {
   outline: 3px solid var(--accent-terracotta);
   outline-offset: 3px;
 }

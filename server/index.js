@@ -319,20 +319,41 @@ async function requireUser(req, res, next) {
 
   // 1. Try Supabase JWT if token has standard 3-part JWT structure and supabase client is present
   if (supabaseAuth && token.includes('.') && token.split('.').length === 3) {
+    let supaData;
+    let supaError;
     try {
-      const { data, error } = await supabaseAuth.auth.getUser(token);
-      if (!error && data?.user?.email) {
-        const user = await db.syncAuthUser({
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.user_metadata?.full_name || data.user.user_metadata?.name || data.user.user_metadata?.user_name || '',
-          phone: data.user.user_metadata?.phone || ''
+      ({ data: supaData, error: supaError } = await supabaseAuth.auth.getUser(token));
+    } catch (error) {
+      console.error('Could not verify the Supabase customer session:', error);
+      return res.status(503).json({ error: 'Could not verify your sign-in right now. Please try again.' });
+    }
+
+    if (supaError || !supaData?.user) return res.status(401).json({ error: 'Your sign-in has expired. Please sign in again.' });
+
+    const supaUser = supaData.user;
+    const email = String(supaUser.email || '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(403).json({ error: 'An email address is needed for orders and account recovery. Allow email access or use email sign-in.' });
+    }
+
+    try {
+      let user = await db.getUserByEmail(email);
+      if (user) {
+        delete user.passwordHash;
+      } else {
+        user = await db.syncAuthUser({
+          id: supaUser.id,
+          email,
+          name: supaUser.user_metadata?.full_name || supaUser.user_metadata?.name || supaUser.user_metadata?.user_name || '',
+          phone: supaUser.user_metadata?.phone || ''
         });
-        req.user = user;
-        return next();
       }
-    } catch {
-      // Continue to local token verification
+      if (!user) throw new Error('AUTH_PROFILE_SYNC_EMPTY');
+      req.user = user;
+      return next();
+    } catch (error) {
+      console.error('Could not sync the authenticated customer profile:', error);
+      return res.status(503).json({ error: 'Your sign-in worked, but we could not save your customer profile. Please retry shortly.' });
     }
   }
 

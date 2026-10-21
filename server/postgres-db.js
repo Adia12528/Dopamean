@@ -236,19 +236,18 @@ export const postgresDb = {
   async getUserByEmail(email) { const { rows } = await pool.query('SELECT * FROM users WHERE lower(email)=lower($1)',[email]); return rows[0] ? {...cleanUser(rows[0]),passwordHash:rows[0].password_hash} : null; },
   async getUserById(id) { const { rows } = await pool.query('SELECT * FROM users WHERE id=$1',[id]); return cleanUser(rows[0]); },
   async syncAuthUser({ id, email, name = '', phone = '' }) {
-    if (!id || !email) throw new Error('AUTH_PROFILE_MISSING');
-    const normalizedEmail = email.trim().toLowerCase();
-    const existing = await postgresDb.getUserByEmail(normalizedEmail);
-    if (existing) {
-      const { rows } = await pool.query(
-        'UPDATE users SET name=COALESCE(NULLIF($2,\'\'),name),phone=COALESCE(NULLIF($3,\'\'),phone),updated_at=now() WHERE id=$1 RETURNING *',
-        [existing.id, name.trim(), phone.trim()]
-      );
-      return cleanUser(rows[0]);
-    }
-    const { rows } = await pool.query(`INSERT INTO users(id,name,email,password_hash,phone) VALUES($1,$2,$3,NULL,$4)
-      ON CONFLICT(id) DO UPDATE SET email=EXCLUDED.email,name=COALESCE(NULLIF(EXCLUDED.name,''),users.name),phone=COALESCE(NULLIF(EXCLUDED.phone,''),users.phone),updated_at=now() RETURNING *`,
-      [id, name.trim() || normalizedEmail.split('@')[0], normalizedEmail, phone.trim()]);
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const normalizedName = String(name || '').trim();
+    const normalizedPhone = String(phone || '').trim();
+    if (!id || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) throw new Error('AUTH_PROFILE_MISSING');
+    const { rows } = await pool.query(`
+      INSERT INTO users(id,name,email,password_hash,phone) VALUES($1,$2,$3,NULL,$4)
+      ON CONFLICT(email) DO UPDATE SET
+        name=COALESCE(NULLIF($5,''),users.name),
+        phone=COALESCE(NULLIF($6,''),users.phone),
+        updated_at=now()
+      RETURNING *`,
+      [id, normalizedName || normalizedEmail.split('@')[0], normalizedEmail, normalizedPhone, normalizedName, normalizedPhone]);
     return cleanUser(rows[0]);
   },
   async createUser({name,email,password,phone='',address='',city='',pincode=''}) { if (await postgresDb.getUserByEmail(email)) throw new Error('EMAIL_EXISTS'); const id=`usr_${crypto.randomUUID()}`; const hash=postgresDb.hashPassword(password); try { const { rows }=await pool.query('INSERT INTO users(id,name,email,password_hash,phone,address,city,pincode) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *',[id,name.trim(),email.trim().toLowerCase(),hash,phone,address,city,pincode]); return cleanUser(rows[0]); } catch(error) { if (error.code === '23505') throw new Error('EMAIL_EXISTS'); throw error; } },

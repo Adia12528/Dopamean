@@ -473,7 +473,10 @@ export const api = {
     const res = await fetch(`${BASE_URL}/api/users/me`, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    if (!res.ok) throw new Error('Not authenticated');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Could not load your customer profile. Please try again.');
+    }
     return res.json();
   },
 

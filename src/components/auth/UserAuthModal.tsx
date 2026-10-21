@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useUser } from '../../context/UserContext';
 import { supabaseAuthEnabled } from '../../lib/supabase';
+import { getAuthErrorMessage, isAuthRateLimitError } from '../../lib/authErrorMessage';
 import { X, Mail, Lock, Eye, EyeOff, User, Phone, Sparkles, ArrowRight, CheckCircle2, LogIn, AlertCircle } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,21 +113,23 @@ const GoogleIcon: React.FC<{ size?: number }> = ({ size = 18 }) => (
   </svg>
 );
 
-interface GoogleAuthButtonProps {
+interface OAuthAuthButtonProps {
   text: string;
+  providerName: string;
+  icon?: React.ReactNode;
   loading: boolean;
   disabled?: boolean;
   onClick: () => void;
 }
 
-const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ text, loading, disabled, onClick }) => {
+const OAuthAuthButton: React.FC<OAuthAuthButtonProps> = ({ text, providerName, icon, loading, disabled, onClick }) => {
   const [isHovered, setIsHovered] = useState(false);
   const [isActive, setIsActive] = useState(false);
 
   return (
     <button
       type="button"
-      className="google-auth-button"
+      className="oauth-auth-button"
       onClick={onClick}
       disabled={loading || disabled}
       aria-busy={loading}
@@ -170,11 +173,11 @@ const GoogleAuthButton: React.FC<GoogleAuthButtonProps> = ({ text, loading, disa
               flexShrink: 0
             }}
           />
-          <span role="status" aria-live="polite">Connecting to Google…</span>
+          <span role="status" aria-live="polite">Connecting to {providerName}…</span>
         </>
       ) : (
         <>
-          <GoogleIcon size={19} />
+          {icon}
           <span>{text}</span>
         </>
       )}
@@ -247,7 +250,7 @@ const AuthErrorBanner: React.FC<{ message: string; onDismiss: () => void }> = ({
 // Sign In Tab
 // ─────────────────────────────────────────────────────────────────────────────
 const SignInTab: React.FC<{ onSwitchToSignUp: (email: string) => void }> = ({ onSwitchToSignUp }) => {
-  const { userLogin, signInWithGoogle, authError, clearAuthError } = useUser();
+  const { userLogin, signInWithOAuth, authError, clearAuthError } = useUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -255,22 +258,22 @@ const SignInTab: React.FC<{ onSwitchToSignUp: (email: string) => void }> = ({ on
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState('');
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'github' | 'facebook' | null>(null);
+  const [oauthError, setOauthError] = useState('');
   const [showCreateAccountAction, setShowCreateAccountAction] = useState(false);
 
-  const handleGoogleSignIn = async () => {
-    setGoogleError('');
+  const handleOAuthSignIn = async (provider: 'google' | 'github' | 'facebook') => {
+    setOauthError('');
     setError('');
     clearAuthError();
-    setGoogleLoading(true);
+    setOauthLoading(provider);
     try {
-      await signInWithGoogle();
-      // Browser redirects to Google OAuth
+      await signInWithOAuth(provider);
     } catch (err: unknown) {
-      setGoogleLoading(false);
-      const msg = err instanceof Error ? err.message : 'Google sign-in could not be started. Please try again.';
-      setGoogleError(msg);
+      setOauthLoading(null);
+      const providerName = provider === 'facebook' ? 'Facebook' : provider === 'github' ? 'GitHub' : 'Google';
+      const msg = err instanceof Error ? err.message : `${providerName} sign-in could not be started. Please try again.`;
+      setOauthError(msg);
     }
   };
 
@@ -305,20 +308,38 @@ const SignInTab: React.FC<{ onSwitchToSignUp: (email: string) => void }> = ({ on
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* 1-Click Google Sign-In */}
+      {/* Social sign-in */}
       {supabaseAuthEnabled && (
-        <GoogleAuthButton
+        <>
+          <OAuthAuthButton
           text="Continue with Google"
-          loading={googleLoading}
-          disabled={loading}
-          onClick={handleGoogleSignIn}
+          providerName="Google"
+          icon={<GoogleIcon size={19} />}
+          loading={oauthLoading === 'google'}
+          disabled={loading || oauthLoading !== null}
+          onClick={() => void handleOAuthSignIn('google')}
         />
+          <OAuthAuthButton
+            text="Continue with GitHub"
+            providerName="GitHub"
+            loading={oauthLoading === 'github'}
+            disabled={loading || oauthLoading !== null}
+            onClick={() => void handleOAuthSignIn('github')}
+          />
+          <OAuthAuthButton
+            text="Continue with Facebook"
+            providerName="Facebook"
+            loading={oauthLoading === 'facebook'}
+            disabled={loading || oauthLoading !== null}
+            onClick={() => void handleOAuthSignIn('facebook')}
+          />
+        </>
       )}
 
-      {(googleError || authError) && (
+      {(oauthError || authError) && (
         <AuthErrorBanner
-          message={googleError || authError || ''}
-          onDismiss={() => { setGoogleError(''); clearAuthError(); }}
+          message={oauthError || authError || ''}
+          onDismiss={() => { setOauthError(''); clearAuthError(); }}
         />
       )}
 
@@ -392,13 +413,13 @@ const SignInTab: React.FC<{ onSwitchToSignUp: (email: string) => void }> = ({ on
         <button
           type="submit"
           className="btn-primary"
-          disabled={loading || googleLoading}
+          disabled={loading || oauthLoading !== null}
           style={{
             width: '100%',
             minHeight: '46px',
             padding: '12px',
             fontSize: '0.94rem',
-            opacity: (loading || googleLoading) ? 0.75 : 1,
+            opacity: (loading || oauthLoading !== null) ? 0.75 : 1,
             marginTop: 4,
             display: 'flex',
             alignItems: 'center',
@@ -434,7 +455,7 @@ const SignInTab: React.FC<{ onSwitchToSignUp: (email: string) => void }> = ({ on
 // Sign Up Tab
 // ─────────────────────────────────────────────────────────────────────────────
 const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }> = ({ onSwitchToSignIn, initialEmail }) => {
-  const { userRegister, userResendConfirmation, signInWithGoogle, authError, clearAuthError } = useUser();
+  const { userRegister, userResendConfirmation, signInWithOAuth, authError, clearAuthError } = useUser();
   const [name, setName] = useState('');
   const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState('');
@@ -449,23 +470,25 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }
   const [confirmationMessage, setConfirmationMessage] = useState('');
   const [resendMessage, setResendMessage] = useState('');
   const [resendError, setResendError] = useState('');
+  const [isSignupRateLimited, setIsSignupRateLimited] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resending, setResending] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleError, setGoogleError] = useState('');
+  const [oauthLoading, setOauthLoading] = useState<'google' | 'github' | 'facebook' | null>(null);
+  const [oauthError, setOauthError] = useState('');
 
-  const handleGoogleSignIn = async () => {
-    setGoogleError('');
+  const handleOAuthSignIn = async (provider: 'google' | 'github' | 'facebook') => {
+    setOauthError('');
     setError('');
+    setIsSignupRateLimited(false);
     clearAuthError();
-    setGoogleLoading(true);
+    setOauthLoading(provider);
     try {
-      await signInWithGoogle();
-      // Browser redirects to Google OAuth
+      await signInWithOAuth(provider);
     } catch (err: unknown) {
-      setGoogleLoading(false);
-      const msg = err instanceof Error ? err.message : 'Google sign-up could not be started. Please try again.';
-      setGoogleError(msg);
+      setOauthLoading(null);
+      const providerName = provider === 'facebook' ? 'Facebook' : provider === 'github' ? 'GitHub' : 'Google';
+      const msg = err instanceof Error ? err.message : `${providerName} sign-up could not be started. Please try again.`;
+      setOauthError(msg);
     }
   };
 
@@ -477,7 +500,7 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }
       await userResendConfirmation(email.trim());
       setResendMessage('A new confirmation email has been sent. Check your inbox.');
     } catch (err: unknown) {
-      setResendError((err as Error).message || 'Could not resend the email. Please try again.');
+      setResendError(getAuthErrorMessage(err, 'Could not resend the email. Please try again.'));
     } finally {
       setResending(false);
     }
@@ -486,6 +509,7 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsSignupRateLimited(false);
     setConfirmationMessage('');
     setResendMessage('');
     setResendError('');
@@ -518,7 +542,8 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }
         setConfirmationMessage('Account created. Check your email for a confirmation link before signing in.');
       }
     } catch (err: unknown) {
-      setError((err as Error).message || 'Could not create account. Please try again.');
+      setIsSignupRateLimited(isAuthRateLimitError(err));
+      setError(getAuthErrorMessage(err, 'Could not create account. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -526,20 +551,38 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* 1-Click Google Sign-Up */}
+      {/* Social sign-up */}
       {supabaseAuthEnabled && (
-        <GoogleAuthButton
-          text="Sign up with Google"
-          loading={googleLoading}
-          disabled={loading}
-          onClick={handleGoogleSignIn}
-        />
+        <>
+          <OAuthAuthButton
+            text="Sign up with Google"
+            providerName="Google"
+            icon={<GoogleIcon size={19} />}
+            loading={oauthLoading === 'google'}
+            disabled={loading || oauthLoading !== null}
+            onClick={() => void handleOAuthSignIn('google')}
+          />
+          <OAuthAuthButton
+            text="Sign up with GitHub"
+            providerName="GitHub"
+            loading={oauthLoading === 'github'}
+            disabled={loading || oauthLoading !== null}
+            onClick={() => void handleOAuthSignIn('github')}
+          />
+          <OAuthAuthButton
+            text="Sign up with Facebook"
+            providerName="Facebook"
+            loading={oauthLoading === 'facebook'}
+            disabled={loading || oauthLoading !== null}
+            onClick={() => void handleOAuthSignIn('facebook')}
+          />
+        </>
       )}
 
-      {(googleError || authError) && (
+      {(oauthError || authError) && (
         <AuthErrorBanner
-          message={googleError || authError || ''}
-          onDismiss={() => { setGoogleError(''); clearAuthError(); }}
+          message={oauthError || authError || ''}
+          onDismiss={() => { setOauthError(''); clearAuthError(); }}
         />
       )}
 
@@ -650,7 +693,16 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }
           {resendError && <p role="alert" style={{ fontSize: '0.76rem', color: '#DC2626', margin: 0 }}>{resendError}</p>}
         </div>
       )}
-      {error && <p role="alert" style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 600, margin: 0 }}>{error}</p>}
+      {error && (
+        <div role="alert" style={{ fontSize: '0.78rem', color: '#DC2626', fontWeight: 600, margin: 0 }}>
+          <p style={{ margin: 0 }}>{error}</p>
+          {isSignupRateLimited && supabaseAuthEnabled && (
+            <p style={{ margin: '5px 0 0', color: 'var(--text-muted)', fontWeight: 500 }}>
+              Or sign up with Google, GitHub, or Facebook using the buttons above.
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Member benefits card */}
       <div style={{

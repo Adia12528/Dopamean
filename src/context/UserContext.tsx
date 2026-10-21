@@ -13,9 +13,11 @@ const getOAuthRedirectError = () => {
     const errDesc = url.searchParams.get('error_description') || hashParams.get('error_description');
     if (!errCode && !errDesc) return null;
 
-    let message = (errDesc || errCode || 'Google authentication failed').replace(/\+/g, ' ');
+    let message = (errDesc || errCode || 'Social sign-in failed').replace(/\+/g, ' ');
     if (errCode === 'access_denied' || message.toLowerCase().includes('user cancelled') || message.toLowerCase().includes('declined') || message.toLowerCase().includes('denied')) {
-      message = 'Google sign-in was cancelled. You can sign in anytime or use your email.';
+      message = 'Sign-in was cancelled. You can try again or use email sign-in.';
+    } else if (/email.*(required|missing|not provided)|(required|missing|not provided).*email/i.test(message)) {
+      message = 'This provider did not share an email address. Try again with email access or use email sign-in.';
     }
     return message;
   } catch {
@@ -41,7 +43,7 @@ interface UserContextType {
   userResendConfirmation: (email: string) => Promise<void>;
   userLogin: (email: string, password: string) => Promise<void>;
   userLogout: () => void;
-  signInWithGoogle: () => Promise<void>;
+  signInWithOAuth: (provider: 'google' | 'github' | 'facebook') => Promise<void>;
   updateUserProfile: (updates: Partial<UserProfile> & { password?: string; currentPassword?: string }) => Promise<void>;
   getUserOrders: () => Promise<Order[]>;
 }
@@ -60,6 +62,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoadingUser, setIsLoadingUser] = useState(true);
   const [authError, setAuthError] = useState<string | null>(initialOAuthError);
   const pendingAuthCallback = useRef<(() => void) | null>(null);
+  const pendingProfileSyncs = useRef(new Map<string, Promise<UserProfile>>());
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
@@ -67,6 +70,31 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserToken(token);
     try { localStorage.setItem(USER_TOKEN_KEY, token); } catch { /* ignore */ }
   };
+
+  const clearPersistedToken = () => {
+    setUserToken(null);
+    try { localStorage.removeItem(USER_TOKEN_KEY); } catch { /* ignore */ }
+  };
+
+  const syncSupabaseProfile = useCallback((token: string) => {
+    const pending = pendingProfileSyncs.current.get(token);
+    if (pending) return pending;
+
+    const request = api.getMe(token).finally(() => {
+      if (pendingProfileSyncs.current.get(token) === request) pendingProfileSyncs.current.delete(token);
+    });
+    pendingProfileSyncs.current.set(token, request);
+    return request;
+  }, []);
+
+  const handleProfileSyncFailure = useCallback((error: unknown) => {
+    clearPersistedToken();
+    setCurrentUser(null);
+    setAuthError(error instanceof Error
+      ? error.message
+      : 'Your sign-in worked, but we could not save your customer profile. Please try again.');
+    setIsUserAuthModalOpen(true);
+  }, []);
 
   const completeSignIn = useCallback((user: UserProfile) => {
     setCurrentUser(user);
@@ -135,10 +163,16 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
             const supaToken = session?.access_token || null;
             if (supaToken) {
-              persistToken(supaToken);
+              if (event === 'TOKEN_REFRESHED') {
+                persistToken(supaToken);
+                return;
+              }
+              if (event !== 'SIGNED_IN' && event !== 'USER_UPDATED') return;
+
               try {
-                const user = await api.getMe(supaToken);
+                const user = await syncSupabaseProfile(supaToken);
                 if (active) {
+                  persistToken(supaToken);
                   completeSignIn(user);
                   setIsLoadingUser(false);
 
@@ -156,13 +190,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
               } catch (error) {
                 console.error('Could not load the signed-in customer profile:', error);
-                if (active) setIsLoadingUser(false);
+                if (active) {
+                  handleProfileSyncFailure(error);
+                  setIsLoadingUser(false);
+                }
               }
             } else if (event === 'SIGNED_OUT') {
               if (active) {
                 setCurrentUser(null);
-                setUserToken(null);
-                try { localStorage.removeItem(USER_TOKEN_KEY); } catch { /* ignore */ }
+                clearPersistedToken();
                 setIsLoadingUser(false);
               }
             }
@@ -174,15 +210,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (!active) return;
           const supaToken = data.session?.access_token || null;
           if (supaToken) {
-            persistToken(supaToken);
             try {
-              const user = await api.getMe(supaToken);
+              const user = await syncSupabaseProfile(supaToken);
               if (active) {
+                persistToken(supaToken);
                 setCurrentUser(user);
+                setAuthError(null);
                 setIsUserAuthModalOpen(false);
               }
             } catch (error) {
               console.error('Could not load the signed-in customer profile:', error);
+              if (active) handleProfileSyncFailure(error);
             } finally {
               if (active) setIsLoadingUser(false);
             }
@@ -207,7 +245,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     void restoreLocalToken();
     return () => { active = false; };
-  }, [completeSignIn]);
+  }, [completeSignIn, handleProfileSyncFailure, syncSupabaseProfile]);
 
   const openUserAuthModal = useCallback((tab: 'signin' | 'signup' = 'signin', onAuthenticated?: () => void) => {
     pendingAuthCallback.current = onAuthenticated || null;
@@ -221,10 +259,10 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsUserAuthModalOpen(false);
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
+  const signInWithOAuth = useCallback(async (provider: 'google' | 'github' | 'facebook') => {
     setAuthError(null);
     if (!supabaseAuthEnabled) {
-      throw new Error('Google Sign-In is unavailable. Supabase authentication is not configured in this environment.');
+      throw new Error('Social sign-in is unavailable. Supabase authentication is not configured in this environment.');
     }
     const supabase = await getSupabaseClient();
     if (!supabase) {
@@ -233,13 +271,17 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const redirectUrl = getOAuthRedirectUrl();
     const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: {
         redirectTo: redirectUrl,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'select_account'
-        }
+        ...(provider === 'google' ? {
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account'
+          }
+        } : provider === 'github'
+          ? { scopes: 'read:user user:email' }
+          : { scopes: 'email,public_profile' })
       }
     });
 
@@ -267,8 +309,8 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
       if (!result.session?.access_token) return 'confirmation-required';
 
+      const user = await syncSupabaseProfile(result.session.access_token);
       persistToken(result.session.access_token);
-      const user = await api.getMe(result.session.access_token);
       completeSignIn(user);
       return 'signed-in';
     } else {
@@ -277,7 +319,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       completeSignIn(result.user);
       return 'signed-in';
     }
-  }, [completeSignIn]);
+  }, [completeSignIn, syncSupabaseProfile]);
 
   const userResendConfirmation = useCallback(async (email: string) => {
     if (!supabaseAuthEnabled) {
@@ -301,15 +343,15 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) throw error;
       const token = result.session?.access_token;
       if (!token) throw new Error('Check your email and confirm your account before signing in.');
+      const user = await syncSupabaseProfile(token);
       persistToken(token);
-      const user = await api.getMe(token);
       completeSignIn(user);
       return;
     }
     const result = await api.userLogin(email, password);
     persistToken(result.token);
     completeSignIn(result.user);
-  }, [completeSignIn]);
+  }, [completeSignIn, syncSupabaseProfile]);
 
   const userLogout = useCallback(() => {
     if (supabaseAuthEnabled) {
@@ -360,7 +402,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
       userResendConfirmation,
       userLogin,
       userLogout,
-      signInWithGoogle,
+      signInWithOAuth,
       updateUserProfile,
       getUserOrders,
     }}>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { CheckCircle2, LoaderCircle, Mail, RefreshCw } from 'lucide-react';
 import { useUser } from '../../context/UserContext';
 import { getSupabaseClient, supabaseAuthEnabled } from '../../lib/supabase';
+import { getAuthErrorMessage } from '../../lib/authErrorMessage';
 
 type ConfirmationState = 'checking' | 'confirmed' | 'failed';
 
@@ -107,7 +108,7 @@ export const EmailConfirmationPage: React.FC<{ onContinue: (hasSession: boolean)
       await userResendConfirmation(normalizedEmail);
       setResendMessage('A new confirmation email has been sent. Check your inbox.');
     } catch (error: unknown) {
-      setResendError((error as Error).message || 'Could not resend the email. Please try again.');
+      setResendError(getAuthErrorMessage(error, 'Could not resend the email. Please try again.'));
     } finally {
       setResending(false);
     }
