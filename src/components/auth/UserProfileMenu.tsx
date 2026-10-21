@@ -149,11 +149,23 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   const { showToast } = useStore();
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<'menu' | 'orders' | 'edit'>('menu');
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orderHistory, setOrderHistory] = useState<{ ownerId: string; orders: Order[] }>({ ownerId: currentUser?.id || '', orders: [] });
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const previousUpiPaymentStatuses = useRef<Record<string, Order['paymentStatus']>>({});
+  const currentOrderOwnerId = currentUser?.id || '';
+  const activeOrderOwnerId = useRef(currentOrderOwnerId);
+  const orders = orderHistory.ownerId === currentOrderOwnerId ? orderHistory.orders : [];
+  const setOrders = useCallback((nextOrders: React.SetStateAction<Order[]>) => {
+    setOrderHistory(previous => {
+      const previousOrders = previous.ownerId === currentOrderOwnerId ? previous.orders : [];
+      return {
+        ownerId: currentOrderOwnerId,
+        orders: typeof nextOrders === 'function' ? nextOrders(previousOrders) : nextOrders
+      };
+    });
+  }, [currentOrderOwnerId]);
 
   // Close on outside click
   useEffect(() => {
@@ -167,8 +179,11 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   }, []);
 
   const refreshOrderStatuses = useCallback(async () => {
+    const requestOwnerId = currentOrderOwnerId;
+    if (!requestOwnerId) return;
     try {
       const myOrders = await getUserOrders();
+      if (activeOrderOwnerId.current !== requestOwnerId) return;
       for (const order of myOrders) {
         if (order.paymentMethod === 'upi' && previousUpiPaymentStatuses.current[order.id] === 'pending' && order.paymentStatus === 'paid') {
           showToast(`UPI payment for order #${order.id} has been verified.`, 'success');
@@ -180,20 +195,21 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
       setOrders(myOrders);
       setOrdersError('');
     } catch (error) {
+      if (activeOrderOwnerId.current !== requestOwnerId) return;
       setOrdersError(error instanceof Error ? error.message : 'Could not load your orders. Please try again.');
     }
-  }, [getUserOrders, showToast]);
+  }, [currentOrderOwnerId, getUserOrders, setOrders, showToast]);
 
-  const handleOrdersClick = useCallback(async () => {
+  useEffect(() => {
+    activeOrderOwnerId.current = currentOrderOwnerId;
+    previousUpiPaymentStatuses.current = {};
+  }, [currentOrderOwnerId]);
+
+  const handleOrdersClick = useCallback(() => {
     setView('orders');
     setLoadingOrders(true);
     setOrdersError('');
-    try {
-      await refreshOrderStatuses();
-    } finally {
-      setLoadingOrders(false);
-    }
-  }, [refreshOrderStatuses]);
+  }, []);
 
   useEffect(() => {
     if (!isUserLoggedIn || orderHistoryRequest === 0) return;
@@ -206,7 +222,11 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
 
   useEffect(() => {
     if (!open || view !== 'orders') return;
-    const refresh = () => { void refreshOrderStatuses(); };
+    const refresh = () => {
+      setLoadingOrders(true);
+      void refreshOrderStatuses().finally(() => setLoadingOrders(false));
+    };
+    refresh();
     const interval = window.setInterval(refresh, 30000);
     window.addEventListener('focus', refresh);
     return () => {

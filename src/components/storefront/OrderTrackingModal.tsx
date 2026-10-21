@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Order } from '../../types';
 import { api, getAssetUrl } from '../../services/api';
 import { useStore } from '../../context/StoreContext';
+import { useUser } from '../../context/UserContext';
 import { createWhatsAppSupportUrl } from '../../lib/whatsapp';
 import { OrderStatusTimeline } from './OrderStatusTimeline';
 import { 
@@ -19,8 +20,13 @@ interface OrderTrackingModalProps {
 
 export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, onClose }) => {
   const { settings, setActiveInvoiceOrder } = useStore();
+  const { currentUser } = useUser();
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchEmail, setSearchEmail] = useState('');
+  const [searchEmailOverride, setSearchEmailOverride] = useState<{ ownerId: string | null; value: string } | null>(null);
+  const currentOwnerId = currentUser?.id || null;
+  const searchEmail = searchEmailOverride?.ownerId === currentOwnerId
+    ? searchEmailOverride.value
+    : currentUser?.email || '';
   const [orders, setOrders] = useState<Order[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -151,7 +157,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
               required
               placeholder="Checkout email address"
               value={searchEmail}
-              onChange={(e) => setSearchEmail(e.target.value)}
+              onChange={(e) => setSearchEmailOverride({ ownerId: currentOwnerId, value: e.target.value })}
               style={{
                 width: '100%',
                 minHeight: '44px',

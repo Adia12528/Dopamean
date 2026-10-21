@@ -1,3 +1,27 @@
+export interface StorePolicies {
+  termsAndConditions: string;
+  refundReturnPolicy: string;
+  privacyPolicy: string;
+  shippingPolicy: string;
+}
+
+export interface OrderPolicyConsent {
+  policyVersion: number;
+  acceptedAt: string;
+  policySnapshot: StorePolicies;
+  upiPaymentAttestedAt?: string;
+}
+
+export interface OrderPolicyConsentRequest {
+  accepted: true;
+  policyVersion: number;
+}
+
+export type OrderCreatePayload = Omit<Partial<Order>, 'policyConsent'> & {
+  policyConsent?: OrderPolicyConsentRequest;
+  upiPaymentAttested?: boolean;
+};
+
 export interface StoreSettings {
   storeName: string;
   storeTagline: string;
@@ -48,6 +72,8 @@ export interface StoreSettings {
   productCardBadgePriority?: ProductCardBadge[];
   shippingNotice?: string;
   codRules?: CodRule[];
+  storePolicies?: StorePolicies;
+  storePolicyVersion?: number;
   
   // Contact & Socials
   contactEmail: string;
@@ -235,6 +261,7 @@ export interface Order {
   razorpayPaymentId?: string;
   upiRefNumber?: string;
   upiCheckoutReference?: string;
+  policyConsent?: OrderPolicyConsent;
   paymentProofKey?: string;
   paymentProofStorage?: 'supabase' | 'local';
   timeline?: OrderTimelineEvent[];

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { DEFAULT_SETTINGS } from './default-settings.js';
 import { isProductCodEligible } from './cod-policy.js';
+import { createOrderReference } from './order-reference.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -502,7 +503,7 @@ const sqliteDb = {
     return rows.map(r => normalizeOrder(JSON.parse(r.data)));
   },
   getOrderById: (id) => {
-    const row = sqlite.prepare('SELECT data FROM orders WHERE id = ?').get(id);
+    const row = sqlite.prepare('SELECT data FROM orders WHERE LOWER(id) = LOWER(?)').get(String(id || '').trim());
     return row ? normalizeOrder(JSON.parse(row.data)) : null;
   },
   getOrderByRazorpayOrderId: (razorpayOrderId) => {
@@ -587,8 +588,8 @@ const sqliteDb = {
       const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299));
       const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40));
       const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
-      const id = `ORD-${crypto.randomUUID()}`;
       const createdAt = new Date().toISOString();
+      const id = createOrderReference(new Date(createdAt));
       const newOrder = {
         id,
         customer,
@@ -603,6 +604,7 @@ const sqliteDb = {
         paymentStatus: 'pending',
         upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined,
         upiCheckoutReference: paymentMethod === 'upi' ? String(orderData.upiCheckoutReference || '').trim().slice(0, 80) || undefined : undefined,
+        policyConsent: orderData.policyConsent || undefined,
         trackingNumber: '',
         timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }],
         createdAt

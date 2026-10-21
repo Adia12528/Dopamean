@@ -1,12 +1,18 @@
 import React from 'react';
 import { useStore } from '../../context/StoreContext';
-import { 
-  DollarSign, 
-  ShoppingBag, 
-  Tag, 
-  Package, 
-  Plus, 
-  ArrowRight
+import {
+  AlertTriangle,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  DollarSign,
+  Package,
+  Plus,
+  RefreshCw,
+  ShoppingBag,
+  Tag,
+  Truck
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -14,357 +20,195 @@ interface DashboardOverviewProps {
   onOpenAddOffer: () => void;
 }
 
-export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddProduct, onOpenAddOffer }) => {
-  const { products, offers, orders, setDashboardTab, settings } = useStore();
+const formatOrderDate = (dateValue: string) => {
+  const timestamp = Date.parse(dateValue);
+  if (Number.isNaN(timestamp)) return 'Date unavailable';
+  return new Date(timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+};
 
-  const totalRevenue = orders.reduce((acc, order) => acc + order.total, 0);
-  const activeOffersCount = offers.filter(o => o.isActive).length;
-  const pendingOrders = orders.filter(o => o.status === 'pending' || o.status === 'processing').length;
-  const lowStockCount = products.filter(p => p.stock <= (settings.lowStockThreshold ?? 5)).length;
+const parseOfferBoundary = (dateValue: string, isEnd: boolean) => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+    return new Date(`${dateValue}T${isEnd ? '23:59:59.999' : '00:00:00'}`).getTime();
+  }
+  return Date.parse(dateValue);
+};
+
+export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddProduct, onOpenAddOffer }) => {
+  const { products, offers, orders, setDashboardTab, settings, refreshData, isLoading } = useStore();
+  const [now] = React.useState(() => Date.now());
+  const collectedOrders = orders.filter(order => order.paymentStatus === 'paid' && order.status !== 'cancelled');
+  const collectedRevenue = collectedOrders.reduce((total, order) => total + order.total, 0);
+  const ordersNeedingAttention = orders.filter(order =>
+    order.status !== 'cancelled' && (
+      order.status === 'pending' ||
+      (order.paymentMethod === 'upi' && order.paymentStatus === 'pending')
+    )
+  );
+  const upiPaymentsToReview = orders.filter(order =>
+    order.paymentMethod === 'upi' && order.paymentStatus === 'pending' && order.status !== 'cancelled'
+  ).length;
+  const fulfillmentOrders = orders.filter(order =>
+    ['confirmed', 'processing', 'shipped', 'out_for_delivery'].includes(order.status)
+  );
+  const lowStockProducts = products
+    .filter(product => product.stock <= (settings.lowStockThreshold ?? 5))
+    .sort((first, second) => first.stock - second.stock);
+  const activeOffers = offers.filter(offer => {
+    const startsAt = offer.startDate ? parseOfferBoundary(offer.startDate, false) : Number.NEGATIVE_INFINITY;
+    const endsAt = parseOfferBoundary(offer.endDate, true);
+    return offer.isActive && startsAt <= now && !Number.isNaN(endsAt) && now < endsAt;
+  });
+  const recentOrders = [...orders]
+    .sort((first, second) => Date.parse(second.createdAt) - Date.parse(first.createdAt))
+    .slice(0, 5);
+
+  const metrics = [
+    {
+      label: 'Collected revenue',
+      value: `${settings.currency}${collectedRevenue.toFixed(2)}`,
+      detail: `${collectedOrders.length} paid order${collectedOrders.length === 1 ? '' : 's'} · all time`,
+      icon: <DollarSign size={18} />,
+      tone: 'var(--accent-sage)',
+      background: 'var(--accent-sage-light)'
+    },
+    {
+      label: 'Needs attention',
+      value: String(ordersNeedingAttention.length),
+      detail: `${upiPaymentsToReview} UPI payment${upiPaymentsToReview === 1 ? '' : 's'} to review`,
+      icon: <Clock size={18} />,
+      tone: ordersNeedingAttention.length ? '#B45309' : 'var(--accent-sage)',
+      background: ordersNeedingAttention.length ? '#FEF3C7' : 'var(--accent-sage-light)'
+    },
+    {
+      label: 'In fulfilment',
+      value: String(fulfillmentOrders.length),
+      detail: `${orders.length} recorded order${orders.length === 1 ? '' : 's'} total`,
+      icon: <Truck size={18} />,
+      tone: 'var(--accent-terracotta)',
+      background: 'var(--accent-terracotta-light)'
+    },
+    {
+      label: 'Low-stock products',
+      value: String(lowStockProducts.length),
+      detail: `At or below ${settings.lowStockThreshold ?? 5} in stock`,
+      icon: <Package size={18} />,
+      tone: lowStockProducts.length ? '#B45309' : 'var(--accent-sage)',
+      background: lowStockProducts.length ? '#FEF3C7' : 'var(--accent-sage-light)'
+    }
+  ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      {/* KPI Stats Cards */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '20px'
-      }}>
-        {/* Revenue */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '20px',
-          padding: '24px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              Total Studio Sales
-            </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--accent-terracotta-light)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent-terracotta)'
-            }}>
-              <DollarSign size={18} />
-            </div>
-          </div>
-          <div>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '2rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              lineHeight: 1.1
-            }}>
-              {settings.currency}{totalRevenue.toFixed(2)}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--accent-sage)', fontWeight: 600, marginTop: '6px' }}>
-              ↑ Based on real and simulated orders
-            </div>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '14px' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: 800, color: 'var(--text-main)' }}>Store overview</h2>
+          <p style={{ margin: '5px 0 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+            Current figures from {products.length} products and {orders.length} recorded orders.
+          </p>
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+          <button type="button" className="btn-outline" onClick={() => void refreshData()} disabled={isLoading} style={{ padding: '8px 12px', fontSize: '0.8rem' }}>
+            <RefreshCw size={15} className={isLoading ? 'spin' : undefined} />
+            <span>{isLoading ? 'Refreshing…' : 'Refresh'}</span>
+          </button>
+          <button type="button" className="btn-secondary" onClick={onOpenAddOffer} style={{ padding: '8px 12px', fontSize: '0.8rem' }}>
+            <Tag size={15} />
+            <span>Add offer</span>
+          </button>
+          <button type="button" className="btn-primary" onClick={onOpenAddProduct} style={{ padding: '8px 12px', fontSize: '0.8rem' }}>
+            <Plus size={15} />
+            <span>Add product</span>
+          </button>
+        </div>
+      </header>
 
-        {/* Catalog items */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '20px',
-          padding: '24px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              Active Products
-            </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--accent-sage-light)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent-sage)'
-            }}>
-              <ShoppingBag size={18} />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: '12px' }}>
+        {metrics.map(metric => (
+          <section key={metric.label} className="glass-card" style={{ padding: '16px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 700 }}>{metric.label}</span>
+              <span aria-hidden="true" style={{ width: 32, height: 32, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: 8, color: metric.tone, background: metric.background }}>
+                {metric.icon}
+              </span>
             </div>
-          </div>
-          <div>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '2rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              lineHeight: 1.1
-            }}>
-              {products.length}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: lowStockCount > 0 ? '#EA580C' : 'var(--text-muted)', fontWeight: 600, marginTop: '6px' }}>
-              {lowStockCount > 0 ? `⚠️ ${lowStockCount} items low on stock` : 'All items well stocked'}
-            </div>
-          </div>
-        </div>
-
-        {/* Active Offers */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '20px',
-          padding: '24px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              Running Promotions
-            </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              backgroundColor: 'var(--accent-rose-light)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--accent-rose)'
-            }}>
-              <Tag size={18} />
-            </div>
-          </div>
-          <div>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '2rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              lineHeight: 1.1
-            }}>
-              {activeOffersCount}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '6px' }}>
-              {offers.length} total marketing banners
-            </div>
-          </div>
-        </div>
-
-        {/* Orders in progress */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '20px',
-          padding: '24px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-              Orders in Progress
-            </span>
-            <div style={{
-              width: '36px',
-              height: '36px',
-              borderRadius: '10px',
-              backgroundColor: '#FEF3C7',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#B45309'
-            }}>
-              <Package size={18} />
-            </div>
-          </div>
-          <div>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '2rem',
-              fontWeight: 800,
-              color: 'var(--text-main)',
-              lineHeight: 1.1
-            }}>
-              {pendingOrders}
-            </div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '6px' }}>
-              {orders.length} total lifetime orders
-            </div>
-          </div>
-        </div>
+            <div style={{ marginTop: '12px', fontSize: '1.65rem', lineHeight: 1.1, fontWeight: 800, color: 'var(--text-main)', overflowWrap: 'anywhere' }}>{metric.value}</div>
+            <div style={{ marginTop: '6px', color: 'var(--text-muted)', fontSize: '0.72rem' }}>{metric.detail}</div>
+          </section>
+        ))}
       </div>
 
-      {/* Quick Launchpad & Shortcuts */}
-      <div className="dashboard-shortcuts-grid" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-        gap: '20px'
-      }}>
-        {/* Add Product Shortcut Banner */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '22px',
-          padding: '28px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            <span className="badge-yarn" style={{ marginBottom: '12px' }}>
-              Inventory Action
-            </span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-              Add Latest Product & Photos
-            </h3>
-            <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '20px' }}>
-              Upload new high-resolution images of your latest handcrafted totes, bucket hats, or amigurumi charms. Set prices, yarn composition, and craft time.
-            </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '16px', alignItems: 'start' }}>
+        <section className="glass-card" style={{ padding: '18px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.98rem', fontWeight: 800 }}>Recent orders</h3>
+            <button type="button" className="btn-outline" onClick={() => setDashboardTab('orders')} style={{ padding: '6px 10px', fontSize: '0.76rem' }}>
+              <span>All {orders.length}</span>
+              <ArrowRight size={14} />
+            </button>
           </div>
 
-          <button
-            onClick={onOpenAddProduct}
-            className="btn-primary"
-            style={{ width: 'fit-content' }}
-          >
-            <Plus size={16} />
-            <span>Add New Product Now</span>
-          </button>
-        </div>
-
-        {/* Launch Campaign Shortcut Banner */}
-        <div style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: '22px',
-          padding: '28px',
-          border: '1px solid var(--border-medium)',
-          boxShadow: 'var(--shadow-sm)',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'space-between'
-        }}>
-          <div>
-            <span className="badge-amber" style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              padding: '4px 12px',
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              borderRadius: '999px',
-              marginBottom: '12px'
-            }}>
-              Marketing Action
-            </span>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
-              Create Seasonal Offer Banner
-            </h3>
-            <p style={{ fontSize: '0.86rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '20px' }}>
-              Generate discount codes (e.g. 20% OFF, Free Gifts) and upload custom promotional banner imagery that dynamically features on your customer storefront.
-            </p>
-          </div>
-
-          <button
-            onClick={onOpenAddOffer}
-            className="btn-secondary"
-            style={{ width: 'fit-content' }}
-          >
-            <Tag size={16} />
-            <span>Launch Offer Banner</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Recent Activity Table Preview */}
-      <div style={{
-        backgroundColor: '#FFFFFF',
-        borderRadius: '22px',
-        padding: '24px',
-        border: '1px solid var(--border-medium)',
-        boxShadow: 'var(--shadow-sm)'
-      }}>
-        <div className="dashboard-recent-orders-header" style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: '18px'
-        }}>
-          <h4 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--text-main)' }}>
-            Recent Customer Orders
-          </h4>
-          <button
-            onClick={() => setDashboardTab('orders')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-              fontSize: '0.82rem',
-              color: 'var(--accent-terracotta)',
-              fontWeight: 600
-            }}
-          >
-            <span>View All ({orders.length})</span>
-            <ArrowRight size={14} />
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {orders.slice(0, 3).map(order => (
-            <div
-              key={order.id}
-              className="dashboard-recent-order-row"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '12px 16px',
-                borderRadius: '12px',
-                backgroundColor: 'var(--bg-surface-soft)',
-                border: '1px solid var(--border-light)'
-              }}
-            >
-              <div>
-                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-main)' }}>
-                  #{order.id}
-                </span>
-                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '10px' }}>
-                  {order.customer.name} ({order.items.length} items)
-                </span>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                <span style={{
-                  fontSize: '0.74rem',
-                  fontWeight: 700,
-                  padding: '3px 8px',
-                  borderRadius: '999px',
-                  backgroundColor: order.status === 'delivered' ? 'var(--accent-sage-light)' : (order.status === 'cancelled' ? '#FEE2E2' : (order.status === 'shipped' || order.status === 'out_for_delivery' ? '#E0F2FE' : '#FEF3C7')),
-                  color: order.status === 'delivered' ? 'var(--accent-sage)' : (order.status === 'cancelled' ? '#B91C1C' : (order.status === 'shipped' || order.status === 'out_for_delivery' ? '#0369A1' : '#B45309')),
-                  textTransform: 'capitalize'
-                }}>
-                  {order.status.replace(/_/g, ' ')}
-                </span>
-                <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--accent-terracotta)' }}>
-                  {settings.currency}{order.total.toFixed(2)}
-                </span>
-              </div>
+          {recentOrders.length === 0 ? (
+            <div role="status" className="badge-yarn" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textTransform: 'none', letterSpacing: 0 }}>
+              <ShoppingBag size={14} />
+              No customer orders recorded yet.
             </div>
-          ))}
-        </div>
+          ) : (
+            <div style={{ display: 'grid' }}>
+              {recentOrders.map(order => (
+                <div key={order.id} className="dashboard-recent-order-row" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', alignItems: 'center', gap: '8px 14px', padding: '11px 0', borderBottom: '1px solid var(--border-light)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 9px' }}>
+                      <strong style={{ fontSize: '0.78rem', color: 'var(--text-main)' }}>#{order.id}</strong>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.74rem', overflowWrap: 'anywhere' }}>{order.customer.name}</span>
+                    </div>
+                    <div style={{ marginTop: '3px', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                      {formatOrderDate(order.createdAt)} · {order.items.length} item{order.items.length === 1 ? '' : 's'}
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', justifyItems: 'end', gap: '4px' }}>
+                    <strong style={{ color: 'var(--text-main)', fontSize: '0.78rem' }}>{settings.currency}{order.total.toFixed(2)}</strong>
+                    <span className={order.paymentStatus === 'paid' ? 'badge-sage' : order.paymentMethod === 'upi' ? 'badge-amber' : 'badge-yarn'} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: '4px', maxWidth: '190px', fontSize: '0.64rem', textAlign: 'right', textTransform: 'none', letterSpacing: 0 }}>
+                      {order.paymentStatus === 'paid' ? <CheckCircle2 size={11} /> : order.paymentMethod === 'upi' ? <CreditCard size={11} /> : <Clock size={11} />}
+                      {order.status.replace(/_/g, ' ')} · {order.paymentStatus === 'paid' ? 'paid' : order.paymentMethod === 'upi' && order.paymentStatus === 'pending' ? 'UPI review' : (order.paymentStatus || 'pending').replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="glass-card" style={{ padding: '18px', minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '0.98rem', fontWeight: 800 }}>Inventory & offers</h3>
+            <button type="button" className="btn-outline" onClick={() => setDashboardTab('products')} style={{ padding: '6px 10px', fontSize: '0.76rem' }}>
+              <span>Products</span>
+              <ArrowRight size={14} />
+            </button>
+          </div>
+          <div role="status" className={lowStockProducts.length ? 'badge-amber' : 'badge-sage'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textTransform: 'none', letterSpacing: 0 }}>
+            {lowStockProducts.length ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+            {lowStockProducts.length ? `${lowStockProducts.length} product${lowStockProducts.length === 1 ? '' : 's'} at or below stock threshold` : 'No products below stock threshold'}
+          </div>
+          {lowStockProducts.length > 0 && (
+            <div style={{ display: 'grid', gap: '7px', marginTop: '12px' }}>
+              {lowStockProducts.slice(0, 4).map(product => (
+                <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '0.76rem' }}>
+                  <span style={{ minWidth: 0, color: 'var(--text-main)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{product.title}</span>
+                  <strong style={{ flexShrink: 0, color: product.stock === 0 ? '#B91C1C' : '#B45309' }}>{product.stock} left</strong>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>Live offers</span>
+            <strong style={{ color: 'var(--text-main)', fontSize: '0.82rem' }}>{activeOffers.length} active · {offers.length} total</strong>
+          </div>
+          <button type="button" className="btn-secondary" onClick={onOpenAddOffer} style={{ marginTop: '10px', padding: '7px 10px', fontSize: '0.76rem' }}>
+            <Tag size={14} />
+            <span>Create offer</span>
+          </button>
+        </section>
       </div>
     </div>
   );

@@ -25,6 +25,7 @@ import {
 import { downloadInvoicePDF } from '../../utils/downloadInvoicePdf';
 import { createWhatsAppUrl, getWhatsAppTemplate, isWhatsAppEnabled, isWhatsAppSupportEnabled, renderWhatsAppTemplate } from '../../lib/whatsapp';
 import { isCartCodEligible, isProductCodEligible } from '../../lib/codPolicy';
+import { StorePolicyDialog, type StorePolicyKey } from './StorePolicyDialog';
 import { forgetPendingPayment, getPendingPaymentReferences, rememberPendingPayment } from '../../lib/paymentRecovery';
 import {
   clearDirectUpiRecoveryDraft,
@@ -128,6 +129,9 @@ export const CartDrawer: React.FC = () => {
   const [upiProofFile, setUpiProofFile] = useState<File | null>(null);
   const [isUpiConfirmationOpen, setIsUpiConfirmationOpen] = useState(false);
   const [upiCheckoutReference, setUpiCheckoutReference] = useState('');
+  const [hasAcceptedStorePolicies, setHasAcceptedStorePolicies] = useState(false);
+  const [hasConfirmedUpiDetails, setHasConfirmedUpiDetails] = useState(false);
+  const [activeStorePolicy, setActiveStorePolicy] = useState<StorePolicyKey | null>(null);
   const [hasCopiedUpiId, setHasCopiedUpiId] = useState(false);
 
   const [formOverrides, setFormOverrides] = useState<{
@@ -515,6 +519,10 @@ export const CartDrawer: React.FC = () => {
       setCheckoutStep('payment');
       return;
     }
+    if (!hasAcceptedStorePolicies) {
+      showToast('Please agree to the store policies before placing your order.', 'error');
+      return;
+    }
     if (!isUserLoggedIn || !userToken) {
       showToast('Sign in to your account before placing an order.', 'error');
       setIsCheckingOut(false);
@@ -530,12 +538,20 @@ export const CartDrawer: React.FC = () => {
       setIsUpiConfirmationOpen(true);
       return;
     }
+    if (paymentMethod === 'upi' && !hasConfirmedUpiDetails) {
+      showToast('Confirm that your payment details are accurate before submitting.', 'error');
+      return;
+    }
     if (paymentMethod === 'upi' && !upiUtrNumber.trim()) {
       showToast('Enter the UPI transaction reference / UTR number before placing your order.', 'error');
       return;
     }
 
     const authenticatedUserToken = userToken;
+    const policyConsent = {
+      accepted: true as const,
+      policyVersion: Number(settings.storePolicyVersion) || 1
+    };
     try {
       const references = getPendingPaymentReferences();
       for (const reference of references) {
@@ -610,6 +626,7 @@ export const CartDrawer: React.FC = () => {
           subtotal,
           discountAmount: discount,
           promoCodeApplied: activePromo?.code,
+          policyConsent,
           userToken: authenticatedUserToken
         });
         try {
@@ -665,7 +682,8 @@ export const CartDrawer: React.FC = () => {
           discountAmount: discount,
           promoCodeApplied: activePromo?.code,
           paymentMethod: 'razorpay',
-          status: 'pending'
+          status: 'pending',
+          policyConsent
         }, authenticatedUserToken);
         pendingRazorpayStoreOrderId = storeOrder.id;
         try {
@@ -797,7 +815,9 @@ export const CartDrawer: React.FC = () => {
         method: paymentMethod,
         status: 'pending',
         upiRefNumber: paymentMethod === 'upi' ? upiUtrNumber.trim() : undefined,
-        upiCheckoutReference: paymentMethod === 'upi' ? upiCheckoutReference : undefined
+        upiCheckoutReference: paymentMethod === 'upi' ? upiCheckoutReference : undefined,
+        policyConsent,
+        upiPaymentAttested: paymentMethod === 'upi' ? hasConfirmedUpiDetails : undefined
       });
 
       if (placedOrder) {
@@ -859,11 +879,15 @@ export const CartDrawer: React.FC = () => {
     }
     if (!isUserLoggedIn) {
       openUserAuthModal('signin', () => {
+        setHasAcceptedStorePolicies(false);
+        setHasConfirmedUpiDetails(false);
         setCheckoutStep('address');
         setIsCheckingOut(true);
       });
       return;
     }
+    setHasAcceptedStorePolicies(false);
+    setHasConfirmedUpiDetails(false);
     setCheckoutStep('address');
     setIsCheckingOut(true);
   };
@@ -1370,6 +1394,32 @@ export const CartDrawer: React.FC = () => {
                 </>
               ) : (
                 <>
+              <section className="glass-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
+                <label htmlFor="checkout-policy-consent" style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', color: 'var(--text-main)', fontSize: '0.8rem', lineHeight: 1.45, cursor: 'pointer' }}>
+                  <input
+                    id="checkout-policy-consent"
+                    type="checkbox"
+                    required
+                    checked={hasAcceptedStorePolicies}
+                    onChange={event => setHasAcceptedStorePolicies(event.target.checked)}
+                    style={{ width: 17, height: 17, marginTop: 1, flexShrink: 0, accentColor: 'var(--accent-terracotta)' }}
+                  />
+                  <span>I have read and agree to the store policies.</span>
+                </label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '9px', paddingLeft: '26px' }}>
+                  {([
+                    ['termsAndConditions', 'Terms & Conditions'],
+                    ['refundReturnPolicy', 'Refund/Return'],
+                    ['privacyPolicy', 'Privacy'],
+                    ['shippingPolicy', 'Shipping']
+                  ] as const).map(([key, label]) => (
+                    <button key={key} type="button" className="btn-outline" onClick={() => setActiveStorePolicy(key)} style={{ padding: '5px 9px', fontSize: '0.7rem' }}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
               {/* Payment Method Selector */}
               <div style={{ marginTop: '6px' }}>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '8px' }}>
@@ -1400,6 +1450,7 @@ export const CartDrawer: React.FC = () => {
                       onChange={() => {
                         setPaymentMethod('upi');
                         setIsUpiConfirmationOpen(false);
+                        setHasConfirmedUpiDetails(false);
                         beginDirectUpiRecovery();
                       }}
                     />
@@ -1712,6 +1763,8 @@ export const CartDrawer: React.FC = () => {
                               window.location.assign(createUpiPaymentLink(reference));
                             }}
                             className={isIosDevice ? 'btn-outline' : 'btn-primary'}
+                            disabled={!hasAcceptedStorePolicies}
+                            title={!hasAcceptedStorePolicies ? 'Agree to the store policies first' : undefined}
                             style={{ width: '100%', minHeight: '44px', padding: '10px 12px', fontSize: '0.82rem' }}
                           >
                             <Smartphone size={17} />
@@ -1761,6 +1814,18 @@ export const CartDrawer: React.FC = () => {
                           }}
                         />
                       </div>
+
+                      <label htmlFor="checkout-upi-attestation" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginTop: '12px', fontSize: '0.78rem', lineHeight: 1.45, color: 'var(--text-main)', cursor: 'pointer' }}>
+                        <input
+                          id="checkout-upi-attestation"
+                          type="checkbox"
+                          required
+                          checked={hasConfirmedUpiDetails}
+                          onChange={event => setHasConfirmedUpiDetails(event.target.checked)}
+                          style={{ width: 16, height: 16, marginTop: 1, flexShrink: 0, accentColor: 'var(--accent-terracotta)' }}
+                        />
+                        <span>I confirm the payment details I entered are accurate.</span>
+                      </label>
 
                       <div style={{ marginTop: '12px' }}>
                         <label htmlFor="checkout-upi-proof" style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, color: '#334155', marginBottom: '5px' }}>
@@ -1841,7 +1906,7 @@ export const CartDrawer: React.FC = () => {
               ) : paymentMethod !== 'upi' || isUpiConfirmationOpen ? (
                 <button
                   type="submit"
-                  disabled={isSubmitting || availablePaymentMethods.length === 0}
+                  disabled={isSubmitting || availablePaymentMethods.length === 0 || !hasAcceptedStorePolicies || (paymentMethod === 'upi' && isUpiConfirmationOpen && !hasConfirmedUpiDetails)}
                   aria-busy={isSubmitting}
                   className="btn-primary"
                   style={{ width: '100%', padding: '14px', fontSize: '0.96rem' }}
@@ -2151,6 +2216,13 @@ export const CartDrawer: React.FC = () => {
           </div>
         )}
       </div>
+      <StorePolicyDialog
+        policyKey={activeStorePolicy}
+        policies={settings.storePolicies}
+        policyVersion={settings.storePolicyVersion}
+        settings={settings}
+        onClose={() => setActiveStorePolicy(null)}
+      />
     </div>
   );
 };

@@ -1,6 +1,28 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { Product, Offer, Order, CartItem, ViewMode, DashboardTab, StoreSettings, Review, AdminRole } from '../types';
+import type { Product, Offer, Order, OrderPolicyConsentRequest, OrderCreatePayload, CartItem, ViewMode, DashboardTab, StoreSettings, Review, AdminRole } from '../types';
 import { api } from '../services/api';
+
+const GUEST_CART_KEY = 'dopamean_cart';
+
+const DEFAULT_STORE_POLICIES = {
+  termsAndConditions: `All products are 100% handmade. Slight variations in colour, size, pattern, or texture between product photos and the item received are normal and are not defects.\n\nOrders are processed within 1–2 business days after payment confirmation. Payment options are the ones shown for your order at checkout. Direct UPI payments are checked manually and confirmation may take a few hours.\n\nPrices are shown in INR and include applicable taxes unless stated otherwise.\n\nWe may cancel an order if an item is unavailable, a pricing error is found, or fraud is reasonably suspected. If we cancel, we will issue a full refund.\n\nWe take reasonable care to keep product information accurate. Delivery estimates may be affected by courier or logistics delays outside our control. Nothing in these terms limits rights available to customers under applicable Indian law.`,
+  refundReturnPolicy: `Return or exchange requests must be made within 7 days of delivery. Items must be unused and returned in their original condition and packaging.\n\nMinor handmade variations are not defects. This does not limit your rights if an item is genuinely defective, damaged as shipped, incorrect, or materially different from its description.\n\nTo request a return, contact us within the return window with your order ID and photos of the issue. We will review the request and confirm whether it is approved.\n\nAfter approval, return the item to the address we provide. Return shipping is arranged and paid by the customer unless the return is due to our error or a genuine defect/damage as shipped. Use a trackable service; we cannot take responsibility for a return parcel lost in transit.\n\nIf an item is returned in a condition materially different from when it was shipped, beyond the issue reported and ordinary handling needed to identify it, the return may be rejected. The original reported defect or damage will be considered during inspection.\n\nAfter we receive and inspect an approved return, refunds are processed within 5–7 business days to the original payment method. Direct UPI refunds are sent manually to the same UPI ID.\n\nOriginal shipping charges and customer-paid return shipping are non-refundable unless the return is due to our error or a genuine defect/damage as shipped. In those cases, we reimburse reasonable return shipping costs.`,
+  privacyPolicy: `We collect the name, email address, phone number, delivery address, and order history that you provide when using the store.\n\nWe use this information to manage your account, process and deliver orders, provide customer support, and meet legal obligations. We do not sell your personal data. We share only the information needed with payment providers (such as Razorpay or PayU) to process payments and delivery partners to deliver orders.\n\nStore data is hosted using Supabase services with access controls. We do not store payment card details; card payments are handled by the relevant payment provider.\n\nYou may request access to or deletion of your personal data, subject to information we must retain by law. For privacy requests or complaints, contact {{contactEmail}}. This notice is intended to describe our practices under applicable Indian data-protection law; please contact us if you have questions.`,
+  shippingPolicy: `We currently ship within India only.\n\nEstimated delivery is 4–7 business days, depending on the destination and courier service. This is an estimate, not a guaranteed delivery date.\n\nShipping charges for your order are shown at checkout before you place it. Free shipping applies to orders above {{freeShippingThreshold}}.`
+};
+
+const getCartStorageKey = (ownerId: string | null) => ownerId
+  ? `${GUEST_CART_KEY}:user:${encodeURIComponent(ownerId)}`
+  : GUEST_CART_KEY;
+
+const readStoredCart = (ownerId: string | null): CartItem[] | null => {
+  try {
+    const saved = localStorage.getItem(getCartStorageKey(ownerId));
+    return saved ? JSON.parse(saved) as CartItem[] : null;
+  } catch {
+    return null;
+  }
+};
 
 const DEFAULT_SETTINGS: StoreSettings = {
   storeName: 'Cozy Loops by Deepa',
@@ -12,6 +34,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   currency: '₹',
   freeShippingThreshold: 299,
   shippingFee: 40,
+  storePolicies: DEFAULT_STORE_POLICIES,
+  storePolicyVersion: 1,
   lowStockThreshold: 5,
   productCardBadgePriority: ['bestseller', 'discount', 'lowStock', 'craftTime'],
   showTestimonialsSection: false,
@@ -90,6 +114,7 @@ interface StoreContextType {
   setSearchQuery: (q: string) => void;
   setSelectedCategory: (cat: string) => void;
   setIsCartOpen: (open: boolean) => void;
+  setCartOwner: (ownerId: string | null) => void;
   setSelectedProductForModal: (p: Product | null) => void;
   showToast: (text: string, type?: 'success' | 'info' | 'error') => void;
 
@@ -118,6 +143,8 @@ interface StoreContextType {
       status?: 'pending' | 'paid';
       upiRefNumber?: string;
       upiCheckoutReference?: string;
+      policyConsent?: OrderPolicyConsentRequest;
+      upiPaymentAttested?: boolean;
       razorpayOrderId?: string;
       razorpayPaymentId?: string;
     }
@@ -148,14 +175,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [products, setProducts] = useState<Product[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    try {
-      const saved = localStorage.getItem('dopamean_cart');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [cartOwner, setCartOwnerState] = useState<string | null>(null);
+  const [cart, setCart] = useState<CartItem[]>(() => readStoredCart(null) || []);
 
   const [activePromo, setActivePromo] = useState<Offer | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -180,6 +201,31 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setToastMessage(prev => (prev?.text === text ? null : prev));
     }, 4200);
   }, []);
+
+  const setCartOwner = useCallback((ownerId: string | null) => {
+    const nextOwner = ownerId?.trim() || null;
+    if (nextOwner === cartOwner) return;
+
+    let nextCart = readStoredCart(nextOwner);
+    let transferGuestCart = false;
+    try {
+      if (nextOwner && nextCart === null && cartOwner === null) {
+        const guestCart = readStoredCart(null);
+        if (guestCart?.length) {
+          localStorage.setItem(getCartStorageKey(nextOwner), JSON.stringify(guestCart));
+          localStorage.removeItem(GUEST_CART_KEY);
+          nextCart = guestCart;
+          transferGuestCart = true;
+        }
+      }
+    } catch {
+      console.warn('Failed to persist cart ownership: localStorage unavailable');
+    }
+
+    if (!transferGuestCart) setActivePromo(null);
+    setCartOwnerState(nextOwner);
+    setCart(nextCart || []);
+  }, [cartOwner]);
 
   // Fetch initial data from the configured backend database
   const loadData = useCallback(async () => {
@@ -266,14 +312,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [settings.themeColor]);
 
-  // Save cart changes to localStorage
+  // Save the active guest or customer cart separately.
   useEffect(() => {
     try {
-      localStorage.setItem('dopamean_cart', JSON.stringify(cart));
+      localStorage.setItem(getCartStorageKey(cartOwner), JSON.stringify(cart));
     } catch {
       console.warn('Failed to persist cart: localStorage unavailable');
     }
-  }, [cart]);
+  }, [cart, cartOwner]);
 
   // Super Admin / Studio Admin login
   const adminLogin = async (passcode: string, superAdmin?: { superAdminId: string; superAdminPassword: string }): Promise<boolean> => {
@@ -509,6 +555,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       status?: 'pending' | 'paid';
       upiRefNumber?: string;
       upiCheckoutReference?: string;
+      policyConsent?: OrderPolicyConsentRequest;
+      upiPaymentAttested?: boolean;
       razorpayOrderId?: string;
       razorpayPaymentId?: string;
     }
@@ -527,7 +575,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const freeShippingThreshold = settings.freeShippingThreshold ?? 299;
     const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : (settings.shippingFee ?? 40);
 
-    const orderPayload: Partial<Order> = {
+    const orderPayload: OrderCreatePayload = {
       customer: {
         name: customer.name,
         email: customer.email,
@@ -550,6 +598,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       paymentStatus: paymentInfo?.status || (paymentInfo?.method === 'cod' ? 'pending' : 'pending'),
       upiRefNumber: paymentInfo?.upiRefNumber,
       upiCheckoutReference: paymentInfo?.method === 'upi' ? paymentInfo.upiCheckoutReference : undefined,
+      policyConsent: paymentInfo?.policyConsent,
+      upiPaymentAttested: paymentInfo?.method === 'upi' ? paymentInfo.upiPaymentAttested : undefined,
       razorpayOrderId: paymentInfo?.razorpayOrderId,
       razorpayPaymentId: paymentInfo?.razorpayPaymentId,
       status: 'pending'
@@ -685,6 +735,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSearchQuery,
         setSelectedCategory,
         setIsCartOpen,
+        setCartOwner,
         setSelectedProductForModal,
         showToast,
 

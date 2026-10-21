@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { UserProfile, Order } from '../types';
 import { api } from '../services/api';
+import { useStore } from './StoreContext';
 import { getEmailConfirmationRedirectUrl, getOAuthRedirectUrl, getSupabaseClient, supabaseAuthEnabled } from '../lib/supabase';
 
 const USER_TOKEN_KEY = 'dopamean_user_token';
@@ -52,6 +53,7 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { setCartOwner } = useStore();
   const [initialOAuthError] = useState(getOAuthRedirectError);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [userToken, setUserToken] = useState<string | null>(() => {
@@ -89,21 +91,23 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const handleProfileSyncFailure = useCallback((error: unknown) => {
     clearPersistedToken();
+    setCartOwner(null);
     setCurrentUser(null);
     setAuthError(error instanceof Error
       ? error.message
       : 'Your sign-in worked, but we could not save your customer profile. Please try again.');
     setIsUserAuthModalOpen(true);
-  }, []);
+  }, [setCartOwner]);
 
   const completeSignIn = useCallback((user: UserProfile) => {
+    setCartOwner(user.id);
     setCurrentUser(user);
     setAuthError(null);
     setIsUserAuthModalOpen(false);
     const callback = pendingAuthCallback.current;
     pendingAuthCallback.current = null;
     callback?.();
-  }, []);
+  }, [setCartOwner]);
 
   // Rehydrate user from stored token or Supabase session on mount
   useEffect(() => {
@@ -129,18 +133,23 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const restoreLocalToken = async () => {
       const stored = localStorage.getItem(USER_TOKEN_KEY);
       if (!stored) {
-        if (active) setIsLoadingUser(false);
+        if (active) {
+          setCartOwner(null);
+          setIsLoadingUser(false);
+        }
         return;
       }
       try {
         const user = await api.getMe(stored);
         if (active) {
+          setCartOwner(user.id);
           setUserToken(stored);
           setCurrentUser(user);
         }
       } catch {
         localStorage.removeItem(USER_TOKEN_KEY);
         if (active) {
+          setCartOwner(null);
           setUserToken(null);
           setCurrentUser(null);
         }
@@ -197,6 +206,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }
             } else if (event === 'SIGNED_OUT') {
               if (active) {
+                setCartOwner(null);
                 setCurrentUser(null);
                 clearPersistedToken();
                 setIsLoadingUser(false);
@@ -213,6 +223,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
             try {
               const user = await syncSupabaseProfile(supaToken);
               if (active) {
+                setCartOwner(user.id);
                 persistToken(supaToken);
                 setCurrentUser(user);
                 setAuthError(null);
@@ -245,7 +256,7 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     void restoreLocalToken();
     return () => { active = false; };
-  }, [completeSignIn, handleProfileSyncFailure, syncSupabaseProfile]);
+  }, [completeSignIn, handleProfileSyncFailure, setCartOwner, syncSupabaseProfile]);
 
   const openUserAuthModal = useCallback((tab: 'signin' | 'signup' = 'signin', onAuthenticated?: () => void) => {
     pendingAuthCallback.current = onAuthenticated || null;
@@ -359,10 +370,11 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .then(supabase => supabase?.auth.signOut())
         .catch(error => console.error('Could not sign out of Supabase:', error));
     }
+    setCartOwner(null);
     setCurrentUser(null);
     setUserToken(null);
     try { localStorage.removeItem(USER_TOKEN_KEY); } catch { /* ignore */ }
-  }, []);
+  }, [setCartOwner]);
 
   const updateUserProfile = useCallback(async (updates: Partial<UserProfile> & { password?: string; currentPassword?: string }) => {
     if (!userToken) throw new Error('Not authenticated');

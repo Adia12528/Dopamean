@@ -194,7 +194,9 @@ export const HeroBanner: React.FC = () => {
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
-            minHeight: '260px'
+            minHeight: '260px',
+            aspectRatio: '4 / 3',
+            width: '100%'
           }}>
             <div className="liquid-static-fallback" aria-hidden="true" />
             <img

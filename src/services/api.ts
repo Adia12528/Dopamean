@@ -1,4 +1,4 @@
-import type { Product, Offer, Order, StoreSettings, Review, UserProfile } from '../types';
+import type { Product, Offer, Order, OrderCreatePayload, StoreSettings, Review, UserProfile } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
 
@@ -155,7 +155,7 @@ export const api = {
     return res.json();
   },
 
-  createOrder: async (orderData: Partial<Order>, userToken: string): Promise<Order> => {
+  createOrder: async (orderData: OrderCreatePayload, userToken: string): Promise<Order> => {
     const res = await fetch(`${BASE_URL}/api/orders`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken}` },
@@ -267,6 +267,7 @@ export const api = {
     subtotal: number;
     discountAmount?: number;
     promoCodeApplied?: string;
+    policyConsent: { accepted: true; policyVersion: number };
     userToken: string;
   }): Promise<{ success: boolean; orderId: string; checkoutUrl: string; fields: Record<string, string> }> => {
     const res = await fetch(`${BASE_URL}/api/payments/payu/create-order`, {
@@ -277,7 +278,8 @@ export const api = {
         items: data.items,
         subtotal: data.subtotal,
         discountAmount: data.discountAmount,
-        promoCodeApplied: data.promoCodeApplied
+        promoCodeApplied: data.promoCodeApplied,
+        policyConsent: data.policyConsent
       })
     });
     if (!res.ok) {

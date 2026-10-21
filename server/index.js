@@ -189,6 +189,46 @@ function getValidAdminPasscodes(settings) {
   return [];
 }
 
+function createOrderPolicyConsent(body, settings, paymentMethod) {
+  if (body?.policyConsent?.accepted !== true) {
+    return { error: 'Please agree to the store policies before placing your order.', statusCode: 400 };
+  }
+
+  const policyVersion = Math.max(1, Number(settings.storePolicyVersion) || 1);
+  if (Number(body.policyConsent.policyVersion) !== policyVersion) {
+    return { error: 'Store policies changed during checkout. Review and accept the current policies before continuing.', statusCode: 409 };
+  }
+
+  if (paymentMethod === 'upi' && body.upiPaymentAttested !== true) {
+    return { error: 'Confirm your UPI payment details are accurate before submitting.', statusCode: 400 };
+  }
+
+  const activePolicies = settings.storePolicies || DEFAULT_SETTINGS.storePolicies;
+  const policySnapshot = {
+    termsAndConditions: String(activePolicies.termsAndConditions || '').trim(),
+    refundReturnPolicy: String(activePolicies.refundReturnPolicy || '').trim(),
+    privacyPolicy: String(activePolicies.privacyPolicy || '').trim(),
+    shippingPolicy: String(activePolicies.shippingPolicy || '').trim()
+  };
+  if (Object.values(policySnapshot).some(policy => !policy)) {
+    return { error: 'Store policies are not configured. Please contact the store before ordering.', statusCode: 503 };
+  }
+
+  const acceptedAt = new Date().toISOString();
+  const snapshotText = policy => policy
+    .replaceAll('{{freeShippingThreshold}}', `${settings.currency || '₹'}${Number(settings.freeShippingThreshold ?? DEFAULT_SETTINGS.freeShippingThreshold)}`)
+    .replaceAll('{{contactEmail}}', settings.contactEmail || DEFAULT_SETTINGS.contactEmail);
+
+  return {
+    value: {
+      policyVersion,
+      acceptedAt,
+      policySnapshot: Object.fromEntries(Object.entries(policySnapshot).map(([key, policy]) => [key, snapshotText(policy)])),
+      ...(paymentMethod === 'upi' ? { upiPaymentAttestedAt: acceptedAt } : {})
+    }
+  };
+}
+
 // ── Delivery Agent Auth ────────────────────────────────────────────────────────
 function getDeliveryAgentPasscode(settings) {
   const dbPass = settings?.deliveryAgentPasscode?.trim();
@@ -1143,6 +1183,8 @@ app.post('/api/orders', orderLimit, requireUser, async (req, res) => {
   try {
     const settings = await db.getSettings();
     const method = req.body?.paymentMethod || 'cod';
+    const consent = createOrderPolicyConsent(req.body, settings, method);
+    if (consent.error) return res.status(consent.statusCode).json({ error: consent.error });
     if (method === 'upi') {
       const upiId = String(settings.upiId || '').trim();
       const isValidUpiVpa = /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(upiId);
@@ -1167,6 +1209,7 @@ app.post('/api/orders', orderLimit, requireUser, async (req, res) => {
     const customer = req.body?.customer || {};
     const newOrder = await db.createOrder({
       ...req.body,
+      policyConsent: consent.value,
       customer: {
         ...customer,
         name: String(customer.name || req.user.name || '').trim(),
@@ -1351,6 +1394,8 @@ app.post('/api/payments/payu/create-order', paymentLimit, requireUser, async (re
   let storeOrder;
   try {
     const settings = await db.getSettings();
+    const consent = createOrderPolicyConsent(req.body, settings, 'payu');
+    if (consent.error) return res.status(consent.statusCode).json({ error: consent.error });
     const { key, salt } = getPayuCredentials(settings);
     if (!key || !salt || settings.paymentPayuEnabled !== true) {
       return res.status(400).json({ error: 'PayU is not configured and enabled in Studio Settings.' });
@@ -1378,6 +1423,7 @@ app.post('/api/payments/payu/create-order', paymentLimit, requireUser, async (re
     const customer = req.body?.customer || {};
     storeOrder = await db.createOrder({
       ...req.body,
+      policyConsent: consent.value,
       customer: {
         ...customer,
         name: String(customer.name || req.user.name || '').trim(),

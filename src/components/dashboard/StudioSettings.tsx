@@ -22,12 +22,13 @@ import {
   QrCode,
   User,
   KeyRound,
-  ShieldAlert
+  ShieldAlert,
+  FileText
 } from 'lucide-react';
 import type { CodRule, ProductCardBadge } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
 
-type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi';
+type ScopedSettingSection = 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies';
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
 
 const isValidUpiVpa = (value: string) =>
@@ -53,7 +54,7 @@ export const StudioSettings: React.FC = () => {
   const upiQrFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
@@ -65,7 +66,8 @@ export const StudioSettings: React.FC = () => {
     trustCards: { isSaving: false, error: '' },
     testimonials: { isSaving: false, error: '' },
     deliveryTimeline: { isSaving: false, error: '' },
-    upi: { isSaving: false, error: '' }
+    upi: { isSaving: false, error: '' },
+    policies: { isSaving: false, error: '' }
   });
   const [validationErrors, setValidationErrors] = useState<Partial<Record<'storeName' | 'heroTitle' | 'currency' | 'upiId', string>>>({});
   const [codRuleErrors, setCodRuleErrors] = useState<Record<string, string>>({});
@@ -125,6 +127,19 @@ export const StudioSettings: React.FC = () => {
     (form.upiQrImage || '') !== (settings.upiQrImage || '') ||
     (form.paymentUpiEnabled !== false) !== (settings.paymentUpiEnabled !== false)
   );
+  const storePolicyFormValues = {
+    termsAndConditions: String(form.storePolicies?.termsAndConditions || ''),
+    refundReturnPolicy: String(form.storePolicies?.refundReturnPolicy || ''),
+    privacyPolicy: String(form.storePolicies?.privacyPolicy || ''),
+    shippingPolicy: String(form.storePolicies?.shippingPolicy || '')
+  };
+  const savedStorePolicyValues = settings.storePolicies || {
+    termsAndConditions: '',
+    refundReturnPolicy: '',
+    privacyPolicy: '',
+    shippingPolicy: ''
+  };
+  const isStorePoliciesDirty = JSON.stringify(storePolicyFormValues) !== JSON.stringify(savedStorePolicyValues);
 
   const getUnsavedScopedSections = (): { id: ScopedSettingSection; label: string }[] => [
     ...(isBadgePriorityDirty ? [{ id: 'productCards' as const, label: 'Product Card Badge Rules' }] : []),
@@ -132,7 +147,8 @@ export const StudioSettings: React.FC = () => {
     ...(isTrustCardsDirty ? [{ id: 'trustCards' as const, label: 'Trust Cards' }] : []),
     ...(isTestimonialsDirty ? [{ id: 'testimonials' as const, label: 'Testimonials' }] : []),
     ...(isDeliveryTimelineDirty ? [{ id: 'deliveryTimeline' as const, label: 'Delivery Timeline' }] : []),
-    ...(isUpiDetailsDirty ? [{ id: 'upi' as const, label: 'Direct UPI' }] : [])
+    ...(isUpiDetailsDirty ? [{ id: 'upi' as const, label: 'Direct UPI' }] : []),
+    ...(isStorePoliciesDirty ? [{ id: 'policies' as const, label: 'Policies & Consent' }] : [])
   ];
 
   const confirmLeavingUnsavedScopedSections = () => {
@@ -162,7 +178,9 @@ export const StudioSettings: React.FC = () => {
             ? 'Testimonials'
             : section === 'deliveryTimeline'
               ? 'Delivery Timeline'
-              : 'Direct UPI';
+              : section === 'upi'
+                ? 'Direct UPI'
+                : 'Policies & Consent';
     const otherUnsavedSections = getUnsavedScopedSections().filter(item => item.id !== section);
     if (otherUnsavedSections.length > 0) {
       const otherSectionNames = otherUnsavedSections.map(item => item.label).join(' and ');
@@ -172,6 +190,9 @@ export const StudioSettings: React.FC = () => {
       if (!shouldContinue) return;
     }
 
+    const nextPolicyVersion = section === 'policies'
+      ? Math.max(0, Number(settings.storePolicyVersion) || 0) + 1
+      : undefined;
     const payload = section === 'productCards'
       ? { productCardBadgePriority: normalizedFormBadgePriority }
       : section === 'lowStock'
@@ -182,11 +203,13 @@ export const StudioSettings: React.FC = () => {
             ? { showTestimonialsSection: form.showTestimonialsSection === true }
             : section === 'deliveryTimeline'
               ? deliveryTimelineFormValues
-              : {
+                : section === 'upi'
+                  ? {
                 paymentUpiEnabled: form.paymentUpiEnabled !== false,
                 upiId: String(form.upiId || '').trim(),
                 upiQrImage: form.upiQrImage || ''
-              };
+                  }
+                  : { storePolicies: storePolicyFormValues, storePolicyVersion: nextPolicyVersion };
 
     if (section === 'upi') {
       if (!isValidUpiVpa(String(form.upiId || ''))) {
@@ -204,6 +227,13 @@ export const StudioSettings: React.FC = () => {
         return;
       }
     }
+    if (section === 'policies' && Object.values(storePolicyFormValues).some(value => !value.trim())) {
+      setScopedSaveStates(prev => ({
+        ...prev,
+        policies: { isSaving: false, error: 'Complete all four policy texts before saving.' }
+      }));
+      return;
+    }
 
     setScopedSaveStates(prev => ({
       ...prev,
@@ -211,6 +241,9 @@ export const StudioSettings: React.FC = () => {
     }));
     try {
       await updateSettings(payload);
+      if (section === 'policies') {
+        setForm(previous => ({ ...previous, storePolicyVersion: nextPolicyVersion }));
+      }
       setScopedSaveStates(prev => ({
         ...prev,
         [section]: { isSaving: false, error: '' }
@@ -286,7 +319,7 @@ export const StudioSettings: React.FC = () => {
             cursor: !isDirty || saveState.isSaving ? 'not-allowed' : 'pointer'
           }}
         >
-          {saveState.isSaving ? <span>Saving…</span> : <><Save size={16} /><span>{section === 'upi' ? 'Save Direct UPI' : 'Save section'}</span></>}
+          {saveState.isSaving ? <span>Saving…</span> : <><Save size={16} /><span>{section === 'upi' ? 'Save Direct UPI' : section === 'policies' ? 'Save policies' : 'Save section'}</span></>}
         </button>
       </div>
     );
@@ -418,6 +451,8 @@ export const StudioSettings: React.FC = () => {
     delete payload.paymentUpiEnabled;
     delete payload.upiId;
     delete payload.upiQrImage;
+    delete payload.storePolicies;
+    delete payload.storePolicyVersion;
     const requiredFieldErrors: typeof validationErrors = {};
     if (!String(form.storeName || '').trim()) requiredFieldErrors.storeName = 'Enter the store or studio name.';
     if (!String(form.heroTitle || '').trim()) requiredFieldErrors.heroTitle = 'Enter the hero headline.';
@@ -580,6 +615,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'whatsapp' as const, label: 'WhatsApp Messages', icon: <MessageCircle size={16} /> },
     { id: 'payments' as const, label: 'Payment Gateways', icon: <CreditCard size={16} /> },
     { id: 'upi' as const, label: 'Direct UPI', icon: <QrCode size={16} /> },
+    { id: 'policies' as const, label: 'Policies & Consent', icon: <FileText size={16} /> },
     { id: 'contact' as const, label: 'Contact & Socials', icon: <MessageCircle size={16} /> },
     { id: 'footer' as const, label: 'Footer & Copyright', icon: <Sliders size={16} /> },
     { id: 'security' as const, label: 'Security & Access Passcodes', icon: <Lock size={16} /> },
@@ -639,7 +675,7 @@ export const StudioSettings: React.FC = () => {
             <span>Live Store Preview</span>
           </button>
 
-          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && activeSection !== 'upi' && (
+          {activeSection !== 'productCards' && activeSection !== 'lowStock' && activeSection !== 'trustCards' && activeSection !== 'testimonials' && activeSection !== 'deliveryTimeline' && activeSection !== 'upi' && activeSection !== 'policies' && (
             <button
               type="button"
               onClick={() => handleSave()}
@@ -709,7 +745,7 @@ export const StudioSettings: React.FC = () => {
         {/* Dynamic Section Editor */}
         <form
           onSubmit={(e) => {
-            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline' || activeSection === 'upi') {
+            if (activeSection === 'productCards' || activeSection === 'lowStock' || activeSection === 'trustCards' || activeSection === 'testimonials' || activeSection === 'deliveryTimeline' || activeSection === 'upi' || activeSection === 'policies') {
               e.preventDefault();
               void saveScopedSection(activeSection);
               return;
@@ -2194,6 +2230,65 @@ export const StudioSettings: React.FC = () => {
             </div>
           )}
 
+          {activeSection === 'policies' && (
+            <div className="glass-card" style={{ padding: 'clamp(16px, 3vw, 26px)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                  <FileText size={19} color="var(--accent-terracotta)" />
+                  <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.18rem', fontWeight: 800 }}>Store policies</h3>
+                </div>
+                <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                  Edit the policy text customers can open at checkout. Current version: {settings.storePolicyVersion || 1}.
+                </p>
+              </div>
+
+              <div role="note" className="badge-amber" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', whiteSpace: 'normal', textTransform: 'none', letterSpacing: 0, lineHeight: 1.5 }}>
+                <ShieldAlert size={16} style={{ flex: '0 0 auto', marginTop: '2px' }} />
+                <span>These are editable draft policies, not legal advice. Have an Indian consumer/privacy lawyer review them before relying on them.</span>
+              </div>
+
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {([
+                  ['termsAndConditions', 'Terms & Conditions'],
+                  ['refundReturnPolicy', 'Refund & Return Policy'],
+                  ['privacyPolicy', 'Privacy Policy'],
+                  ['shippingPolicy', 'Shipping Policy']
+                ] as const).map(([field, label]) => (
+                  <details key={field} className="glass-card" style={{ padding: '12px 14px' }}>
+                    <summary style={{ cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.88rem', fontWeight: 700 }}>
+                      {label}
+                    </summary>
+                    <textarea
+                      rows={10}
+                      value={storePolicyFormValues[field]}
+                      onChange={event => setForm(previous => ({
+                        ...previous,
+                        storePolicies: {
+                          ...(previous.storePolicies || storePolicyFormValues),
+                          [field]: event.target.value
+                        }
+                      }))}
+                      aria-label={label}
+                      style={{ width: '100%', boxSizing: 'border-box', marginTop: '12px', padding: '10px 12px', border: '1px solid var(--border-medium)', borderRadius: 8, fontFamily: 'inherit', fontSize: '0.84rem', lineHeight: 1.55, resize: 'vertical' }}
+                    />
+                    {field === 'shippingPolicy' && (
+                      <p style={{ margin: '6px 0 0', color: 'var(--text-muted)', fontSize: '0.74rem' }}>
+                        Keep <code>{'{{freeShippingThreshold}}'}</code> in the text to show the current Shipping & Inventory setting automatically.
+                      </p>
+                    )}
+                  </details>
+                ))}
+              </div>
+
+              <div role="note" className="badge-yarn" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', whiteSpace: 'normal', textTransform: 'none', letterSpacing: 0, lineHeight: 1.5 }}>
+                <Info size={15} style={{ flex: '0 0 auto', marginTop: '2px' }} />
+                <span>Legal review needed: avoid blanket rejection of genuine defect claims; add your grievance contact, response process, and data-retention details. The draft says free shipping above ₹599, while this store is currently set to {form.currency}{Number(form.freeShippingThreshold ?? 299)}; the customer policy placeholder follows the store setting.</span>
+              </div>
+
+              {renderScopedSaveControls('policies', isStorePoliciesDirty)}
+            </div>
+          )}
+
           {/* 7. PAYMENT GATEWAYS */}
           {activeSection === 'payments' && (
             <div style={{
@@ -2209,9 +2304,17 @@ export const StudioSettings: React.FC = () => {
                   Payment Gateways & Cash on Delivery
                 </h3>
               </div>
-              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '24px' }}>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
                 Configure Razorpay and PayU online payments, along with Cash on Delivery. Set up manual Direct UPI separately.
               </p>
+
+              <div role="note" className="badge-amber" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', whiteSpace: 'normal', textTransform: 'none', letterSpacing: 0, lineHeight: 1.5, marginBottom: '18px' }}>
+                <ShieldAlert size={16} style={{ flex: '0 0 auto', marginTop: '2px' }} />
+                <span>All payment settings in this section are the Super Admin source of truth for live behavior. If a value differs from the environment, the saved Studio value wins. If credentials or passcodes still look stale, open Security &amp; Access Passcodes to fix the super admin/admin credentials or return to this section to re-save the payment configuration.</span>
+              </div>
+              <button type="button" className="btn-secondary" onClick={() => setActiveSection('security')} style={{ alignSelf: 'flex-start', marginBottom: '18px', padding: '8px 12px', fontSize: '0.78rem' }}>
+                Fix super admin or passcode conflicts
+              </button>
 
               {/* CARD 1: RAZORPAY GATEWAY */}
               <div style={{
@@ -2674,9 +2777,13 @@ export const StudioSettings: React.FC = () => {
                 }}>
                   <ShieldAlert size={16} style={{ flexShrink: 0 }} />
                   <span>
-                    When changed, the new password is saved to both the live database and your server <strong>.env</strong> file. All previous passwords become immediately invalid.
+                    When changed, the new password is saved to both the live database and your server <strong>.env</strong> file. All previous passwords become immediately invalid. Also note: payment config is managed here in Studio and is the master source of truth; if a payment setting looks stale, reopen Payment Gateways and save again after fixing the credential conflict.
                   </span>
                 </div>
+
+                <button type="button" className="btn-secondary" onClick={() => setActiveSection('payments')} style={{ marginTop: '14px', alignSelf: 'flex-start', padding: '8px 12px', fontSize: '0.78rem' }}>
+                  Re-check payment configuration
+                </button>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '18px', marginTop: '20px' }}>
                   <div>

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Pool } from 'pg';
 import { DEFAULT_SETTINGS } from './default-settings.js';
 import { isProductCodEligible } from './cod-policy.js';
+import { createOrderReference } from './order-reference.js';
 
 const pool = new Pool({
   connectionString: process.env.SUPABASE_DB_URL,
@@ -149,7 +150,7 @@ export const postgresDb = {
   async deleteOffer(id) { await pool.query('DELETE FROM offers WHERE id=$1', [id]); return true; },
   async toggleOfferStatus(id) { const { rows } = await pool.query('SELECT data,is_active FROM offers WHERE id=$1', [id]); if (!rows[0]) return null; const offer = { ...parse(rows[0].data), isActive: !rows[0].is_active }; await pool.query('UPDATE offers SET is_active=$2,data=$3::jsonb WHERE id=$1', [id, offer.isActive, JSON.stringify(offer)]); return offer; },
   async getOrders() { const { rows } = await pool.query('SELECT data FROM orders ORDER BY created_at DESC'); return rows.map(row => cleanOrder(row.data)); },
-  async getOrderById(id) { const { rows } = await pool.query('SELECT data FROM orders WHERE id=$1', [id]); return rows[0] ? cleanOrder(rows[0].data) : null; },
+  async getOrderById(id) { const { rows } = await pool.query('SELECT data FROM orders WHERE lower(id)=lower($1)', [String(id || '').trim()]); return rows[0] ? cleanOrder(rows[0].data) : null; },
   async getOrderByRazorpayOrderId(id) { const { rows } = await pool.query("SELECT data FROM orders WHERE data->>'razorpayOrderId'=$1", [id]); return rows[0] ? cleanOrder(rows[0].data) : null; },
   async getOrderByPayuTransactionId(id) { const { rows } = await pool.query("SELECT data FROM orders WHERE data->>'payuTransactionId'=$1", [id]); return rows[0] ? cleanOrder(rows[0].data) : null; },
   async getOrdersByQuery(q) { const { rows } = await pool.query('SELECT data FROM orders WHERE lower(id)=lower($1)', [q.trim()]); return rows.map(row => cleanOrder(row.data)); },
@@ -183,8 +184,8 @@ export const postgresDb = {
         discountAmount = Number((offer.discountType === 'percentage' ? subtotal * Number(offer.discountValue) / 100 : Math.min(subtotal, Number(offer.discountValue))).toFixed(2)); promoCodeApplied = offer.code;
       }
       const threshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299)); const shippingAmount = subtotal === 0 || subtotal >= threshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40)); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
-      const id = `ORD-${crypto.randomUUID()}`; const createdAt = new Date().toISOString();
-      const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined, upiCheckoutReference: paymentMethod === 'upi' ? String(orderData.upiCheckoutReference || '').trim().slice(0, 80) || undefined : undefined, trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
+      const createdAt = new Date().toISOString(); const id = createOrderReference(new Date(createdAt));
+      const order = { id, customer, items: products.map(entry => entry.item), subtotal, discountAmount, shippingAmount, promoCodeApplied, total, status: 'pending', paymentMethod, paymentStatus: 'pending', upiRefNumber: paymentMethod === 'upi' ? String(orderData.upiRefNumber || '').trim() : undefined, upiCheckoutReference: paymentMethod === 'upi' ? String(orderData.upiCheckoutReference || '').trim().slice(0, 80) || undefined : undefined, policyConsent: orderData.policyConsent || undefined, trackingNumber: '', timeline: [{ status: 'Order Placed', timestamp: createdAt, note: `Order received via ${paymentMethod.toUpperCase()}.` }], createdAt };
       await insertOrder(client, order); for (const entry of products) await saveProduct(client, { ...entry.product, stock: entry.remainingStock });
       await client.query('COMMIT'); return order;
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
