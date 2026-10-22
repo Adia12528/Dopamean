@@ -1,6 +1,5 @@
 import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
-import { useUser } from '../../context/UserContext';
 import { getAssetUrl } from '../../services/api';
 import { StorefrontImage } from './StorefrontImage';
 import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
@@ -19,7 +18,6 @@ import {
 const UserProfileMenu = lazy(() => import('../auth/UserProfileMenu').then(module => ({ default: module.UserProfileMenu })));
 
 export const Navbar: React.FC = () => {
-  const { isUserLoggedIn } = useUser();
   const { 
     viewMode, 
     setViewMode, 
@@ -42,7 +40,6 @@ export const Navbar: React.FC = () => {
   const activeOffersCount = offers.filter(o => o.isActive).length;
   const isStudioDashboard = isAdmin && viewMode === 'dashboard';
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [orderHistoryRequest, setOrderHistoryRequest] = useState(0);
   const exactSearchMatches = useMemo(() => findExactProductMatches(products, searchQuery), [products, searchQuery]);
   const searchSuggestions = useMemo(
     () => exactSearchMatches.length > 0
@@ -449,12 +446,9 @@ export const Navbar: React.FC = () => {
           {viewMode === 'store' && (
             <>
               <button
-                onClick={() => {
-                  if (isUserLoggedIn) setOrderHistoryRequest(value => value + 1);
-                  else setIsTrackingModalOpen(true);
-                }}
-                aria-label={isUserLoggedIn ? 'View your orders' : 'Track an order'}
-                title={isUserLoggedIn ? 'View your order history and delivery progress' : 'Track an order with order ID and checkout email'}
+                onClick={() => setIsTrackingModalOpen(true)}
+                aria-label="Track an order"
+                title="Track an order with order ID and checkout email"
                 className="nav-track-order"
                 style={{
                   display: 'flex',
@@ -481,12 +475,12 @@ export const Navbar: React.FC = () => {
                 }}
               >
                 <Truck size={15} />
-                <span className="hide-on-mobile-sm">{isUserLoggedIn ? 'My Orders' : 'Track Order'}</span>
+                <span className="hide-on-mobile-sm">Track Order</span>
               </button>
 
               {/* User Account (Sign In or Avatar Menu) */}
               <Suspense fallback={<span role="status" aria-label="Loading account" style={{ width: 42, height: 34 }} />}>
-                <UserProfileMenu orderHistoryRequest={orderHistoryRequest} />
+                <UserProfileMenu />
               </Suspense>
             </>
           )}

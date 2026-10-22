@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useUser } from '../../context/UserContext';
 import { useStore } from '../../context/StoreContext';
 import { 
@@ -162,7 +163,7 @@ const EditProfileForm: React.FC<{ onDone: () => void }> = ({ onDone }) => {
 };
 
 // ─── Main dropdown ────────────────────────────────────────────────────────────
-export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ orderHistoryRequest = 0 }) => {
+export const UserProfileMenu: React.FC = () => {
   const { currentUser, isUserLoggedIn, openUserAuthModal, userLogout, getUserOrders } = useUser();
   const { showToast } = useStore();
   const [open, setOpen] = useState(false);
@@ -204,7 +205,8 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (!ref.current?.contains(target) && !panelRef.current?.contains(target)) {
         closeMenu();
       }
     };
@@ -276,16 +278,6 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   }, []);
 
   useEffect(() => {
-    if (!isUserLoggedIn || orderHistoryRequest === 0) return;
-    const timeout = window.setTimeout(() => {
-      setOpen(true);
-      setIsClosing(false);
-      void handleOrdersClick();
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [handleOrdersClick, isUserLoggedIn, orderHistoryRequest]);
-
-  useEffect(() => {
     if (!open || view !== 'orders') return;
     const refresh = () => {
       setLoadingOrders(true);
@@ -352,25 +344,27 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
       </button>
 
       {open && (
-        <div
-          className={`user-profile-menu-backdrop mobile-drawer-overlay${isClosing ? ' user-profile-menu-closing' : ''}`}
-          onMouseDown={event => {
-            if (event.target === event.currentTarget) {
-              closeMenu();
-            }
-          }}
-        >
-        <div
-          ref={panelRef}
-          className={`user-profile-menu-panel mobile-drawer-panel glass-card animate-slide-drawer${isClosing ? ' user-profile-menu-panel-closing' : ''}`}
-          role="dialog"
-          aria-label="Your account"
-          style={{
-          position: 'fixed', left: popoverPosition.left, top: popoverPosition.top, zIndex: 200,
-          backgroundColor: 'rgba(255, 255, 255, 0.88)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
-          border: '1px solid var(--border-medium)', width: 320, minWidth: 280, maxWidth: 'calc(100vw - 24px)', overflow: 'hidden',
-          boxSizing: 'border-box'
-        }}>
+        createPortal(
+          <div
+            className={`user-profile-menu-backdrop mobile-drawer-overlay${isClosing ? ' user-profile-menu-closing' : ''}`}
+            onMouseDown={event => {
+              if (event.target === event.currentTarget) {
+                closeMenu();
+              }
+            }}
+            style={{ zIndex: 1000 }}
+          >
+          <div
+            ref={panelRef}
+            className={`user-profile-menu-panel mobile-drawer-panel glass-card animate-slide-drawer${isClosing ? ' user-profile-menu-panel-closing' : ''}`}
+            role="dialog"
+            aria-label="Your account"
+            style={{
+              position: 'fixed', left: popoverPosition.left, top: popoverPosition.top, zIndex: 1001,
+              backgroundColor: 'rgba(255, 255, 255, 0.88)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
+              border: '1px solid var(--border-medium)', width: 320, minWidth: 280, maxWidth: 'calc(100vw - 24px)', overflow: 'hidden',
+              boxSizing: 'border-box'
+            }}>
           {/* Header */}
           <div className="user-profile-menu-header">
             <div className="user-profile-menu-identity">
@@ -464,8 +458,10 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
               </div>
             )}
           </div>
-        </div>
-        </div>
+          </div>
+          </div>,
+          document.body
+        )
       )}
     </div>
   );
