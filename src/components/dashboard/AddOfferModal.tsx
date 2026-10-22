@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import type { Offer } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { api, getAssetUrl } from '../../services/api';
@@ -30,7 +31,8 @@ const OFFER_BANNER_PRESETS = [
 ];
 
 export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, editOffer }) => {
-  const { addOffer, updateOffer } = useStore();
+  useBackNavigationLayer('add-offer-modal', isOpen, onClose);
+  const { addOffer, updateOffer, settings } = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [title, setTitle] = useState(editOffer?.title || '');
@@ -234,7 +236,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                   {title || 'Your Promo Title Here'}
                 </div>
                 <div style={{ fontSize: '0.8rem', opacity: 0.9 }}>
-                  Code: <strong>{code || 'CODE'}</strong> • {discountType === 'percentage' ? `${discountValue}% OFF` : `$${discountValue} OFF`}
+                  Code: <strong>{code || 'CODE'}</strong> • {discountType === 'percentage' ? `${discountValue}% OFF` : `${settings.currency}${discountValue} OFF`}
                 </div>
               </div>
             </div>

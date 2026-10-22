@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { createOrderWhatsAppMessage, createWhatsAppUrl, isWhatsAppStageEnabled } from '../../lib/whatsapp';
 import { api } from '../../services/api';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import type { Order } from '../../types';
 import {
   Truck, CheckCircle2, Package, MapPin, Phone, User,
@@ -24,6 +25,8 @@ export const DeliveryDashboard: React.FC = () => {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [deliveryNotes, setDeliveryNotes] = useState<Record<string, string>>({});
   const [isRefreshing, setIsRefreshing] = useState(false);
+  useBackNavigationLayer('delivery-delivered-tab', activeTab === 'delivered', () => setActiveTab('active'));
+  useBackNavigationLayer('delivery-expanded-order', Boolean(expandedId), () => setExpandedId(null));
   const activeOrders = useMemo(() =>
     deliveryOrders.filter(o => o.status === 'shipped' || o.status === 'out_for_delivery'),
     [deliveryOrders]

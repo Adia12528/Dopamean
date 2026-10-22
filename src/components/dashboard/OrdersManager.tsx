@@ -22,6 +22,7 @@ import {
   Copy
 } from 'lucide-react';
 import { getShortOrderId } from '../../lib/shortOrderId';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 
 type SectionTab = 'pending' | 'confirmed' | 'shipped' | 'out_for_delivery' | 'delivered' | 'cancelled' | 'all';
 type OrderSort = 'default' | 'newest' | 'oldest' | 'highest_total' | 'lowest_total';
@@ -65,6 +66,11 @@ export const OrdersManager: React.FC = () => {
   // Inline Tracking AWB inputs (for quick updates)
   const [trackingInputs, setTrackingInputs] = useState<Record<string, string>>({});
   const activeOrderTabRef = useRef<HTMLButtonElement>(null);
+  useBackNavigationLayer('orders-settings-panel', isSettingsOpen, () => setIsSettingsOpen(false));
+  useBackNavigationLayer('cancel-order-dialog', Boolean(cancellingOrder), () => setCancellingOrder(null));
+  useBackNavigationLayer('ship-order-dialog', Boolean(shippingOrder), () => setShippingOrder(null));
+  useBackNavigationLayer('out-for-delivery-dialog', Boolean(outForDeliveryOrder), () => setOutForDeliveryOrder(null));
+  useBackNavigationLayer('delivered-order-dialog', Boolean(deliveringOrder), () => setDeliveringOrder(null));
 
   useEffect(() => {
     activeOrderTabRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });

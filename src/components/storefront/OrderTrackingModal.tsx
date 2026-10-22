@@ -7,6 +7,7 @@ import { useUser } from '../../context/UserContext';
 import { createWhatsAppSupportUrl } from '../../lib/whatsapp';
 import { OrderStatusTimeline } from './OrderStatusTimeline';
 import { StorefrontImage } from '../common/StorefrontImage';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import { 
   Search, 
   X, 
@@ -34,6 +35,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
   const [hasSearched, setHasSearched] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  useBackNavigationLayer('order-tracking', isOpen, onClose);
 
   useEffect(() => {
     if (!isOpen || !currentUser) return;

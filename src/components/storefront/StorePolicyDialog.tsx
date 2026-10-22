@@ -1,4 +1,5 @@
 import React from 'react';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import { X } from 'lucide-react';
 import type { StorePolicies, StoreSettings } from '../../types';
 
@@ -20,6 +21,7 @@ interface StorePolicyDialogProps {
 }
 
 export const StorePolicyDialog: React.FC<StorePolicyDialogProps> = ({ policyKey, policies, policyVersion, settings, onClose }) => {
+  useBackNavigationLayer('store-policy-dialog', Boolean(policyKey), onClose);
   if (!policyKey) return null;
 
   const policyText = (policies?.[policyKey] || '')

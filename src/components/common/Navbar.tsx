@@ -3,6 +3,7 @@ import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
 import { StorefrontImage } from './StorefrontImage';
 import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import { 
   ShoppingBag, 
   LayoutDashboard, 
@@ -48,6 +49,7 @@ export const Navbar: React.FC = () => {
     [exactSearchMatches, products, searchQuery]
   );
   const isSearchSuggestionsVisible = viewMode === 'store' && isSearchFocused && Boolean(searchQuery.trim());
+  useBackNavigationLayer('search-suggestions', isSearchSuggestionsVisible, () => setIsSearchFocused(false));
 
   return (
     <header className={isStudioDashboard ? 'studio-dashboard-header' : undefined} style={{

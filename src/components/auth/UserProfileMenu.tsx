@@ -4,11 +4,12 @@ import { useUser } from '../../context/UserContext';
 import { useStore } from '../../context/StoreContext';
 import { 
   User, UserRound, LogOut, Package, ChevronDown, MapPin, ArrowLeft,
-  Phone, X, CheckCircle2, Clock, Loader2, Copy
+  Phone, X, CheckCircle2, Clock, Loader2, Copy, FileText
 } from 'lucide-react';
 import type { Order } from '../../types';
 import { getShortOrderId } from '../../lib/shortOrderId';
 import { OrderCardSkeleton } from '../common/LoadingSkeleton';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 
 const OrderStatusTimeline = lazy(() => import('../storefront/OrderStatusTimeline').then(module => ({ default: module.OrderStatusTimeline })));
 
@@ -28,7 +29,7 @@ const Avatar: React.FC<{ name: string; size?: number }> = ({ name, size = 34 }) 
 
 // ─── Order history card ───────────────────────────────────────────────────────
 const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
-  const { settings, showToast } = useStore();
+  const { settings, showToast, setActiveInvoiceOrder } = useStore();
   const cur = settings.currency || '₹';
   const statusLabel = order.status.replace(/_/g, ' ');
   const shortOrderId = getShortOrderId(order.id);
@@ -65,6 +66,14 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
       <div style={{ fontSize: '0.72rem', color: 'var(--text-subtle)' }}>
         {new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
       </div>
+      <button
+        type="button"
+        onClick={() => setActiveInvoiceOrder(order)}
+        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start', gap: 6, minHeight: 40, marginTop: 2, padding: '7px 12px', border: '1px solid var(--accent-terracotta)', borderRadius: 9, background: '#FFFFFF', color: 'var(--accent-terracotta)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer' }}
+      >
+        <FileText size={15} />
+        <span>View / Download Invoice</span>
+      </button>
       {order.paymentMethod === 'upi' && order.status !== 'cancelled' && (
         <>
           <span role="status" className={order.paymentStatus === 'paid' ? 'badge-sage' : 'badge-amber'} style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere', whiteSpace: 'normal', display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', textTransform: 'none', letterSpacing: 0 }}>
@@ -190,7 +199,6 @@ export const UserProfileMenu: React.FC = () => {
       };
     });
   }, [currentOrderOwnerId]);
-
   const closeMenu = useCallback(() => {
     if (!open || isClosing) return;
     setIsClosing(true);
@@ -201,6 +209,8 @@ export const UserProfileMenu: React.FC = () => {
       closeTimerRef.current = null;
     }, 300);
   }, [isClosing, open]);
+  useBackNavigationLayer('profile-menu', open, closeMenu);
+  useBackNavigationLayer('profile-subview', open && view !== 'menu', () => setView('menu'));
 
   // Close on outside click
   useEffect(() => {

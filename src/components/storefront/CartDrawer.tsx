@@ -37,6 +37,7 @@ import {
   readDirectUpiRecoveryDraft,
   saveDirectUpiRecoveryDraft
 } from '../../lib/directUpiRecovery';
+import { useBackNavigationBlocker, useBackNavigationLayer } from '../../context/BackNavigationContext';
 
 const isValidUpiVpa = (value?: string) =>
   Boolean(value && /^[A-Za-z0-9][A-Za-z0-9._-]{1,255}@[A-Za-z][A-Za-z0-9.-]{1,63}$/.test(value.trim()));
@@ -82,7 +83,8 @@ export const CartDrawer: React.FC = () => {
     userToken,
     isUserLoggedIn,
     isLoadingUser,
-    openUserAuthModal
+    openUserAuthModal,
+    updateUserProfile
   } = useUser();
   const {
     isCartOpen,
@@ -109,6 +111,7 @@ export const CartDrawer: React.FC = () => {
   const [orderComplete, setOrderComplete] = useState<Order | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
+  const [invoiceDownloadError, setInvoiceDownloadError] = useState('');
   const [paymentIssue, setPaymentIssue] = useState<{
     orderId: string;
     method: 'razorpay' | 'payu';
@@ -117,6 +120,7 @@ export const CartDrawer: React.FC = () => {
     createdAt: number;
   } | null>(null);
   const [paymentStatusRefresh, setPaymentStatusRefresh] = useState(0);
+  const [isGatewayCheckoutOpen, setIsGatewayCheckoutOpen] = useState(false);
   const isPaymentStatusCheckInProgress = useRef(false);
   const upiProofFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -136,6 +140,24 @@ export const CartDrawer: React.FC = () => {
   const [hasConfirmedUpiDetails, setHasConfirmedUpiDetails] = useState(false);
   const [activeStorePolicy, setActiveStorePolicy] = useState<StorePolicyKey | null>(null);
   const [hasCopiedUpiId, setHasCopiedUpiId] = useState(false);
+  const isPaymentNavigationProtected = isGatewayCheckoutOpen ||
+    isUpiConfirmationOpen ||
+    (isSubmitting && (selectedPaymentMethod === 'razorpay' || selectedPaymentMethod === 'payu')) ||
+    paymentIssue?.state === 'checking';
+  useBackNavigationBlocker('cart-payment-flow', isPaymentNavigationProtected);
+  useBackNavigationLayer('cart-drawer', isCartOpen, () => {
+    setIsCartOpen(false);
+    setOrderComplete(null);
+    setIsCheckingOut(false);
+  });
+  useBackNavigationLayer('cart-checkout', isCartOpen && isCheckingOut, () => {
+    setIsCheckingOut(false);
+    setCheckoutStep('address');
+  });
+  useBackNavigationLayer('cart-checkout-payment-step', isCartOpen && isCheckingOut && checkoutStep === 'payment', () => {
+    setCheckoutStep('address');
+  });
+  useBackNavigationLayer('cart-order-complete', isCartOpen && Boolean(orderComplete), () => setOrderComplete(null));
 
   const [formOverrides, setFormOverrides] = useState<{
     name?: string;
@@ -254,13 +276,20 @@ export const CartDrawer: React.FC = () => {
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   );
   const isMobileDevice = isAndroidDevice || isIosDevice;
-  const createUpiPaymentLink = (checkoutReference: string) => `upi://pay?${new URLSearchParams({
-    pa: upiId,
-    pn: settings.storeName || 'Cozy Loops by Deepa',
-    am: total.toFixed(2),
-    cu: 'INR',
-    tn: `${settings.storeName || 'Cozy Loops by Deepa'} ${checkoutReference}`
-  }).toString()}`;
+  const createUpiPaymentLink = (checkoutReference: string) => {
+    const storeName = settings.storeName || 'Cozy Loops by Deepa';
+    const payeeName = settings.upiPayeeName?.trim() || storeName;
+    const transactionReference = checkoutReference.replace(/[^A-Za-z0-9]/g, '');
+    const parameters = new URLSearchParams({
+      pa: upiId,
+      pn: payeeName,
+      am: total.toFixed(2),
+      cu: 'INR',
+      tr: transactionReference,
+      tn: `${storeName} ${checkoutReference}`
+    });
+    return `upi://pay?${parameters.toString()}`;
+  };
   const hasValidUpiId = settings.paymentUpiEnabled !== false && isValidUpiVpa(upiId) && Boolean(settings.upiQrImage?.trim());
   const codUnavailableProducts = cart
     .filter(item => !isProductCodEligible(item.product, settings.codRules || []))
@@ -522,6 +551,18 @@ export const CartDrawer: React.FC = () => {
       if (!formData.address.trim()) errors.address = 'Enter your complete delivery address.';
       setAddressErrors(errors);
       if (Object.keys(errors).length > 0) return;
+      if (currentUser && formData.address.trim() !== profileAddress) {
+        try {
+          await updateUserProfile({
+            address: formData.address.trim(),
+            city: '',
+            pincode: ''
+          });
+        } catch (error) {
+          console.error('Could not save the delivery address to the customer profile:', error);
+          showToast('Your order can continue, but we could not save this address to your profile. You can save it under My Profile.', 'error');
+        }
+      }
       if (paymentMethod === 'upi') beginDirectUpiRecovery();
       setCheckoutStep('payment');
       return;
@@ -724,6 +765,7 @@ export const CartDrawer: React.FC = () => {
             razorpay_payment_id?: string;
             razorpay_signature?: string;
           }) => {
+            setIsGatewayCheckoutOpen(false);
             setPaymentIssue({
               orderId: storeOrder.id,
               method: 'razorpay',
@@ -766,6 +808,7 @@ export const CartDrawer: React.FC = () => {
           },
           modal: {
             ondismiss: () => {
+              setIsGatewayCheckoutOpen(false);
               setPaymentIssue({
                 orderId: storeOrder.id,
                 method: 'razorpay',
@@ -803,6 +846,7 @@ export const CartDrawer: React.FC = () => {
 
         const rzp = new window.Razorpay(rzpOptions);
         rzp.on('payment.failed', response => {
+          setIsGatewayCheckoutOpen(false);
           setPaymentIssue({
             orderId: storeOrder.id,
             method: 'razorpay',
@@ -812,6 +856,7 @@ export const CartDrawer: React.FC = () => {
           });
         });
         razorpayCheckoutOpened = true;
+        setIsGatewayCheckoutOpen(true);
         rzp.open();
         setIsSubmitting(false);
         return;
@@ -848,6 +893,7 @@ export const CartDrawer: React.FC = () => {
         void triggerCelebration();
       }
     } catch (error: unknown) {
+      setIsGatewayCheckoutOpen(false);
       if (pendingRazorpayStoreOrderId && !razorpayCheckoutOpened) {
         try {
           const cancelledOrder = await api.cancelRazorpayOrder(pendingRazorpayStoreOrderId, authenticatedUserToken);
@@ -1130,11 +1176,12 @@ export const CartDrawer: React.FC = () => {
                   onClick={async () => {
                     if (!orderComplete || isDownloadingInvoice) return;
                     setIsDownloadingInvoice(true);
+                    setInvoiceDownloadError('');
                     try {
                       await downloadInvoicePDF(orderComplete, settings);
-                    } catch (err) {
+                    } catch (err: unknown) {
                       console.error('Invoice download failed:', err);
-                      alert('Could not generate PDF. Please try again or track parcel.');
+                      setInvoiceDownloadError(err instanceof Error ? err.message : 'Could not generate the invoice PDF. Please try again.');
                     } finally {
                       setIsDownloadingInvoice(false);
                     }
@@ -1159,8 +1206,13 @@ export const CartDrawer: React.FC = () => {
                   }}
                 >
                   <Download size={16} />
-                  <span>{isDownloadingInvoice ? 'Downloading Invoice PDF…' : 'Download Invoice PDF'}</span>
+                  <span>{isDownloadingInvoice ? 'Generating invoice…' : invoiceDownloadError ? 'Retry invoice download' : 'Download Invoice PDF'}</span>
                 </button>
+                {invoiceDownloadError && (
+                  <p role="alert" style={{ margin: 0, padding: '10px 12px', borderRadius: 10, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', fontSize: '0.82rem', lineHeight: 1.5 }}>
+                    {invoiceDownloadError}
+                  </p>
+                )}
 
                 <button
                   onClick={() => {
@@ -1286,6 +1338,9 @@ export const CartDrawer: React.FC = () => {
               }}>
                 Signed in as <strong>{currentUser?.email}</strong>. Your account details have been filled in; confirm your phone number and delivery address before placing the order.
               </div>
+              <p style={{ margin: '-6px 0 0', color: 'var(--text-muted)', fontSize: '0.76rem', lineHeight: 1.45 }}>
+                Your delivery address is saved to your profile when you continue. You can edit it here on future orders or under My Profile.
+              </p>
 
               {/* Customer Inputs */}
               <div>

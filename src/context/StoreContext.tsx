@@ -267,7 +267,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         api.getProducts().catch(() => [])
       ]);
 
-      setSettings(fetchedSettings);
+      setSettings({ ...fetchedSettings, currency: '₹' });
       setProducts(fetchedProducts);
       setIsLoading(false);
 
@@ -421,8 +421,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // SETTINGS
   const updateSettings = async (newSettings: Partial<StoreSettings>) => {
     try {
-      const updated = await api.updateSettings(newSettings);
-      setSettings(updated);
+      const updated = await api.updateSettings({ ...newSettings, currency: '₹' });
+      setSettings({ ...updated, currency: '₹' });
       showToast('Store settings updated successfully! ✨');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update settings';

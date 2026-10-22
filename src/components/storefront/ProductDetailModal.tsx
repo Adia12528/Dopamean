@@ -13,6 +13,7 @@ import {
   Check
 } from 'lucide-react';
 import { ReviewsSection } from './ReviewsSection';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 
 export const ProductDetailModal: React.FC = () => {
   const {
@@ -28,6 +29,10 @@ export const ProductDetailModal: React.FC = () => {
   const [quantity, setQuantity] = useState(1);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [appliedOfferCode, setAppliedOfferCode] = useState<string | null>(null);
+  const isOfferOpen = Boolean(!selectedProductForModal && selectedOfferForModal);
+  const isProductOpen = Boolean(selectedProductForModal);
+  useBackNavigationLayer('offer-details', isOfferOpen, () => setSelectedOfferForModal(null));
+  useBackNavigationLayer('product-details', isProductOpen, () => setSelectedProductForModal(null));
 
   if (!selectedProductForModal && !selectedOfferForModal) return null;
 

@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { preload } from 'react-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { UserProvider } from './context/UserContext';
+import { BackNavigationProvider } from './context/BackNavigationProvider';
+import { useBackNavigationLayer } from './context/BackNavigationContext';
 import { Navbar } from './components/common/Navbar';
 import { Toast } from './components/common/Toast';
 import { StorefrontView } from './components/storefront/StorefrontView';
@@ -13,6 +15,7 @@ import { InvoiceModal } from './components/storefront/InvoiceModal';
 import { Footer } from './components/common/Footer';
 import { AdminLoginModal } from './components/auth/AdminLoginModal';
 import { UserAuthModal } from './components/auth/UserAuthModal';
+import { DeliveryDashboard } from './components/delivery/DeliveryDashboard';
 import { getAssetUrl } from './services/api';
 import { StorefrontImage } from './components/common/StorefrontImage';
 import { SkeletonBlock } from './components/common/LoadingSkeleton';
@@ -22,9 +25,15 @@ const DEFAULT_SPLASH_DURATION_MS = 2500;
 const SPLASH_FADE_MS = 360;
 const SPLASH_SEEN_KEY = 'dopamean_intro_seen';
 
+const SplashBackLayer: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  useBackNavigationLayer('intro-splash', isOpen, onClose);
+  return null;
+};
+
 const MainApp: React.FC = () => {
   const {
     viewMode,
+    adminRole,
     isTrackingModalOpen,
     setIsTrackingModalOpen,
     activeInvoiceOrder,
@@ -41,6 +50,8 @@ const MainApp: React.FC = () => {
   const [loadedSplashImageUrl, setLoadedSplashImageUrl] = useState('');
   const [failedSplashImageUrl, setFailedSplashImageUrl] = useState('');
   const shouldShowSplash = isSplashVisible && settings.introSplashEnabled !== false;
+  const isDeliveryDashboard = adminRole === 'delivery_agent' || viewMode === 'delivery';
+  const backSection = viewMode === 'store' ? 'store' : isDeliveryDashboard ? 'delivery' : 'studio';
   const splashStartedAt = useRef<number | null>(null);
   const splashImageUrl = getStorefrontImageUrl(
     getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp'),
@@ -82,6 +93,8 @@ const MainApp: React.FC = () => {
   }, [isSplashMounted, shouldShowSplash]);
 
   return (
+    <BackNavigationProvider section={backSection}>
+    <SplashBackLayer isOpen={shouldShowSplash} onClose={() => hideSplash()} />
     <div className={`app-shell ${shouldShowSplash ? 'app-shell-splashing' : ''}`} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {isSplashMounted && (
         <div className={`app-splash${shouldShowSplash ? '' : ' is-exiting'}`} aria-live="polite" aria-busy={isLoading} role="dialog" aria-modal="false">
@@ -116,15 +129,19 @@ const MainApp: React.FC = () => {
       )}
 
       {/* Universal Navigation */}
-      <Navbar />
+      {!isDeliveryDashboard && <Navbar />}
 
       {/* Main View Router */}
       <main style={{ flex: 1 }}>
-        {viewMode === 'store' ? <StorefrontView /> : <DashboardView />}
+        {viewMode === 'store'
+          ? <StorefrontView />
+          : isDeliveryDashboard
+            ? <DeliveryDashboard />
+            : <DashboardView />}
       </main>
 
       {/* Storefront Footer */}
-      <Footer />
+      {!isDeliveryDashboard && <Footer />}
 
       {/* Global Modals & Overlays */}
       <CartDrawer />
@@ -141,6 +158,7 @@ const MainApp: React.FC = () => {
       />
       <Toast />
     </div>
+    </BackNavigationProvider>
   );
 };
 

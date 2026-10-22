@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { ShieldCheck, Lock, Eye, EyeOff, X, Truck, User, ShieldAlert, Package } from 'lucide-react';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 
 type AuthTier = 'delivery' | 'superadmin';
 
@@ -21,13 +22,14 @@ export const AdminLoginModal: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!isAdminLoginModalOpen) return null;
-
   const handleClose = () => {
     setDeliveryPasscode(''); setSuperAdminId(''); setSuperAdminPassword('');
     setError(''); setLoading(false);
     setIsAdminLoginModalOpen(false);
   };
+  useBackNavigationLayer('admin-login', isAdminLoginModalOpen, handleClose);
+
+  if (!isAdminLoginModalOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

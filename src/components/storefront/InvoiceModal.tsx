@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import type { Order } from '../../types';
 import { getShortOrderId } from '../../lib/shortOrderId';
 import { useStore } from '../../context/StoreContext';
-import { Download, X, Package } from 'lucide-react';
+import { Download, X, Package, AlertCircle } from 'lucide-react';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
+import { downloadInvoicePDF, isIosBrowser } from '../../utils/downloadInvoicePdf';
 
 interface InvoiceModalProps {
   order: Order | null;
@@ -12,52 +14,21 @@ interface InvoiceModalProps {
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) => {
   const { settings } = useStore();
   const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+  const isIos = typeof navigator !== 'undefined' && isIosBrowser();
+  useBackNavigationLayer('invoice-modal', Boolean(order), onClose);
 
   if (!order) return null;
 
   const handleDownload = async () => {
+    if (isDownloading) return;
     setIsDownloading(true);
+    setDownloadError('');
     try {
-      const { default: html2canvas } = await import('html2canvas');
-      const { default: jsPDF } = await import('jspdf');
-
-      const element = document.getElementById('printable-invoice');
-      if (!element) return;
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-      });
-
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * pageWidth) / canvas.width;
-
-      // If content overflows a page, split across pages
-      let yPosition = 0;
-      let remainingHeight = imgHeight;
-      while (remainingHeight > 0) {
-        pdf.addImage(imgData, 'PNG', 0, -yPosition, imgWidth, imgHeight);
-        remainingHeight -= pageHeight;
-        yPosition += pageHeight;
-        if (remainingHeight > 0) pdf.addPage();
-      }
-
-      pdf.save(`Invoice-${order.id}.pdf`);
-    } catch (err) {
+      await downloadInvoicePDF(order, settings);
+    } catch (err: unknown) {
       console.error('PDF download failed:', err);
-      // Fallback to print dialog
-      window.print();
+      setDownloadError(err instanceof Error ? err.message : 'Could not generate the invoice PDF. Please try again.');
     } finally {
       setIsDownloading(false);
     }
@@ -122,6 +93,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
             <button
               onClick={handleDownload}
               disabled={isDownloading}
+              aria-live="polite"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -138,7 +110,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
               }}
             >
               <Download size={15} />
-              <span>{isDownloading ? 'Generating PDF…' : 'Download Invoice PDF'}</span>
+              <span>{isDownloading ? 'Generating invoice…' : downloadError ? 'Retry invoice download' : 'Download Invoice PDF'}</span>
             </button>
 
             <button
@@ -160,6 +132,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
             </button>
           </div>
         </div>
+
+        {downloadError && (
+          <div role="alert" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, margin: '12px 24px 0', padding: '10px 12px', borderRadius: 10, color: '#991B1B', background: '#FEF2F2', border: '1px solid #FECACA', fontSize: '0.82rem' }}>
+            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>{downloadError}</span>
+          </div>
+        )}
+        {isIos && (
+          <p style={{ margin: '10px 24px 0', color: '#64748B', fontSize: '0.78rem', lineHeight: 1.5 }}>
+            On iPhone or iPad, the invoice opens in a new tab. Use Share to save it to Files.
+          </p>
+        )}
 
         {/* Printable Invoice Document Body */}
         <div 
@@ -271,7 +255,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({ order, onClose }) =>
                 Delivery Address:
               </div>
               <div style={{ color: '#334155', fontSize: '0.86rem', whiteSpace: 'pre-wrap' }}>
-                {order.customer.address || 'Provided during WhatsApp confirmation'}
+                {[order.customer.address, order.customer.city, order.customer.pincode]
+                  .filter(part => typeof part === 'string' && part.trim())
+                  .join(', ') || 'Provided during WhatsApp confirmation'}
               </div>
               {order.trackingNumber && (
                 <div style={{ marginTop: '6px', fontSize: '0.82rem', color: '#2563EB', fontWeight: 600 }}>

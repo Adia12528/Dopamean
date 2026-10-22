@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import type { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { api, getAssetUrl } from '../../services/api';
@@ -74,6 +75,7 @@ const buildInitialFormState = (editProduct?: Product | null) => {
 };
 
 export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, editProduct }) => {
+  useBackNavigationLayer('add-product-modal', isOpen, onClose);
   const { addProduct, updateProduct, showToast, settings } = useStore();
   const initialForm = buildInitialFormState(editProduct);
 

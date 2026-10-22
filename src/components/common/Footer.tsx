@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import { useStore } from '../../context/StoreContext';
 import { Lock, Heart, Sparkles, MessageCircle, X } from 'lucide-react';
 import { createWhatsAppUrl } from '../../lib/whatsapp';
@@ -26,6 +27,7 @@ const EMPTY_BULK_ORDER: BulkOrderDetails = {
 export const Footer: React.FC = () => {
   const { settings, setIsAdminLoginModalOpen, setSelectedCategory, viewMode, isAdmin } = useStore();
   const [isBulkOrderOpen, setIsBulkOrderOpen] = useState(false);
+  useBackNavigationLayer('bulk-order-dialog', isBulkOrderOpen, () => setIsBulkOrderOpen(false));
   const [bulkOrder, setBulkOrder] = useState(EMPTY_BULK_ORDER);
   const minimumBulkOrderQuantity = Math.max(1, Math.floor(Number(settings.bulkOrderMinimumQuantity ?? 10)));
 

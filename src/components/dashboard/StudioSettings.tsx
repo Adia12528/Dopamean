@@ -153,6 +153,7 @@ export const StudioSettings: React.FC = () => {
   const isDeliveryTimelineDirty = JSON.stringify(deliveryTimelineFormValues) !== JSON.stringify(deliveryTimelineSavedValues);
   const isUpiDetailsDirty = (
     String(form.upiId || '').trim() !== String(settings.upiId || '').trim() ||
+    String(form.upiPayeeName || '').trim() !== String(settings.upiPayeeName || '').trim() ||
     (form.upiQrImage || '') !== (settings.upiQrImage || '') ||
     (form.paymentUpiEnabled !== false) !== (settings.paymentUpiEnabled !== false)
   );
@@ -287,6 +288,7 @@ export const StudioSettings: React.FC = () => {
                   ? {
                 paymentUpiEnabled: form.paymentUpiEnabled !== false,
                 upiId: String(form.upiId || '').trim(),
+                upiPayeeName: String(form.upiPayeeName || '').trim() || 'Cozy Loops by Deepa',
                 upiQrImage: form.upiQrImage || ''
                   }
                   : { storePolicies: storePolicyFormValues, storePolicyVersion: nextPolicyVersion };
@@ -522,6 +524,7 @@ export const StudioSettings: React.FC = () => {
     }
     
     const payload: Partial<typeof form> & { clearPayuCredentials?: boolean } = { ...form };
+    payload.currency = '₹';
     delete payload.productCardBadgePriority;
     delete payload.lowStockThreshold;
     delete payload.trustBadge1Icon;
@@ -551,7 +554,6 @@ export const StudioSettings: React.FC = () => {
     const requiredFieldErrors: typeof validationErrors = {};
     if (!String(form.storeName || '').trim()) requiredFieldErrors.storeName = 'Enter the store or studio name.';
     if (!String(form.heroTitle || '').trim()) requiredFieldErrors.heroTitle = 'Enter the hero headline.';
-    if (!String(form.currency || '').trim()) requiredFieldErrors.currency = 'Enter the currency symbol.';
     setValidationErrors(prev => ({ ...prev, ...requiredFieldErrors }));
     if (Object.values(requiredFieldErrors).some(Boolean)) return false;
 
@@ -1948,24 +1950,24 @@ export const StudioSettings: React.FC = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '20px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
-                    Currency Symbol *
+                    Store Currency
                   </label>
                   <input
                     type="text"
-                    required
-                    value={form.currency}
-                    onChange={(e) => handleChange('currency', e.target.value)}
-                    aria-invalid={Boolean(validationErrors.currency)}
-                    placeholder="e.g. ₹ or $ or €"
+                    value="₹ (INR)"
+                    readOnly
+                    aria-label="Store currency, Indian Rupee"
                     style={{
                       width: '100%',
                       padding: '10px 14px',
                       borderRadius: '10px',
-                      border: `1px solid ${validationErrors.currency ? '#DC2626' : 'var(--border-medium)'}`,
+                      border: '1px solid var(--border-medium)',
                       fontSize: '0.9rem'
                     }}
                   />
-                  {validationErrors.currency && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{validationErrors.currency}</p>}
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.76rem', margin: '4px 0 0' }}>
+                    Prices throughout the storefront and Studio are shown in Indian Rupees (INR).
+                  </p>
                 </div>
 
                 <div>
@@ -2508,6 +2510,33 @@ export const StudioSettings: React.FC = () => {
                   />
                   <span>{form.paymentUpiEnabled !== false ? 'Direct UPI is enabled' : 'Direct UPI is disabled'}</span>
                 </label>
+
+                <div>
+                  <label htmlFor="studio-upi-payee-name" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
+                    UPI Payee Name
+                  </label>
+                  <input
+                    id="studio-upi-payee-name"
+                    type="text"
+                    autoComplete="organization"
+                    maxLength={80}
+                    value={form.upiPayeeName || ''}
+                    onChange={e => handleChange('upiPayeeName', e.target.value)}
+                    placeholder="e.g. Cozy Loops by Deepa"
+                    style={{
+                      width: '100%',
+                      boxSizing: 'border-box',
+                      padding: '10px 14px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border-medium)',
+                      backgroundColor: '#FFFFFF',
+                      fontSize: '0.9rem'
+                    }}
+                  />
+                  <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '6px 0 0' }}>
+                    This name is shown to customers in UPI apps when they use the optional payment link.
+                  </p>
+                </div>
 
                 <div>
                   <label htmlFor="studio-upi-id" style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>

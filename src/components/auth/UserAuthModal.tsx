@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useUser } from '../../context/UserContext';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import { supabaseAuthEnabled } from '../../lib/supabase';
 import { getAuthErrorMessage, isAuthRateLimitError } from '../../lib/authErrorMessage';
 import { X, Mail, Lock, Eye, EyeOff, User, Phone, Sparkles, ArrowRight, CheckCircle2, LogIn, AlertCircle } from 'lucide-react';
@@ -769,6 +770,8 @@ const SignUpTab: React.FC<{ onSwitchToSignIn: () => void; initialEmail: string }
 // ─────────────────────────────────────────────────────────────────────────────
 export const UserAuthModal: React.FC = () => {
   const { isUserAuthModalOpen, closeUserAuthModal, userAuthModalTab, setUserAuthModalTab, clearAuthError } = useUser();
+  useBackNavigationLayer('user-auth', isUserAuthModalOpen, closeUserAuthModal);
+  useBackNavigationLayer('user-auth-signup', isUserAuthModalOpen && userAuthModalTab === 'signup', () => setUserAuthModalTab('signin'));
   const [signUpEmail, setSignUpEmail] = useState('');
 
   if (!isUserAuthModalOpen) return null;

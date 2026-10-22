@@ -8,6 +8,7 @@ import { OrdersManager } from './OrdersManager';
 import { StudioSettings } from './StudioSettings';
 import { AddProductModal } from './AddProductModal';
 import { AddOfferModal } from './AddOfferModal';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import { 
   BarChart3, 
   ShoppingBag, 
@@ -25,6 +26,7 @@ export const DashboardView: React.FC = () => {
 
   const [isAddOfferOpen, setIsAddOfferOpen] = useState(false);
   const [editingOffer, setEditingOffer] = useState<Offer | null>(null);
+  useBackNavigationLayer('studio-tab', dashboardTab !== 'overview', () => setDashboardTab('overview'));
 
   const handleEditProduct = (prod: Product) => {
     setEditingProduct(prod);

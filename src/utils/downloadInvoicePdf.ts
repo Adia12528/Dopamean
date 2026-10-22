@@ -1,185 +1,180 @@
 import type { Order, StoreSettings } from '../types';
 import { getShortOrderId } from '../lib/shortOrderId';
 
+export const isIosBrowser = () => {
+  const userAgent = navigator.userAgent;
+  return /iPhone|iPad|iPod/i.test(userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+const money = (value: number | undefined, currency: string) => {
+  const amount = Number.isFinite(value) ? Number(value).toFixed(2) : '0.00';
+  const prefix = currency === '₹' ? 'INR ' : `${currency || ''}`;
+  return `${prefix}${amount}`;
+};
+
 export async function downloadInvoicePDF(order: Order, settings: StoreSettings): Promise<void> {
-  const { default: html2canvas } = await import('html2canvas');
-  const { default: jsPDF } = await import('jspdf');
-
-  const invoiceDate = new Date(order.createdAt).toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric'
-  });
-
-  // Create an offscreen invoice element for rendering
-  const container = document.createElement('div');
-  container.id = 'direct-invoice-pdf-render';
-  container.style.position = 'fixed';
-  container.style.left = '-9999px';
-  container.style.top = '0';
-  container.style.width = '800px';
-  container.style.backgroundColor = '#FFFFFF';
-  container.style.padding = '36px 40px';
-  container.style.color = '#1E293B';
-  container.style.fontFamily = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Outfit', sans-serif";
-  container.style.fontSize = '14px';
-  container.style.lineHeight = '1.6';
-  container.style.boxSizing = 'border-box';
-  container.style.zIndex = '-9999';
-
-  const itemsRows = order.items
-    .map(
-      (item) => `
-      <tr style="border-bottom: 1px solid #E2E8F0;">
-        <td style="padding: 12px 0;">
-          <div style="font-weight: 600; color: #0F172A; font-size: 14px;">${item.productTitle}</div>
-          <div style="font-size: 12px; color: #64748B;">Handmade Crochet Accessory${item.color ? ` • Color: ${item.color}` : ''}</div>
-        </td>
-        <td style="padding: 12px 0; text-align: center; font-weight: 600;">${item.quantity}</td>
-        <td style="padding: 12px 0; text-align: right; color: #475569;">${settings.currency}${item.price}</td>
-        <td style="padding: 12px 0; text-align: right; font-weight: 700; color: #0F172A;">${settings.currency}${item.price * item.quantity}</td>
-      </tr>
-    `
-    )
-    .join('');
-
-  const shippingDisplay =
-    (order.shippingAmount ?? (order.subtotal >= settings.freeShippingThreshold ? 0 : (settings.shippingFee ?? 40))) === 0
-      ? 'FREE'
-      : `${settings.currency}${order.shippingAmount ?? settings.shippingFee ?? 40}`;
-
-  const discountRow =
-    order.discountAmount > 0
-      ? `
-      <div style="display: flex; justify-content: space-between; color: #16A34A; font-size: 14px;">
-        <span>Discount (${order.promoCodeApplied || 'Promo'}):</span>
-        <span>-${settings.currency}${order.discountAmount}</span>
-      </div>
-    `
-      : '';
-
-  container.innerHTML = `
-    <div style="border-bottom: 2px solid #E2E8F0; padding-bottom: 24px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
-      <div>
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 28px;">🧶</span>
-          <h1 style="font-size: 24px; font-weight: 800; color: #C85A32; margin: 0;">${settings.storeName || 'Cozy Loops by Deepa'}</h1>
-        </div>
-        <p style="margin: 4px 0 0; color: #64748B; font-size: 13px;">${settings.storeTagline || 'Handcrafted Crochet Accessories'}</p>
-        <p style="margin: 2px 0 0; color: #64748B; font-size: 12px;">${settings.contactEmail || ''} • ${settings.contactPhone || ''}</p>
-        ${settings.studioLocation ? `<p style="margin: 2px 0 0; color: #64748B; font-size: 12px;">${settings.studioLocation}</p>` : ''}
-      </div>
-
-      <div style="text-align: right;">
-        <span style="display: inline-block; background-color: #EFF6FF; color: #1D4ED8; font-weight: 700; font-size: 11px; padding: 4px 10px; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">
-          Tax Invoice
-        </span>
-        <div style="font-size: 16px; font-weight: 800; color: #0F172A;">#${getShortOrderId(order.id)}</div>
-        <div style="font-size: 12px; color: #64748B; margin-top: 2px;">Date: ${invoiceDate}</div>
-        <div style="margin-top: 4px; font-size: 12px; font-weight: 600; color: ${order.paymentStatus === 'paid' ? '#059669' : '#D97706'};">
-          Payment: ${(order.paymentMethod || 'COD').toUpperCase()} (${(order.paymentStatus || 'PENDING').toUpperCase()})
-        </div>
-      </div>
-    </div>
-
-    <!-- Customer & Shipping -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background-color: #F8FAFC; padding: 18px 20px; border-radius: 12px; margin-bottom: 24px; border: 1px solid #E2E8F0;">
-      <div>
-        <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
-          Billed & Shipped To:
-        </div>
-        <div style="font-weight: 700; font-size: 15px; color: #0F172A;">${order.customer.name}</div>
-        <div style="color: #475569; font-size: 13px; margin-top: 2px;">${order.customer.email}</div>
-        ${order.customer.phone ? `<div style="color: #475569; font-size: 13px;">${order.customer.phone}</div>` : ''}
-      </div>
-
-      <div>
-        <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
-          Delivery Address:
-        </div>
-        <div style="color: #334155; font-size: 13px; white-space: pre-wrap;">${order.customer.address || 'Address provided'}</div>
-        ${order.trackingNumber ? `<div style="margin-top: 6px; font-size: 12px; color: #2563EB; font-weight: 600;">Tracking AWB: ${order.trackingNumber}</div>` : ''}
-      </div>
-    </div>
-
-    <!-- Items Table -->
-    <table style="width: 100%; border-collapse: collapse; text-align: left; margin-bottom: 24px;">
-      <thead>
-        <tr style="border-bottom: 2px solid #CBD5E1; font-size: 12px; text-transform: uppercase; color: #64748B;">
-          <th style="padding: 8px 0; font-weight: 700;">Item Description</th>
-          <th style="padding: 8px 0; text-align: center; font-weight: 700;">Qty</th>
-          <th style="padding: 8px 0; text-align: right; font-weight: 700;">Rate</th>
-          <th style="padding: 8px 0; text-align: right; font-weight: 700;">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${itemsRows}
-      </tbody>
-    </table>
-
-    <!-- Totals Summary -->
-    <div style="display: flex; justify-content: flex-end; margin-bottom: 28px;">
-      <div style="width: 280px; display: flex; flexDirection: column; gap: 6px;">
-        <div style="display: flex; justify-content: space-between; color: #64748B; font-size: 14px;">
-          <span>Subtotal:</span>
-          <span>${settings.currency}${order.subtotal}</span>
-        </div>
-        ${discountRow}
-        <div style="display: flex; justify-content: space-between; color: #64748B; font-size: 14px;">
-          <span>Pan-India Shipping:</span>
-          <span style="color: #16A34A; font-weight: 600;">${shippingDisplay}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding-top: 8px; border-top: 2px solid #E2E8F0; font-size: 18px; font-weight: 800; color: #C85A32;">
-          <span>Total Amount:</span>
-          <span>${settings.currency}${order.total}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Footer Note -->
-    <div style="border-top: 1px dashed #CBD5E1; padding-top: 16px; text-align: center; font-size: 12px; color: #64748B;">
-      <p style="margin: 0; font-weight: 600; color: #334155;">
-        🌸 Thank you for supporting slow handcrafted fashion & handmade artisan dreams!
-      </p>
-      <p style="margin: 4px 0 0; font-size: 11px;">
-        Care note: Gently hand-wash in cold water with mild liquid soap. Air dry flat.
-      </p>
-    </div>
-  `;
-
-  document.body.appendChild(container);
+  const isIos = isIosBrowser();
+  const iosWindow = isIos ? window.open('', '_blank') : null;
+  if (isIos && !iosWindow) {
+    throw new Error('Allow pop-ups for this storefront to open your invoice PDF, then try again.');
+  }
 
   try {
-    const canvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-    });
-
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
-
+    const { default: jsPDF } = await import('jspdf');
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
-    const imgWidth = pageWidth;
-    const imgHeight = (canvas.height * pageWidth) / canvas.width;
+    const margin = 16;
+    const contentWidth = pageWidth - margin * 2;
+    let y = margin;
 
-    let yPosition = 0;
-    let remainingHeight = imgHeight;
-    while (remainingHeight > 0) {
-      pdf.addImage(imgData, 'PNG', 0, -yPosition, imgWidth, imgHeight);
-      remainingHeight -= pageHeight;
-      yPosition += pageHeight;
-      if (remainingHeight > 0) pdf.addPage();
+    const addText = (text: string, x: number, options?: { size?: number; bold?: boolean; maxWidth?: number }) => {
+      const size = options?.size ?? 10;
+      pdf.setFont('helvetica', options?.bold ? 'bold' : 'normal');
+      pdf.setFontSize(size);
+      const lines = pdf.splitTextToSize(text || '-', options?.maxWidth ?? contentWidth);
+      const lineHeight = size * 0.42;
+      if (y + lines.length * lineHeight > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.text(lines, x, y);
+      y += lines.length * lineHeight;
+      return lines.length * lineHeight;
+    };
+
+    const addRule = () => {
+      pdf.setDrawColor(203, 213, 225);
+      pdf.line(margin, y, pageWidth - margin, y);
+      y += 6;
+    };
+
+    const address = [order.customer.address, order.customer.city, order.customer.pincode]
+      .filter(part => typeof part === 'string' && part.trim())
+      .join(', ') || 'Address provided during checkout';
+
+    pdf.setTextColor(30, 41, 59);
+    pdf.setFillColor(200, 90, 50);
+    pdf.rect(margin, y, 3, 20, 'F');
+    pdf.setTextColor(200, 90, 50);
+    addText(settings.storeName || 'Cozy Loops by Deepa', margin + 7, { size: 18, bold: true });
+    pdf.setTextColor(71, 85, 105);
+    addText(settings.storeTagline || 'Handcrafted Crochet Accessories', margin + 7, { size: 9 });
+    addText([settings.contactEmail, settings.contactPhone].filter(Boolean).join(' • '), margin + 7, { size: 8 });
+    if (settings.studioLocation) addText(settings.studioLocation, margin + 7, { size: 8 });
+
+    y += 5;
+    addRule();
+    pdf.setTextColor(30, 41, 59);
+    addText('TAX INVOICE', margin, { size: 14, bold: true });
+    addText(`Order #${getShortOrderId(order.id)}`, margin, { size: 10, bold: true });
+    addText(`Date: ${new Date(order.createdAt).toLocaleDateString('en-IN', {
+      day: 'numeric', month: 'short', year: 'numeric'
+    })}`, margin, { size: 9 });
+    addText(`Payment: ${(order.paymentMethod || 'COD').toUpperCase()} (${(order.paymentStatus || 'PENDING').toUpperCase()})`, margin, { size: 9 });
+
+    y += 4;
+    addRule();
+    pdf.setTextColor(30, 41, 59);
+    addText('BILLED AND SHIPPED TO', margin, { size: 9, bold: true });
+    addText(order.customer.name || 'Customer', margin, { size: 10, bold: true });
+    addText(order.customer.email || '', margin, { size: 9 });
+    if (order.customer.phone) addText(order.customer.phone, margin, { size: 9 });
+    addText(address, margin, { size: 9, maxWidth: contentWidth });
+    if (order.trackingNumber) addText(`Tracking AWB: ${order.trackingNumber}`, margin, { size: 9 });
+
+    y += 5;
+    addRule();
+    const itemNameWidth = contentWidth - 72;
+    const qtyX = margin + itemNameWidth + 4;
+    const rateX = qtyX + 14;
+    const amountX = pageWidth - margin;
+    pdf.setTextColor(71, 85, 105);
+    addText('ITEM', margin, { size: 8, bold: true, maxWidth: itemNameWidth });
+    const headerY = y - 3;
+    pdf.text('QTY', qtyX, headerY);
+    pdf.text('RATE', rateX, headerY);
+    pdf.text('AMOUNT', amountX, headerY, { align: 'right' });
+    addRule();
+
+    for (const item of order.items || []) {
+      const nameLines = pdf.splitTextToSize(item.productTitle || 'Handcrafted item', itemNameWidth);
+      const nameLineHeight = 4.5;
+      const colorLines = item.color
+        ? pdf.splitTextToSize(`Color: ${item.color}`, itemNameWidth)
+        : [];
+      const rowHeight = Math.max(nameLines.length * nameLineHeight + colorLines.length * 3.5, 8);
+      if (y + rowHeight > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.setTextColor(30, 41, 59);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(9);
+      pdf.text(nameLines, margin, y);
+      if (colorLines.length > 0) {
+        pdf.setTextColor(100, 116, 139);
+        pdf.setFontSize(8);
+        pdf.text(colorLines, margin, y + nameLines.length * nameLineHeight);
+      }
+      const rowY = y + 3;
+      pdf.setTextColor(30, 41, 59);
+      pdf.text(String(item.quantity || 0), qtyX, rowY);
+      pdf.text(money(item.price, settings.currency), rateX, rowY);
+      pdf.text(money((Number(item.price) || 0) * (Number(item.quantity) || 0), settings.currency), amountX, rowY, { align: 'right' });
+      y += rowHeight + 4;
+      addRule();
     }
 
-    pdf.save(`Invoice-${order.id}.pdf`);
-  } finally {
-    document.body.removeChild(container);
+    const rightLabelX = margin + contentWidth * 0.55;
+    const addTotal = (label: string, value: string, bold = false) => {
+      if (y + 8 > pageHeight - margin) {
+        pdf.addPage();
+        y = margin;
+      }
+      pdf.setTextColor(71, 85, 105);
+      pdf.setFont('helvetica', bold ? 'bold' : 'normal');
+      pdf.setFontSize(bold ? 11 : 9);
+      pdf.text(label, rightLabelX, y);
+      pdf.text(value, amountX, y, { align: 'right' });
+      y += 7;
+    };
+
+    addTotal('Subtotal', money(order.subtotal, settings.currency));
+    if (Number(order.discountAmount) > 0) {
+      addTotal(`Discount${order.promoCodeApplied ? ` (${order.promoCodeApplied})` : ''}`, `-${money(order.discountAmount, settings.currency)}`);
+    }
+    const shipping = order.shippingAmount ?? (order.subtotal >= settings.freeShippingThreshold ? 0 : settings.shippingFee ?? 40);
+    addTotal('Shipping', shipping === 0 ? 'FREE' : money(shipping, settings.currency));
+    pdf.setDrawColor(200, 90, 50);
+    pdf.line(rightLabelX, y - 2, amountX, y - 2);
+    addTotal('TOTAL', money(order.total, settings.currency), true);
+
+    y += 5;
+    pdf.setTextColor(100, 116, 139);
+    addText('Thank you for supporting handcrafted artisan work.', margin, { size: 9 });
+
+    const blob = pdf.output('blob');
+    if (!blob.size) throw new Error('The generated invoice PDF is empty.');
+
+    const objectUrl = URL.createObjectURL(blob);
+    if (iosWindow) {
+      iosWindow.location.replace(objectUrl);
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = `Invoice-${getShortOrderId(order.id)}.pdf`;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (error) {
+    iosWindow?.close();
+    throw error;
   }
 }

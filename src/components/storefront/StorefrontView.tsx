@@ -10,6 +10,7 @@ import { PendingPaymentRecoveryBanner } from './PendingPaymentRecoveryBanner';
 import { DirectUpiRecoveryBanner } from './DirectUpiRecoveryBanner';
 import { CategoryFilter } from './CategoryFilter';
 import { ProductCard } from './ProductCard';
+import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import { ChevronDown, SlidersHorizontal, Sparkles, X } from 'lucide-react';
 import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
 import { buildProductCategorySections } from '../../lib/productCategorySections';
@@ -28,6 +29,8 @@ export const StorefrontView: React.FC = () => {
   const [selectedYarnType, setSelectedYarnType] = useState('all');
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [isFullCatalogOpen, setIsFullCatalogOpen] = useState(false);
+  useBackNavigationLayer('storefront-filter-panel', isFilterPanelOpen, () => setIsFilterPanelOpen(false));
+  useBackNavigationLayer('storefront-full-catalog', isFullCatalogOpen, () => setIsFullCatalogOpen(false));
   const filterPanelRef = useRef<HTMLDivElement>(null);
   const [pagination, setPagination] = useState({ criteriaKey: '', page: 1 });
   const pageCriteria = JSON.stringify([
