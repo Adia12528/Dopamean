@@ -27,6 +27,7 @@ import { downloadInvoicePDF } from '../../utils/downloadInvoicePdf';
 import { createWhatsAppUrl, getWhatsAppTemplate, isWhatsAppEnabled, isWhatsAppSupportEnabled, renderWhatsAppTemplate } from '../../lib/whatsapp';
 import { isCartCodEligible, isProductCodEligible } from '../../lib/codPolicy';
 import { StorePolicyDialog, type StorePolicyKey } from './StorePolicyDialog';
+import { StorefrontImage } from '../common/StorefrontImage';
 import { forgetPendingPayment, getPendingPaymentReferences, rememberPendingPayment } from '../../lib/paymentRecovery';
 import {
   clearDirectUpiRecoveryDraft,
@@ -1985,9 +1986,14 @@ export const CartDrawer: React.FC = () => {
                     boxShadow: 'var(--shadow-sm)'
                   }}
                 >
-                  <img
+                  <StorefrontImage
                     src={getAssetUrl(item.product.image)}
                     alt={item.product.title}
+                    width={74}
+                    height={74}
+                    transformWidth={148}
+                    transformHeight={148}
+                    loading="eager"
                     style={{
                       width: '74px',
                       height: '74px',

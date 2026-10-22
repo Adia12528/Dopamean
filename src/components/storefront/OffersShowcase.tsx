@@ -2,9 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
 import { Tag, Sparkles, Copy, Check, Clock } from 'lucide-react';
+import { StorefrontImage } from '../common/StorefrontImage';
+import { SkeletonBlock } from '../common/LoadingSkeleton';
 
 export const OffersShowcase: React.FC = () => {
-  const { offers, products, settings, applyPromoCode, setSelectedProductForModal, setSelectedOfferForModal } = useStore();
+  const { offers, products, settings, isOffersLoading, applyPromoCode, setSelectedProductForModal, setSelectedOfferForModal } = useStore();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -29,7 +31,7 @@ export const OffersShowcase: React.FC = () => {
   ];
 
   const shouldShowLaunchRail = settings.showLaunchRail !== false && railItems.length > 0;
-  if (!shouldShowLaunchRail && activeOffers.length === 0) return null;
+  if (!isOffersLoading && !shouldShowLaunchRail && activeOffers.length === 0) return null;
 
   const handleCopy = (code: string) => {
     navigator.clipboard?.writeText(code).catch(() => undefined);
@@ -51,11 +53,14 @@ export const OffersShowcase: React.FC = () => {
         : setSelectedProductForModal(item.product)}
       aria-label={item.type === 'offer' ? `View offer ${item.offer.title}` : `Quick view ${item.product.title}`}
     >
-      <img
+      <StorefrontImage
         src={getAssetUrl(item.type === 'offer' ? item.offer.image : item.product.image)}
         alt=""
+        width={224}
+        height={144}
+        transformWidth={224}
+        transformHeight={144}
         loading="lazy"
-        decoding="async"
       />
       <span className="launch-rail-copy">
         <span className="launch-rail-kind">
@@ -74,6 +79,37 @@ export const OffersShowcase: React.FC = () => {
   return (
     <section className="offers-showcase-section">
       <div className="container">
+        {isOffersLoading && (
+          <div className="offers-loading-state" role="status" aria-label="Loading offers" aria-busy="true">
+            <div className="launch-rail-heading">
+              <SkeletonBlock style={{ width: 154, height: 12, borderRadius: 999 }} />
+            </div>
+            <div className="launch-rail-window">
+              <div className="offers-loading-rail">
+                {[0, 1, 2].map(item => (
+                  <div key={item} className="launch-rail-item" aria-hidden="true">
+                    <SkeletonBlock style={{ width: 48, height: 48, flex: '0 0 48px', borderRadius: 10 }} />
+                    <div className="launch-rail-copy">
+                      <SkeletonBlock style={{ width: '48%', height: 10, borderRadius: 999 }} />
+                      <SkeletonBlock style={{ width: '76%', height: 12, borderRadius: 6 }} />
+                    </div>
+                    <SkeletonBlock style={{ width: 48, height: 10, borderRadius: 999 }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <article className="single-offer-card offers-loading-card" aria-hidden="true">
+              <SkeletonBlock className="offers-loading-image" />
+              <div className="single-offer-details">
+                <SkeletonBlock style={{ width: 132, height: 12, borderRadius: 999 }} />
+                <SkeletonBlock style={{ width: '74%', height: 24, borderRadius: 7 }} />
+                <SkeletonBlock style={{ width: '90%', height: 14, borderRadius: 6 }} />
+                <SkeletonBlock style={{ width: '68%', height: 14, borderRadius: 6 }} />
+                <SkeletonBlock style={{ width: '100%', height: 44, borderRadius: 999 }} />
+              </div>
+            </article>
+          </div>
+        )}
         {shouldShowLaunchRail && <div
           className={`launch-rail ${isPaused ? 'is-paused' : ''}`}
           onMouseEnter={() => setIsPaused(true)}
@@ -108,7 +144,15 @@ export const OffersShowcase: React.FC = () => {
                   onClick={() => setSelectedOfferForModal(activeOffers[0])}
                   aria-label={`View offer ${activeOffers[0].title}`}
                 >
-                  <img src={getAssetUrl(activeOffers[0].image)} alt="" loading="lazy" decoding="async" />
+                  <StorefrontImage
+                    src={getAssetUrl(activeOffers[0].image)}
+                    alt=""
+                    width={1200}
+                    height={675}
+                    transformWidth={1200}
+                    transformHeight={675}
+                    loading="lazy"
+                  />
                   <span className="offer-marquee-badge"><Tag size={12} />{activeOffers[0].badge}</span>
                   <span className="single-offer-discount">
                     {activeOffers[0].discountType === 'percentage' ? `${activeOffers[0].discountValue}% OFF` : `₹${activeOffers[0].discountValue} OFF`}
@@ -151,7 +195,15 @@ export const OffersShowcase: React.FC = () => {
                     aria-label={`Apply offer ${offer.title}`}
                   >
                     <div className="offer-marquee-image-wrap">
-                      <img src={getAssetUrl(offer.image)} alt={offer.title} loading="lazy" decoding="async" />
+                      <StorefrontImage
+                        src={getAssetUrl(offer.image)}
+                        alt={offer.title}
+                        width={720}
+                        height={463}
+                        transformWidth={720}
+                        transformHeight={463}
+                        loading="lazy"
+                      />
                       <div className="offer-marquee-overlay" />
                       <span className="offer-marquee-badge"><Tag size={12} />{offer.badge}</span>
                       <div className="offer-marquee-discount">

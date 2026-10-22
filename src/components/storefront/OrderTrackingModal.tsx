@@ -6,6 +6,7 @@ import { useStore } from '../../context/StoreContext';
 import { useUser } from '../../context/UserContext';
 import { createWhatsAppSupportUrl } from '../../lib/whatsapp';
 import { OrderStatusTimeline } from './OrderStatusTimeline';
+import { StorefrontImage } from '../common/StorefrontImage';
 import { 
   Search, 
   X, 
@@ -401,10 +402,15 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({ isOpen, 
                       <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.86rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                           {item.image && (
-                            <img
+                            <StorefrontImage
                               src={getAssetUrl(item.image)}
                               alt={item.productTitle}
-                              style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover' }}
+                              width={32}
+                              height={32}
+                              transformWidth={96}
+                              transformHeight={96}
+                              loading="eager"
+                              style={{ width: '32px', height: '32px', borderRadius: '6px', objectFit: 'cover', backgroundColor: 'var(--bg-surface-soft)' }}
                             />
                           )}
                           <span style={{ color: 'var(--text-main)', fontWeight: 500 }}>

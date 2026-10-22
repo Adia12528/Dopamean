@@ -29,7 +29,12 @@ const DEFAULT_SETTINGS: StoreSettings = {
   storeTagline: 'Cozy, Handmade Happiness • Premium Crochet Hair Accessories',
   heroBadge: '🌸 100% Handcrafted with Love',
   heroTitle: 'Cozy Loops by Deepa',
-  heroSubtitle: '100% handmade with love. Big flower rose ponytail holders, sunny clips, and handcrafted floral accessories.',
+  heroSubtitle: 'Soft, handcrafted crochet accessories made to bring a little joy to every day.',
+  showHeroSocialProof: true,
+  showHeroOfferHighlight: true,
+  showHeroPersonalGreeting: true,
+  showHeroInstagramStrip: true,
+  enableHeroParallax: true,
   introSplashEnabled: true,
   introSplashDurationMs: 2500,
   categoryTopStockPreviewCount: 4,
@@ -103,6 +108,8 @@ interface StoreContextType {
   selectedOfferForModal: Offer | null;
   toastMessage: { text: string; type: 'success' | 'info' | 'error' } | null;
   isLoading: boolean;
+  isOffersLoading: boolean;
+  isOrdersLoading: boolean;
   isAdmin: boolean;
   adminRole: AdminRole;
   isAdminLoginModalOpen: boolean;
@@ -205,6 +212,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [selectedOfferForModal, setSelectedOfferForModalState] = useState<Offer | null>(null);
   const [toastMessage, setToastMessage] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOffersLoading, setIsOffersLoading] = useState(true);
+  const [isOrdersLoading, setIsOrdersLoading] = useState(true);
 
   const setProductModal = (product: Product | null) => {
     setSelectedProductForModal(product);
@@ -250,6 +259,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Fetch initial data from the configured backend database
   const loadData = useCallback(async () => {
+    setIsOffersLoading(true);
+    setIsOrdersLoading(true);
     try {
       const [fetchedSettings, fetchedProducts] = await Promise.all([
         api.getSettings().catch(() => DEFAULT_SETTINGS),
@@ -269,6 +280,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch {
       console.warn('Backend loading warning: unable to hydrate storefront data');
     } finally {
+      setIsOffersLoading(false);
+      setIsOrdersLoading(false);
       setIsLoading(false);
     }
   }, []);
@@ -745,6 +758,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         selectedOfferForModal,
         toastMessage,
         isLoading,
+        isOffersLoading,
+        isOrdersLoading,
         isAdmin,
         adminRole,
         isAdminLoginModalOpen,

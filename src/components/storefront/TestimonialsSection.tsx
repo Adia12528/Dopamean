@@ -3,6 +3,7 @@ import { Star } from 'lucide-react';
 import { useStore } from '../../context/StoreContext';
 import { api } from '../../services/api';
 import type { Review } from '../../types';
+import { TestimonialCardSkeleton } from '../common/LoadingSkeleton';
 
 interface Testimonial {
   review: Review;
@@ -73,13 +74,7 @@ export const TestimonialsSection: React.FC = () => {
         <h2 id="testimonials-heading" className="testimonials-title">Customer reviews</h2>
         <div className="testimonials-grid" aria-busy={isLoading}>
           {isLoading ? (
-            [1, 2, 3].map(index => (
-              <div className="testimonial-card testimonial-skeleton" key={index} aria-hidden="true">
-                <div />
-                <div />
-                <div />
-              </div>
-            ))
+            [1, 2, 3].map(index => <TestimonialCardSkeleton key={index} />)
           ) : (
             testimonials.map(({ review, productTitle }) => (
               <article className="testimonial-card" key={review.id}>

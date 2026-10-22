@@ -4,6 +4,7 @@ import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
 import { Star, ShoppingBag, Eye, Clock } from 'lucide-react';
 import { normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
+import { StorefrontImage } from '../common/StorefrontImage';
 
 interface ProductCardProps {
   product: Product;
@@ -35,11 +36,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         className="product-card-image"
         onClick={() => setSelectedProductForModal(product)}
       >
-        <img
+        <StorefrontImage
           src={getAssetUrl(product.image)}
           alt={product.title}
+          width={640}
+          height={576}
+          transformWidth={640}
+          transformHeight={576}
           loading="lazy"
-          decoding="async"
         />
 
         {/* Show only the highest-priority qualifying badge configured in Studio. */}

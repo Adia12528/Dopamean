@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { preload } from 'react-dom';
 import { StoreProvider, useStore } from './context/StoreContext';
 import { UserProvider } from './context/UserContext';
 import { Navbar } from './components/common/Navbar';
@@ -13,6 +14,9 @@ import { Footer } from './components/common/Footer';
 import { AdminLoginModal } from './components/auth/AdminLoginModal';
 import { UserAuthModal } from './components/auth/UserAuthModal';
 import { getAssetUrl } from './services/api';
+import { StorefrontImage } from './components/common/StorefrontImage';
+import { SkeletonBlock } from './components/common/LoadingSkeleton';
+import { getStorefrontImageUrl } from './lib/storefrontImageUrl';
 
 const DEFAULT_SPLASH_DURATION_MS = 2500;
 const SPLASH_FADE_MS = 360;
@@ -34,8 +38,19 @@ const MainApp: React.FC = () => {
     return settings.introSplashEnabled !== false && !window.sessionStorage.getItem(SPLASH_SEEN_KEY);
   });
   const [isSplashMounted, setIsSplashMounted] = useState(isSplashVisible);
+  const [loadedSplashImageUrl, setLoadedSplashImageUrl] = useState('');
+  const [failedSplashImageUrl, setFailedSplashImageUrl] = useState('');
   const shouldShowSplash = isSplashVisible && settings.introSplashEnabled !== false;
   const splashStartedAt = useRef<number | null>(null);
+  const splashImageUrl = getStorefrontImageUrl(
+    getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp'),
+    { width: 1400, quality: 80 }
+  );
+  const isSplashImageReady = loadedSplashImageUrl === splashImageUrl || failedSplashImageUrl === splashImageUrl;
+
+  if (viewMode === 'store' || shouldShowSplash) {
+    preload(splashImageUrl, { as: 'image', fetchPriority: 'high' });
+  }
 
   const hideSplash = useMemo(() => (markAsSeen = true) => {
     if (markAsSeen && typeof window !== 'undefined') {
@@ -49,12 +64,14 @@ const MainApp: React.FC = () => {
     splashStartedAt.current ??= Date.now();
     const configuredDuration = Number(settings.introSplashDurationMs) || DEFAULT_SPLASH_DURATION_MS;
     const duration = Math.min(3000, Math.max(2000, configuredDuration));
-    const remainingDuration = Math.max(0, duration - (Date.now() - splashStartedAt.current));
+    const maxDuration = duration + 1250;
+    const deadline = splashStartedAt.current + (isSplashImageReady ? duration : maxDuration);
+    const remainingDuration = Math.max(0, deadline - Date.now());
     const timer = window.setTimeout(() => {
       if (!isLoading) hideSplash();
     }, remainingDuration);
     return () => window.clearTimeout(timer);
-  }, [hideSplash, isLoading, shouldShowSplash, settings.introSplashDurationMs]);
+  }, [hideSplash, isLoading, isSplashImageReady, shouldShowSplash, settings.introSplashDurationMs]);
 
   useEffect(() => {
     if (shouldShowSplash || !isSplashMounted) return;
@@ -68,12 +85,21 @@ const MainApp: React.FC = () => {
     <div className={`app-shell ${shouldShowSplash ? 'app-shell-splashing' : ''}`} style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {isSplashMounted && (
         <div className={`app-splash${shouldShowSplash ? '' : ' is-exiting'}`} aria-live="polite" aria-busy={isLoading} role="dialog" aria-modal="false">
-          <img
+          {loadedSplashImageUrl !== splashImageUrl && (
+            <SkeletonBlock className="app-splash-image-skeleton" />
+          )}
+          <StorefrontImage
             className="app-splash-image"
             src={getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp')}
             alt=""
+            width={1400}
+            height={1050}
+            transformWidth={1400}
+            quality={80}
+            loading="eager"
             fetchPriority="high"
-            decoding="async"
+            onLoad={() => setLoadedSplashImageUrl(splashImageUrl)}
+            onError={() => setFailedSplashImageUrl(splashImageUrl)}
           />
           <div className="app-splash-glow" aria-hidden="true" />
           <div className="app-splash-panel">

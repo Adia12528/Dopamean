@@ -15,6 +15,7 @@ import {
   Truck
 } from 'lucide-react';
 import { getShortOrderId } from '../../lib/shortOrderId';
+import { SkeletonBlock } from '../common/LoadingSkeleton';
 
 interface DashboardOverviewProps {
   onOpenAddOffer: () => void;
@@ -34,7 +35,8 @@ const parseOfferBoundary = (dateValue: string, isEnd: boolean) => {
 };
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddOffer }) => {
-  const { products, offers, orders, setDashboardTab, settings, refreshData, isLoading, showToast } = useStore();
+  const { products, offers, orders, setDashboardTab, settings, refreshData, isLoading, isOffersLoading, isOrdersLoading, showToast } = useStore();
+  const isDashboardDataLoading = isLoading || isOffersLoading || isOrdersLoading;
   const [now] = React.useState(() => Date.now());
   const collectedOrders = orders.filter(order => order.paymentStatus === 'paid' && order.status !== 'cancelled');
   const collectedRevenue = collectedOrders.reduce((total, order) => total + order.total, 0);
@@ -128,7 +130,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddO
       </header>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 210px), 1fr))', gap: '12px' }}>
-        {metrics.map(metric => (
+        {isDashboardDataLoading ? [0, 1, 2, 3].map(metric => (
+          <section key={metric} className="glass-card" aria-hidden="true" style={{ padding: '16px', minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+              <SkeletonBlock style={{ width: '58%', height: 13, borderRadius: 6 }} />
+              <SkeletonBlock style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0 }} />
+            </div>
+            <SkeletonBlock style={{ width: '42%', height: 29, marginTop: 12, borderRadius: 6 }} />
+            <SkeletonBlock style={{ width: '72%', height: 11, marginTop: 8, borderRadius: 6 }} />
+          </section>
+        )) : metrics.map(metric => (
           <section key={metric.label} className="glass-card" style={{ padding: '16px', minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
               <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: 700 }}>{metric.label}</span>
@@ -152,7 +163,19 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddO
             </button>
           </div>
 
-          {recentOrders.length === 0 ? (
+          {isDashboardDataLoading ? (
+            <div role="status" aria-label="Loading recent orders" style={{ display: 'grid' }}>
+              {[0, 1, 2, 3].map(row => (
+                <div key={row} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '8px 14px', padding: '11px 0', borderBottom: '1px solid var(--border-light)' }}>
+                  <div style={{ display: 'grid', gap: 8 }}>
+                    <SkeletonBlock style={{ width: '48%', height: 12, borderRadius: 6 }} />
+                    <SkeletonBlock style={{ width: '70%', height: 11, borderRadius: 6 }} />
+                  </div>
+                  <SkeletonBlock style={{ width: 82, height: 22, borderRadius: 999 }} />
+                </div>
+              ))}
+            </div>
+          ) : recentOrders.length === 0 ? (
             <div role="status" className="badge-yarn" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textTransform: 'none', letterSpacing: 0 }}>
               <ShoppingBag size={14} />
               No customer orders recorded yet.
@@ -196,11 +219,27 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddO
               <ArrowRight size={14} />
             </button>
           </div>
-          <div role="status" className={lowStockProducts.length ? 'badge-amber' : 'badge-sage'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textTransform: 'none', letterSpacing: 0 }}>
-            {lowStockProducts.length ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
-            {lowStockProducts.length ? `${lowStockProducts.length} product${lowStockProducts.length === 1 ? '' : 's'} at or below stock threshold` : 'No products below stock threshold'}
-          </div>
-          {lowStockProducts.length > 0 && (
+          {isDashboardDataLoading ? (
+            <div role="status" aria-label="Loading inventory">
+              <SkeletonBlock style={{ width: '84%', height: 24, borderRadius: 999 }} />
+              {[0, 1, 2].map(row => (
+                <div key={row} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
+                  <SkeletonBlock style={{ width: '58%', height: 12, borderRadius: 6 }} />
+                  <SkeletonBlock style={{ width: 44, height: 12, borderRadius: 6 }} />
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border-light)' }}>
+                <SkeletonBlock style={{ width: 70, height: 12, borderRadius: 6 }} />
+                <SkeletonBlock style={{ width: 110, height: 12, borderRadius: 6 }} />
+              </div>
+            </div>
+          ) : (
+            <>
+              <div role="status" className={lowStockProducts.length ? 'badge-amber' : 'badge-sage'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', textTransform: 'none', letterSpacing: 0 }}>
+                {lowStockProducts.length ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
+                {lowStockProducts.length ? `${lowStockProducts.length} product${lowStockProducts.length === 1 ? '' : 's'} at or below stock threshold` : 'No products below stock threshold'}
+              </div>
+              {lowStockProducts.length > 0 && (
             <div style={{ display: 'grid', gap: '7px', marginTop: '12px' }}>
               {lowStockProducts.slice(0, 4).map(product => (
                 <div key={product.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '0.76rem' }}>
@@ -209,11 +248,13 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onOpenAddO
                 </div>
               ))}
             </div>
+              )}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>Live offers</span>
+                <strong style={{ color: 'var(--text-main)', fontSize: '0.82rem' }}>{activeOffers.length} active · {offers.length} total</strong>
+              </div>
+            </>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginTop: '16px', paddingTop: '12px', borderTop: '1px solid var(--border-light)' }}>
-            <span style={{ color: 'var(--text-muted)', fontSize: '0.76rem' }}>Live offers</span>
-            <strong style={{ color: 'var(--text-main)', fontSize: '0.82rem' }}>{activeOffers.length} active · {offers.length} total</strong>
-          </div>
           <button type="button" className="btn-secondary" onClick={onOpenAddOffer} style={{ marginTop: '10px', padding: '7px 10px', fontSize: '0.76rem' }}>
             <Tag size={14} />
             <span>Create offer</span>

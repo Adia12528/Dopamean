@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
+import { StorefrontImage } from '../common/StorefrontImage';
 import { 
   X, 
   Star, 
@@ -61,7 +62,16 @@ export const ProductDetailModal: React.FC = () => {
             <X size={20} />
           </button>
           {offer.image && (
-            <img src={getAssetUrl(offer.image)} alt="" style={{ display: 'block', width: '100%', maxHeight: '300px', objectFit: 'cover', background: 'var(--bg-surface-soft)' }} />
+            <StorefrontImage
+              src={getAssetUrl(offer.image)}
+              alt=""
+              width={900}
+              height={506}
+              transformWidth={900}
+              transformHeight={506}
+              loading="eager"
+              style={{ display: 'block', width: '100%', maxHeight: '300px', objectFit: 'cover', background: 'var(--bg-surface-soft)' }}
+            />
           )}
           <div style={{ padding: 'clamp(20px, 4vw, 32px)' }}>
             <span className="badge-yarn"><Tag size={13} /> {offer.badge}</span>
@@ -189,9 +199,14 @@ export const ProductDetailModal: React.FC = () => {
             backgroundColor: '#FFFFFF',
             border: '1px solid var(--border-light)'
           }}>
-            <img
+            <StorefrontImage
               src={getAssetUrl(allImages[activeImageIndex] || product.image)}
               alt={product.title}
+              width={1200}
+              height={1200}
+              transformWidth={1200}
+              transformHeight={1200}
+              loading="eager"
               style={{
                 width: '100%',
                 height: '100%',
@@ -215,6 +230,7 @@ export const ProductDetailModal: React.FC = () => {
                     height: '68px',
                     borderRadius: '12px',
                     overflow: 'hidden',
+                    backgroundColor: 'var(--bg-surface-soft)',
                     cursor: 'pointer',
                     border: activeImageIndex === idx 
                       ? '2.5px solid var(--accent-terracotta)' 
@@ -223,9 +239,13 @@ export const ProductDetailModal: React.FC = () => {
                     transition: 'var(--transition-smooth)'
                   }}
                 >
-                  <img
+                  <StorefrontImage
                     src={getAssetUrl(img)}
                     alt=""
+                    width={68}
+                    height={68}
+                    transformWidth={136}
+                    transformHeight={136}
                     style={{
                       width: '100%',
                       height: '100%',

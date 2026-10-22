@@ -28,9 +28,10 @@ import {
 import type { CodRule, ProductCardBadge, StoreSettings } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
 
-type ScopedSettingSection = 'introSplash' | 'categorySections' | 'launchRail' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies';
+type HeroDisplaySettingSection = 'heroSocialProof' | 'heroOfferHighlight' | 'heroPersonalGreeting' | 'heroInstagramStrip' | 'heroParallax';
+type ScopedSettingSection = 'introSplash' | 'categorySections' | 'launchRail' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies' | 'heroDisplay' | HeroDisplaySettingSection;
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
-const SCOPED_SETTING_SECTIONS: ScopedSettingSection[] = ['introSplash', 'categorySections', 'launchRail', 'productCards', 'lowStock', 'trustCards', 'testimonials', 'deliveryTimeline', 'upi', 'policies'];
+const SCOPED_SETTING_SECTIONS: ScopedSettingSection[] = ['introSplash', 'categorySections', 'launchRail', 'productCards', 'lowStock', 'trustCards', 'testimonials', 'deliveryTimeline', 'upi', 'policies', 'heroDisplay', 'heroSocialProof', 'heroOfferHighlight', 'heroPersonalGreeting', 'heroInstagramStrip', 'heroParallax'];
 const isScopedSettingSection = (section: string): section is ScopedSettingSection =>
   SCOPED_SETTING_SECTIONS.includes(section as ScopedSettingSection);
 
@@ -57,7 +58,7 @@ export const StudioSettings: React.FC = () => {
   const upiQrFileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'heroDisplay' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
@@ -73,7 +74,13 @@ export const StudioSettings: React.FC = () => {
     testimonials: { isSaving: false, error: '' },
     deliveryTimeline: { isSaving: false, error: '' },
     upi: { isSaving: false, error: '' },
-    policies: { isSaving: false, error: '' }
+    policies: { isSaving: false, error: '' },
+    heroDisplay: { isSaving: false, error: '' },
+    heroSocialProof: { isSaving: false, error: '' },
+    heroOfferHighlight: { isSaving: false, error: '' },
+    heroPersonalGreeting: { isSaving: false, error: '' },
+    heroInstagramStrip: { isSaving: false, error: '' },
+    heroParallax: { isSaving: false, error: '' }
   });
   const [validationErrors, setValidationErrors] = useState<Partial<Record<'storeName' | 'heroTitle' | 'currency' | 'upiId', string>>>({});
   const [codRuleErrors, setCodRuleErrors] = useState<Record<string, string>>({});
@@ -122,6 +129,11 @@ export const StudioSettings: React.FC = () => {
   };
   const isTrustCardsDirty = JSON.stringify(trustCardFormValues) !== JSON.stringify(trustCardSavedValues);
   const isTestimonialsDirty = (form.showTestimonialsSection === true) !== (settings.showTestimonialsSection === true);
+  const isHeroSocialProofDirty = (form.showHeroSocialProof !== false) !== (settings.showHeroSocialProof !== false);
+  const isHeroOfferHighlightDirty = (form.showHeroOfferHighlight !== false) !== (settings.showHeroOfferHighlight !== false);
+  const isHeroPersonalGreetingDirty = (form.showHeroPersonalGreeting !== false) !== (settings.showHeroPersonalGreeting !== false);
+  const isHeroInstagramStripDirty = (form.showHeroInstagramStrip !== false) !== (settings.showHeroInstagramStrip !== false);
+  const isHeroParallaxDirty = (form.enableHeroParallax !== false) !== (settings.enableHeroParallax !== false);
   const deliveryTimelineFormValues = {
     deliveryStagePlacedLabel: form.deliveryStagePlacedLabel || 'Order placed',
     deliveryStageConfirmedLabel: form.deliveryStageConfirmedLabel || 'Confirmed',
@@ -166,6 +178,11 @@ export const StudioSettings: React.FC = () => {
     ...(isLowStockThresholdDirty ? [{ id: 'lowStock' as const, label: 'Low Stock Threshold' }] : []),
     ...(isTrustCardsDirty ? [{ id: 'trustCards' as const, label: 'Trust Cards' }] : []),
     ...(isTestimonialsDirty ? [{ id: 'testimonials' as const, label: 'Testimonials' }] : []),
+    ...(isHeroSocialProofDirty ? [{ id: 'heroSocialProof' as const, label: 'Hero rating and review proof' }] : []),
+    ...(isHeroOfferHighlightDirty ? [{ id: 'heroOfferHighlight' as const, label: 'Hero active offer highlight' }] : []),
+    ...(isHeroPersonalGreetingDirty ? [{ id: 'heroPersonalGreeting' as const, label: 'Hero personalized greeting' }] : []),
+    ...(isHeroInstagramStripDirty ? [{ id: 'heroInstagramStrip' as const, label: 'Hero Instagram strip' }] : []),
+    ...(isHeroParallaxDirty ? [{ id: 'heroParallax' as const, label: 'Hero parallax' }] : []),
     ...(isDeliveryTimelineDirty ? [{ id: 'deliveryTimeline' as const, label: 'Delivery Timeline' }] : []),
     ...(isUpiDetailsDirty ? [{ id: 'upi' as const, label: 'Direct UPI' }] : []),
     ...(isStorePoliciesDirty ? [{ id: 'policies' as const, label: 'Policies & Consent' }] : [])
@@ -187,7 +204,7 @@ export const StudioSettings: React.FC = () => {
   };
 
   const saveScopedSection = async (section: ScopedSettingSection) => {
-    if (scopedSaveStates[section].isSaving) return;
+    if (section === 'heroDisplay' || scopedSaveStates[section].isSaving) return;
     const sectionLabel = section === 'introSplash'
       ? 'Intro Splash'
       : section === 'categorySections'
@@ -206,7 +223,17 @@ export const StudioSettings: React.FC = () => {
               ? 'Delivery Timeline'
               : section === 'upi'
                 ? 'Direct UPI'
-                : 'Policies & Consent';
+                : section === 'policies'
+                  ? 'Policies & Consent'
+                  : section === 'heroSocialProof'
+                    ? 'Hero rating and review proof'
+                    : section === 'heroOfferHighlight'
+                      ? 'Hero active offer highlight'
+                      : section === 'heroPersonalGreeting'
+                        ? 'Hero personalized greeting'
+                        : section === 'heroInstagramStrip'
+                          ? 'Hero Instagram strip'
+                          : 'Hero parallax';
     const otherUnsavedSections = getUnsavedScopedSections().filter(item => item.id !== section);
     if (otherUnsavedSections.length > 0) {
       const otherSectionNames = otherUnsavedSections.map(item => item.label).join(' and ');
@@ -219,7 +246,17 @@ export const StudioSettings: React.FC = () => {
     const nextPolicyVersion = section === 'policies'
       ? Math.max(0, Number(settings.storePolicyVersion) || 0) + 1
       : undefined;
-    const payload: Partial<StoreSettings> = section === 'introSplash'
+    const payload: Partial<StoreSettings> = section === 'heroSocialProof'
+      ? { showHeroSocialProof: form.showHeroSocialProof !== false }
+      : section === 'heroOfferHighlight'
+        ? { showHeroOfferHighlight: form.showHeroOfferHighlight !== false }
+        : section === 'heroPersonalGreeting'
+          ? { showHeroPersonalGreeting: form.showHeroPersonalGreeting !== false }
+          : section === 'heroInstagramStrip'
+            ? { showHeroInstagramStrip: form.showHeroInstagramStrip !== false }
+            : section === 'heroParallax'
+              ? { enableHeroParallax: form.enableHeroParallax !== false }
+              : section === 'introSplash'
       ? {
         introSplashEnabled: form.introSplashEnabled !== false,
         introSplashDurationMs: Math.min(3000, Math.max(2000, Number(form.introSplashDurationMs) || 2500))
@@ -325,6 +362,21 @@ export const StudioSettings: React.FC = () => {
   const renderScopedSaveControls = (section: ScopedSettingSection, isDirty: boolean) => {
     const saveState = scopedSaveStates[section];
     const status = saveState.isSaving ? 'Saving…' : isDirty ? 'Unsaved changes' : 'Saved';
+    const saveLabel = section === 'upi'
+      ? 'Save Direct UPI'
+      : section === 'policies'
+        ? 'Save policies'
+        : section === 'heroSocialProof'
+          ? 'Save rating display'
+          : section === 'heroOfferHighlight'
+            ? 'Save offer display'
+            : section === 'heroPersonalGreeting'
+              ? 'Save greeting display'
+              : section === 'heroInstagramStrip'
+                ? 'Save Instagram display'
+                : section === 'heroParallax'
+                  ? 'Save parallax setting'
+                  : 'Save section';
     return (
       <div style={{
         display: 'flex',
@@ -362,7 +414,7 @@ export const StudioSettings: React.FC = () => {
             cursor: !isDirty || saveState.isSaving ? 'not-allowed' : 'pointer'
           }}
         >
-          {saveState.isSaving ? <span>Saving…</span> : <><Save size={16} /><span>{section === 'upi' ? 'Save Direct UPI' : section === 'policies' ? 'Save policies' : 'Save section'}</span></>}
+          {saveState.isSaving ? <span>Saving…</span> : <><Save size={16} /><span>{saveLabel}</span></>}
         </button>
       </div>
     );
@@ -647,6 +699,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'theme' as const, label: 'Theme & Colors', icon: <Palette size={16} /> },
     { id: 'header' as const, label: 'Brand & Announcement', icon: <Sparkles size={16} /> },
     { id: 'hero' as const, label: 'Hero Banner', icon: <ImageIcon size={16} /> },
+    { id: 'heroDisplay' as const, label: 'Hero Display Options', icon: <Sliders size={16} /> },
     { id: 'introSplash' as const, label: 'Intro Splash', icon: <Eye size={16} /> },
     { id: 'categorySections' as const, label: 'Category Sections', icon: <Sliders size={16} /> },
     { id: 'launchRail' as const, label: 'Launches & Offers Rail', icon: <Sparkles size={16} /> },
@@ -791,6 +844,10 @@ export const StudioSettings: React.FC = () => {
         {/* Dynamic Section Editor */}
         <form
           onSubmit={(e) => {
+            if (activeSection === 'heroDisplay') {
+              e.preventDefault();
+              return;
+            }
             if (isScopedSettingSection(activeSection)) {
               e.preventDefault();
               void saveScopedSection(activeSection);
@@ -1338,6 +1395,94 @@ export const StudioSettings: React.FC = () => {
                     )}
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'heroDisplay' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Sliders size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Hero Display Options
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px' }}>
+                Each option saves independently. Ratings and offers always come from existing store data; these controls only change whether each feature is displayed.
+              </p>
+
+              <div style={{ display: 'grid', gap: '14px' }}>
+                {[
+                  {
+                    section: 'heroSocialProof' as const,
+                    setting: 'showHeroSocialProof' as const,
+                    dirty: isHeroSocialProofDirty,
+                    title: 'Real rating and review count',
+                    description: 'Show the aggregate rating only when products have real ratings and review counts.'
+                  },
+                  {
+                    section: 'heroOfferHighlight' as const,
+                    setting: 'showHeroOfferHighlight' as const,
+                    dirty: isHeroOfferHighlightDirty,
+                    title: 'Active offer highlight and countdown',
+                    description: 'Show currently active offers. A countdown appears only when an offer has a valid future end date.'
+                  },
+                  {
+                    section: 'heroPersonalGreeting' as const,
+                    setting: 'showHeroPersonalGreeting' as const,
+                    dirty: isHeroPersonalGreetingDirty,
+                    title: 'Signed-in customer greeting',
+                    description: 'Replace the generic tagline with the customer’s name after their session is confirmed.'
+                  },
+                  {
+                    section: 'heroInstagramStrip' as const,
+                    setting: 'showHeroInstagramStrip' as const,
+                    dirty: isHeroInstagramStripDirty,
+                    title: 'Instagram follow strip',
+                    description: 'Show a lightweight static link to the Instagram handle configured in Contact & Socials.'
+                  },
+                  {
+                    section: 'heroParallax' as const,
+                    setting: 'enableHeroParallax' as const,
+                    dirty: isHeroParallaxDirty,
+                    title: 'Desktop hero-image parallax',
+                    description: 'Use transform-only movement; it remains disabled on mobile, low-core devices, and when reduced motion is preferred.'
+                  }
+                ].map(option => (
+                  <section
+                    key={option.section}
+                    style={{
+                      padding: '18px',
+                      border: '1px solid var(--border-light)',
+                      borderRadius: '14px',
+                      background: 'var(--bg-surface-soft)'
+                    }}
+                  >
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={form[option.setting] !== false}
+                        onChange={event => handleChange(option.setting, event.target.checked)}
+                        style={{ width: '18px', height: '18px', marginTop: '2px', accentColor: 'var(--accent-terracotta)' }}
+                      />
+                      <span>
+                        <strong style={{ display: 'block', color: 'var(--text-main)', fontSize: '0.9rem' }}>
+                          {option.title}
+                        </strong>
+                        <span style={{ display: 'block', marginTop: '4px', color: 'var(--text-muted)', fontSize: '0.8rem', lineHeight: 1.5 }}>
+                          {option.description}
+                        </span>
+                      </span>
+                    </label>
+                    {renderScopedSaveControls(option.section, option.dirty)}
+                  </section>
+                ))}
               </div>
             </div>
           )}

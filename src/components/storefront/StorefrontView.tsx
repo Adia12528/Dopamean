@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { getAssetUrl } from '../../services/api';
+import { StorefrontImage } from '../common/StorefrontImage';
+import { ProductCardSkeleton, SkeletonBlock } from '../common/LoadingSkeleton';
 import { HeroBanner } from './HeroBanner';
 import { OffersShowcase } from './OffersShowcase';
 import { TestimonialsSection } from './TestimonialsSection';
@@ -161,7 +163,36 @@ export const StorefrontView: React.FC = () => {
       {/* Offers Showcase Section */}
       <OffersShowcase />
 
-      {featuredCategories.length > 0 && (
+      {isLoading && featuredCategories.length === 0 ? (
+        <section className="featured-category-section" aria-label="Loading collections" aria-busy="true">
+          <div className="container">
+            <div className="storefront-skeleton-heading">
+              <SkeletonBlock style={{ width: 150, height: 12, borderRadius: 999 }} />
+              <SkeletonBlock style={{ width: 'min(390px, 80%)', height: 28, marginTop: 10, borderRadius: 8 }} />
+            </div>
+            <div className="featured-category-grid">
+              {[0, 1, 2].map(category => (
+                <section key={category} className="featured-category-card">
+                  <div className="featured-category-header">
+                    <div>
+                      <SkeletonBlock style={{ width: 74, height: 11, borderRadius: 999 }} />
+                      <SkeletonBlock style={{ width: 130, height: 20, marginTop: 8, borderRadius: 6 }} />
+                    </div>
+                    <SkeletonBlock style={{ width: 78, height: 40, borderRadius: 999 }} />
+                  </div>
+                  <div className="featured-category-items">
+                    {[0, 1, 2, 3].map(product => (
+                      <div key={product} className={product === 0 ? 'featured-category-item is-lead' : 'featured-category-item'}>
+                        <ProductCardSkeleton />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : featuredCategories.length > 0 && (
         <section id="catalog" className="featured-category-section">
           <div className="container">
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px', marginBottom: '22px', flexWrap: 'wrap' }}>
@@ -472,26 +503,7 @@ export const StorefrontView: React.FC = () => {
                 gap: 'clamp(14px, 3vw, 24px)'
               }}
             >
-              {Array.from({ length: 8 }, (_, index) => (
-                <div
-                  key={index}
-                  aria-hidden="true"
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    borderRadius: '22px',
-                    border: '1px solid var(--border-medium)',
-                    overflow: 'hidden',
-                    boxShadow: 'var(--shadow-sm)'
-                  }}
-                >
-                  <div className="catalog-skeleton" style={{ aspectRatio: '1 / 0.9' }} />
-                  <div style={{ padding: '16px', display: 'grid', gap: '10px' }}>
-                    <div className="catalog-skeleton" style={{ width: '72%', height: '18px', borderRadius: '6px' }} />
-                    <div className="catalog-skeleton" style={{ width: '46%', height: '14px', borderRadius: '6px' }} />
-                    <div className="catalog-skeleton" style={{ width: '58%', height: '20px', borderRadius: '6px', marginTop: '4px' }} />
-                  </div>
-                </div>
-              ))}
+              {Array.from({ length: 8 }, (_, index) => <ProductCardSkeleton key={index} />)}
             </div>
           ) : filteredProducts.length === 0 ? (
             <div style={{
@@ -652,13 +664,17 @@ export const StorefrontView: React.FC = () => {
                     border: '1px solid var(--border-medium)',
                     boxShadow: 'var(--shadow-md)',
                     maxHeight: '320px',
-                    position: 'relative'
+                    position: 'relative',
+                    backgroundColor: 'var(--bg-surface-soft)'
                   }}>
-                    <img
+                    <StorefrontImage
                       src={getAssetUrl(settings.aboutImage)}
                       alt={settings.aboutTitle || 'Artisan Workshop'}
+                      width={900}
+                      height={640}
+                      transformWidth={900}
+                      transformHeight={640}
                       loading="lazy"
-                      decoding="async"
                       style={{
                         width: '100%',
                         height: '100%',

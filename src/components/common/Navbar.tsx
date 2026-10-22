@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useUser } from '../../context/UserContext';
 import { getAssetUrl } from '../../services/api';
+import { StorefrontImage } from './StorefrontImage';
 import { findClosestProducts, findExactProductMatches } from '../../lib/productSearch';
 import { 
   ShoppingBag, 
@@ -356,9 +357,13 @@ export const Navbar: React.FC = () => {
                   onMouseEnter={event => { event.currentTarget.style.background = 'var(--bg-surface-soft)'; }}
                   onMouseLeave={event => { event.currentTarget.style.background = 'transparent'; }}
                 >
-                  <img
+                  <StorefrontImage
                     src={getAssetUrl(product.image)}
                     alt=""
+                    width={46}
+                    height={46}
+                    transformWidth={92}
+                    transformHeight={92}
                     loading="lazy"
                     style={{ width: '46px', height: '46px', objectFit: 'cover', borderRadius: '8px', background: 'var(--bg-surface-soft)', flexShrink: 0 }}
                   />

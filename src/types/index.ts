@@ -31,6 +31,11 @@ export interface StoreSettings {
   heroPrimaryBtnText?: string;
   heroSecondaryBtnText?: string;
   heroImage: string;
+  showHeroSocialProof?: boolean;
+  showHeroOfferHighlight?: boolean;
+  showHeroPersonalGreeting?: boolean;
+  showHeroInstagramStrip?: boolean;
+  enableHeroParallax?: boolean;
   introSplashEnabled?: boolean;
   introSplashDurationMs?: number;
   categoryTopStockPreviewCount?: number;

@@ -2,11 +2,12 @@ import React, { Suspense, lazy, useState, useRef, useEffect, useLayoutEffect, us
 import { useUser } from '../../context/UserContext';
 import { useStore } from '../../context/StoreContext';
 import { 
-  User, LogOut, Package, ChevronDown, MapPin,
-  Phone, Pencil, X, CheckCircle2, Clock, Loader2, Copy
+  User, UserRound, LogOut, Package, ChevronDown, MapPin, ArrowLeft,
+  Phone, X, CheckCircle2, Clock, Loader2, Copy
 } from 'lucide-react';
 import type { Order } from '../../types';
 import { getShortOrderId } from '../../lib/shortOrderId';
+import { OrderCardSkeleton } from '../common/LoadingSkeleton';
 
 const OrderStatusTimeline = lazy(() => import('../storefront/OrderStatusTimeline').then(module => ({ default: module.OrderStatusTimeline })));
 
@@ -39,18 +40,20 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
     }
   };
   return (
-    <div style={{
+    <div className="user-profile-order-card" style={{
+      minWidth: 0, width: '100%', boxSizing: 'border-box',
       border: '1px solid var(--border-medium)', borderRadius: 12, padding: '12px 14px',
       display: 'flex', flexDirection: 'column', gap: 6, background: '#FAFAF9'
     }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minWidth: 0 }}>
+      <div className="user-profile-order-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
           <span style={{ minWidth: 0, overflowWrap: 'anywhere', fontWeight: 700, fontSize: '0.82rem', color: 'var(--text-main)' }}>#{shortOrderId}</span>
           <button type="button" aria-label={`Copy order ${shortOrderId}`} title="Copy order ID" onClick={() => void handleCopyOrderId()} style={{ minWidth: 44, minHeight: 44, display: 'grid', placeItems: 'center', flexShrink: 0, color: 'var(--text-muted)' }}>
             <Copy size={14} />
           </button>
         </div>
-        <span style={{
+        <span className="user-profile-order-card-status" style={{
+          maxWidth: '100%', overflowWrap: 'anywhere', whiteSpace: 'normal',
           fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: 999,
           backgroundColor: 'var(--accent-terracotta-light)', color: 'var(--accent-terracotta)', textTransform: 'capitalize'
         }}>{statusLabel}</span>
@@ -63,7 +66,7 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
       </div>
       {order.paymentMethod === 'upi' && order.status !== 'cancelled' && (
         <>
-          <span role="status" className={order.paymentStatus === 'paid' ? 'badge-sage' : 'badge-amber'} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', textTransform: 'none', letterSpacing: 0 }}>
+          <span role="status" className={order.paymentStatus === 'paid' ? 'badge-sage' : 'badge-amber'} style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere', whiteSpace: 'normal', display: 'inline-flex', alignItems: 'center', gap: '6px', alignSelf: 'flex-start', textTransform: 'none', letterSpacing: 0 }}>
             {order.paymentStatus === 'paid' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
             {order.paymentStatus === 'paid' ? 'Payment verified' : 'Payment submitted; awaiting review'}
           </span>
@@ -71,7 +74,7 @@ const OrderCard: React.FC<{ order: Order }> = ({ order }) => {
           {order.upiCheckoutReference && <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>UPI payment note: {order.upiCheckoutReference}</span>}
         </>
       )}
-      <div style={{ borderTop: '1px solid var(--border-light)', paddingTop: '9px', marginTop: '3px' }}>
+      <div style={{ minWidth: 0, borderTop: '1px solid var(--border-light)', paddingTop: '9px', marginTop: '3px' }}>
         <p style={{ margin: '0 0 8px', fontSize: '0.72rem', fontWeight: 800, color: 'var(--text-main)' }}>Delivery progress</p>
         <Suspense fallback={<p role="status" style={{ margin: 0, fontSize: '0.72rem', color: 'var(--text-muted)' }}>Loading delivery progress…</p>}>
           <OrderStatusTimeline order={order} settings={settings} compact />
@@ -170,7 +173,9 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   const ref = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | null>(null);
   const [popoverPosition, setPopoverPosition] = useState({ left: 0, top: 0 });
+  const [isClosing, setIsClosing] = useState(false);
   const previousUpiPaymentStatuses = useRef<Record<string, Order['paymentStatus']>>({});
   const currentOrderOwnerId = currentUser?.id || '';
   const activeOrderOwnerId = useRef(currentOrderOwnerId);
@@ -185,17 +190,27 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
     });
   }, [currentOrderOwnerId]);
 
+  const closeMenu = useCallback(() => {
+    if (!open || isClosing) return;
+    setIsClosing(true);
+    closeTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+      setView('menu');
+      setIsClosing(false);
+      closeTimerRef.current = null;
+    }, 300);
+  }, [isClosing, open]);
+
   // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setView('menu');
+        closeMenu();
       }
     };
     const keyHandler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setOpen(false);
-        setView('menu');
+        closeMenu();
       }
     };
     document.addEventListener('mousedown', handler);
@@ -204,6 +219,10 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
       document.removeEventListener('mousedown', handler);
       document.removeEventListener('keydown', keyHandler);
     };
+  }, [closeMenu]);
+
+  useEffect(() => () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
   }, []);
 
   useLayoutEffect(() => {
@@ -260,6 +279,7 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
     if (!isUserLoggedIn || orderHistoryRequest === 0) return;
     const timeout = window.setTimeout(() => {
       setOpen(true);
+      setIsClosing(false);
       void handleOrdersClick();
     }, 0);
     return () => window.clearTimeout(timeout);
@@ -303,7 +323,16 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
   return (
     <div ref={ref} style={{ position: 'relative' }}>
       <button
-        onClick={() => { setOpen(!open); if (!open) setView('menu'); }}
+        onClick={() => {
+          if (open) {
+            closeMenu();
+          } else {
+            if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+            setIsClosing(false);
+            setOpen(true);
+            setView('menu');
+          }
+        }}
         ref={triggerRef}
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -324,39 +353,39 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
 
       {open && (
         <div
-          className="user-profile-menu-backdrop"
+          className={`user-profile-menu-backdrop mobile-drawer-overlay${isClosing ? ' user-profile-menu-closing' : ''}`}
           onMouseDown={event => {
             if (event.target === event.currentTarget) {
-              setOpen(false);
-              setView('menu');
+              closeMenu();
             }
           }}
         >
         <div
           ref={panelRef}
-          className="user-profile-menu-panel"
+          className={`user-profile-menu-panel mobile-drawer-panel glass-card animate-slide-drawer${isClosing ? ' user-profile-menu-panel-closing' : ''}`}
           role="dialog"
           aria-label="Your account"
           style={{
           position: 'fixed', left: popoverPosition.left, top: popoverPosition.top, zIndex: 200,
-          backgroundColor: '#FFFFFF', borderRadius: 16, boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
+          backgroundColor: 'rgba(255, 255, 255, 0.88)', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg)',
           border: '1px solid var(--border-medium)', width: 320, minWidth: 280, maxWidth: 'calc(100vw - 24px)', overflow: 'hidden',
-          boxSizing: 'border-box',
-          animation: 'fadeIn 0.15s ease-out'
+          boxSizing: 'border-box'
         }}>
           {/* Header */}
-          <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid var(--border-light)', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <Avatar name={currentUser!.name} size={40} />
-            <div style={{ overflow: 'hidden' }}>
-              <p style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {currentUser!.name}
-              </p>
-              <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {currentUser!.email}
-              </p>
+          <div className="user-profile-menu-header">
+            <div className="user-profile-menu-identity">
+              <Avatar name={currentUser!.name} size={40} />
+              <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                <p style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-main)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {currentUser!.name}
+                </p>
+                <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {currentUser!.email}
+                </p>
+              </div>
             </div>
-            <button aria-label="Close account menu" onClick={() => { setOpen(false); setView('menu'); }} style={{ marginLeft: 'auto', color: 'var(--text-subtle)', cursor: 'pointer', flexShrink: 0, minWidth: 44, minHeight: 44, display: 'grid', placeItems: 'center' }}>
-              <X size={14} />
+            <button className="user-profile-menu-close" aria-label="Close account menu" onClick={closeMenu}>
+              <X size={18} />
             </button>
           </div>
 
@@ -364,41 +393,47 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
           {view === 'menu' && (currentUser!.phone || currentUser!.address) && (
             <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-light)', display: 'flex', flexDirection: 'column', gap: 4 }}>
               {currentUser!.phone && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <Phone size={11} style={{ color: 'var(--accent-terracotta)' }} />{currentUser!.phone}
+                <span style={{ minWidth: 0, overflowWrap: 'anywhere', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Phone size={11} style={{ color: 'var(--accent-terracotta)', flexShrink: 0 }} />
+                  <span>{currentUser!.phone}</span>
                 </span>
-              )}
-              {currentUser!.address && (
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <MapPin size={11} style={{ color: 'var(--accent-terracotta)' }} />
-                  {[currentUser!.address, currentUser!.city, currentUser!.pincode].filter(Boolean).join(', ')}
-                </span>
-              )}
+                )}
+                {currentUser!.address && (
+                  <span style={{ minWidth: 0, overflowWrap: 'anywhere', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'flex-start', gap: 5 }}>
+                    <MapPin size={11} style={{ color: 'var(--accent-terracotta)', flexShrink: 0, marginTop: 2 }} />
+                    <span>{[currentUser!.address, currentUser!.city, currentUser!.pincode].filter(Boolean).join(', ')}</span>
+                  </span>
+                )}
             </div>
           )}
 
           {/* Content area */}
-          <div style={{ padding: '8px 0', maxHeight: view === 'orders' ? 'min(70vh, 620px)' : 320, overflowY: 'auto' }}>
+          <div className="user-profile-menu-content" style={{ padding: '8px 0', maxHeight: view === 'orders' ? 'min(70vh, 620px)' : 320, overflowY: 'auto' }}>
             {view === 'menu' && (
-              <>
-                <MenuButton icon={<Package size={15} />} label="My Orders" onClick={handleOrdersClick} />
-                <MenuButton icon={<Pencil size={15} />} label="Edit Profile & Address" onClick={() => setView('edit')} />
-                <div style={{ height: 1, background: 'var(--border-light)', margin: '6px 0' }} />
-                <MenuButton icon={<LogOut size={15} />} label="Sign Out" onClick={() => { userLogout(); setOpen(false); }} danger />
-              </>
+              <div className="user-profile-menu-view" key={view}>
+                <div className="user-profile-menu-group">
+                  <MenuButton icon={<Package size={18} />} label="My Orders" onClick={handleOrdersClick} />
+                  <MenuButton icon={<UserRound size={18} />} label="My Profile" onClick={() => setView('edit')} />
+                </div>
+                <div className="user-profile-menu-divider" />
+                <div className="user-profile-menu-group">
+                  <MenuButton icon={<LogOut size={18} />} label="Sign Out" onClick={() => { userLogout(); setOpen(false); }} danger />
+                </div>
+              </div>
             )}
 
             {view === 'orders' && (
-              <div style={{ padding: '0 12px 8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingTop: 4 }}>
-                  <button onClick={() => setView('menu')} style={{ color: 'var(--text-subtle)', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ← Back
+              <div className="user-profile-menu-view user-profile-menu-subview" key={view}>
+                <div className="user-profile-menu-subview-header">
+                  <button onClick={() => setView('menu')} aria-label="Back to account menu" className="user-profile-menu-back">
+                    <ArrowLeft size={16} />
+                    <span>Back</span>
                   </button>
-                  <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-main)' }}>My Orders</span>
+                  <span>My Orders</span>
                 </div>
                 {loadingOrders ? (
-                  <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--text-muted)' }}>
-                    <Loader2 size={20} style={{ animation: 'spin 1s linear infinite', margin: '0 auto' }} />
+                  <div role="status" aria-label="Loading orders" style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {[0, 1].map(order => <OrderCardSkeleton key={order} />)}
                   </div>
                 ) : ordersError ? (
                   <p role="alert" style={{ fontSize: '0.82rem', color: '#B91C1C', textAlign: 'center', padding: '16px 0' }}>
@@ -409,7 +444,7 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
                     No orders yet. Start shopping! 🛍️
                   </p>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {orders.map(o => <OrderCard key={o.id} order={o} />)}
                   </div>
                 )}
@@ -417,12 +452,13 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
             )}
 
             {view === 'edit' && (
-              <div style={{ padding: '0 12px 8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, paddingTop: 4 }}>
-                  <button onClick={() => setView('menu')} style={{ color: 'var(--text-subtle)', cursor: 'pointer', fontSize: '0.78rem' }}>
-                    ← Back
+              <div className="user-profile-menu-view user-profile-menu-subview" key={view}>
+                <div className="user-profile-menu-subview-header">
+                  <button onClick={() => setView('menu')} aria-label="Back to account menu" className="user-profile-menu-back">
+                    <ArrowLeft size={16} />
+                    <span>Back</span>
                   </button>
-                  <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-main)' }}>Edit Profile</span>
+                  <span>My Profile</span>
                 </div>
                 <EditProfileForm onDone={() => setView('menu')} />
               </div>
@@ -436,19 +472,9 @@ export const UserProfileMenu: React.FC<{ orderHistoryRequest?: number }> = ({ or
 };
 
 // ─── Menu Button ──────────────────────────────────────────────────────────────
-const MenuButton: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean; muted?: boolean }> = ({ icon, label, onClick, danger, muted }) => (
-  <button onClick={onClick} style={{
-    display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '9px 16px',
-      minHeight: 44,
-    fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer', textAlign: 'left',
-    color: danger ? '#DC2626' : muted ? 'var(--text-subtle)' : 'var(--text-main)',
-    backgroundColor: 'transparent', transition: 'background 0.15s',
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
-  }}
-    onMouseEnter={e => e.currentTarget.style.backgroundColor = danger ? '#FEF2F2' : 'var(--bg-surface-soft)'}
-    onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
-  >
-    <span style={{ flexShrink: 0 }}>{icon}</span>
-    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+const MenuButton: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void; danger?: boolean }> = ({ icon, label, onClick, danger }) => (
+  <button onClick={onClick} className={`user-profile-menu-item${danger ? ' user-profile-menu-item-danger' : ''}`}>
+    <span className="user-profile-menu-item-icon">{icon}</span>
+    <span>{label}</span>
   </button>
 );

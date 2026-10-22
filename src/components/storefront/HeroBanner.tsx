@@ -1,14 +1,130 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../context/StoreContext';
+import { useUser } from '../../context/UserContext';
 import { getAssetUrl } from '../../services/api';
-import { Sparkles, Copy, Check, ArrowRight, Tag, Heart } from 'lucide-react';
+import { Sparkles, Copy, Check, ArrowRight, Tag, Heart, Camera, Star, Clock } from 'lucide-react';
+import { StorefrontImage } from '../common/StorefrontImage';
+import type { Offer } from '../../types';
+
+const parseOfferBoundary = (value: string | undefined, isEnd: boolean): number | null => {
+  if (!value?.trim()) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const timestamp = dateOnly
+    ? new Date(
+      Number(dateOnly[1]),
+      Number(dateOnly[2]) - 1,
+      Number(dateOnly[3]),
+      isEnd ? 23 : 0,
+      isEnd ? 59 : 0,
+      isEnd ? 59 : 0,
+      isEnd ? 999 : 0
+    ).getTime()
+    : Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const isOfferActiveNow = (offer: Offer, now: number) => {
+  if (!offer.isActive) return false;
+  const startsAt = parseOfferBoundary(offer.startDate, false);
+  const endsAt = parseOfferBoundary(offer.endDate, true);
+  return (startsAt === null || startsAt <= now) && (endsAt === null || now < endsAt);
+};
+
+const formatTimeRemaining = (milliseconds: number) => {
+  const totalMinutes = Math.floor(milliseconds / 60_000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  if (days > 0) return `Ends in ${days}d ${hours}h`;
+  if (hours > 0) return `Ends in ${hours}h ${totalMinutes % 60}m`;
+  return `Ends in ${Math.max(1, totalMinutes)}m`;
+};
 
 export const HeroBanner: React.FC = () => {
-  const { offers, applyPromoCode, setSelectedCategory, settings } = useStore();
+  const { offers, products, applyPromoCode, setSelectedCategory, settings } = useStore();
+  const { currentUser, isLoadingUser } = useUser();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [showInstagramLink, setShowInstagramLink] = useState(false);
+  const heroImageFrameRef = useRef<HTMLDivElement>(null);
 
-  const activeOffers = offers.filter(o => o.isActive);
+  const activeOffers = offers.filter(offer => isOfferActiveNow(offer, now));
   const featuredOffer = activeOffers[0];
+  const offerEndTimestamp = featuredOffer ? parseOfferBoundary(featuredOffer.endDate, true) : null;
+  const timeRemaining = offerEndTimestamp !== null ? offerEndTimestamp - now : null;
+  const reviewedProducts = products.filter(product =>
+    Number.isFinite(product.rating) &&
+    product.rating > 0 &&
+    Number.isFinite(product.reviewsCount) &&
+    product.reviewsCount > 0
+  );
+  const totalReviewCount = reviewedProducts.reduce((total, product) => total + product.reviewsCount, 0);
+  const aggregateRating = totalReviewCount > 0
+    ? reviewedProducts.reduce((total, product) => total + product.rating * product.reviewsCount, 0) / totalReviewCount
+    : null;
+  const customerName = currentUser?.name.trim();
+  const heroSubtitle = settings.showHeroPersonalGreeting !== false && !isLoadingUser && customerName
+    ? `Welcome back, ${customerName}!`
+    : settings.heroSubtitle || 'Soft, handcrafted crochet accessories made to bring a little joy to every day.';
+  const instagramHandle = settings.instagramHandle.replace(/^@/, '').trim();
+
+  useEffect(() => {
+    if (offerEndTimestamp === null || offerEndTimestamp <= Date.now()) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [offerEndTimestamp]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowInstagramLink(true), 300);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const frame = heroImageFrameRef.current;
+    if (!frame || settings.enableHeroParallax === false || (navigator.hardwareConcurrency > 0 && navigator.hardwareConcurrency <= 4)) return;
+
+    let animationFrame = 0;
+    let scrollListening = false;
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateParallax = () => {
+      if (reducedMotion.matches) {
+        cancelAnimationFrame(animationFrame);
+        frame.style.removeProperty('--hero-parallax-offset');
+        return;
+      }
+      cancelAnimationFrame(animationFrame);
+      animationFrame = requestAnimationFrame(() => {
+        const { top } = frame.getBoundingClientRect();
+        const offset = Math.max(-16, Math.min(16, -top * 0.05));
+        frame.style.setProperty('--hero-parallax-offset', `${offset}px`);
+      });
+    };
+    const syncParallax = () => {
+      const shouldEnable = !reducedMotion.matches && window.innerWidth >= 768;
+      if (!shouldEnable) {
+        if (scrollListening) window.removeEventListener('scroll', updateParallax);
+        scrollListening = false;
+        cancelAnimationFrame(animationFrame);
+        frame.style.removeProperty('--hero-parallax-offset');
+        return;
+      }
+      if (shouldEnable && !scrollListening) {
+        window.addEventListener('scroll', updateParallax, { passive: true });
+        scrollListening = true;
+        updateParallax();
+      }
+    };
+
+    syncParallax();
+    window.addEventListener('resize', syncParallax);
+    reducedMotion.addEventListener('change', syncParallax);
+    return () => {
+      cancelAnimationFrame(animationFrame);
+      window.removeEventListener('scroll', updateParallax);
+      window.removeEventListener('resize', syncParallax);
+      reducedMotion.removeEventListener('change', syncParallax);
+      frame.style.removeProperty('--hero-parallax-offset');
+    };
+  }, [settings.enableHeroParallax]);
 
   const handleCopy = (code: string) => {
     navigator.clipboard?.writeText(code);
@@ -76,12 +192,24 @@ export const HeroBanner: React.FC = () => {
               lineHeight: 1.6,
               marginBottom: '28px'
             }}>
-              {settings.heroSubtitle || 'Hand-crocheted stitch-by-stitch with ultra-soft organic combed milk cotton and fine merino yarns.'}
+              {heroSubtitle}
             </p>
 
+            {settings.showHeroSocialProof !== false && (
+              <div className="hero-rating-slot">
+                {aggregateRating !== null && totalReviewCount > 0 && (
+                <div className="hero-rating-proof" aria-label={`${aggregateRating.toFixed(1)} out of 5 from ${totalReviewCount.toLocaleString()} reviews`}>
+                  <Star size={16} fill="currentColor" aria-hidden="true" />
+                  <strong>{aggregateRating.toFixed(1)}</strong>
+                  <span>from {totalReviewCount.toLocaleString()} reviews</span>
+                </div>
+                )}
+              </div>
+            )}
+
             {/* Active Live Offer Spotlight if available */}
-            {featuredOffer && (
-              <div style={{
+            {settings.showHeroOfferHighlight !== false && featuredOffer && (
+              <div className="hero-offer-highlight" style={{
                 backgroundColor: 'var(--bg-surface-soft)',
                 border: '1.5px dashed var(--accent-terracotta)',
                 borderRadius: '16px',
@@ -114,12 +242,23 @@ export const HeroBanner: React.FC = () => {
                   }}>
                     {featuredOffer.title}
                   </h4>
+                  <p className="hero-offer-discount">
+                    {featuredOffer.discountType === 'percentage'
+                      ? `${featuredOffer.discountValue}% off`
+                      : `${settings.currency}${featuredOffer.discountValue} off`}
+                  </p>
                   <p style={{
                     fontSize: '0.8rem',
                     color: 'var(--text-muted)'
                   }}>
                     {featuredOffer.description}
                   </p>
+                  {timeRemaining !== null && timeRemaining > 0 && (
+                    <span className="hero-offer-countdown">
+                      <Clock size={13} />
+                      {formatTimeRemaining(timeRemaining)}
+                    </span>
+                  )}
                 </div>
 
                 <button
@@ -176,7 +315,7 @@ export const HeroBanner: React.FC = () => {
                   if (el) el.scrollIntoView({ behavior: 'smooth' });
                   else setSelectedCategory('Accessories');
                 }}
-                className="btn-primary"
+                className="btn-secondary"
               >
                 <span>{settings.heroSecondaryBtnText || 'View Special Combos'}</span>
               </button>
@@ -194,18 +333,22 @@ export const HeroBanner: React.FC = () => {
             minHeight: '260px',
             aspectRatio: '4 / 3',
             width: '100%'
-          }}>
+          }} ref={heroImageFrameRef} className="hero-image-frame">
             <div className="liquid-static-fallback" aria-hidden="true" />
-            <img
+            <StorefrontImage
+              className="hero-parallax-image"
               src={getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp')}
               alt={settings.storeName || 'Handcrafted Crochet Accessories'}
+              width={1400}
+              height={1050}
+              transformWidth={1400}
+              quality={80}
+              loading="eager"
               fetchPriority="high"
-              decoding="async"
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                transition: 'transform 0.6s ease',
                 position: 'relative',
                 zIndex: 1,
                 opacity: 0.84,
@@ -291,6 +434,24 @@ export const HeroBanner: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {settings.showHeroInstagramStrip !== false && (
+          <div className="hero-instagram-slot">
+            {showInstagramLink && instagramHandle && (
+            <a
+              className="hero-instagram-strip"
+              href={`https://www.instagram.com/${encodeURIComponent(instagramHandle)}/`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Camera size={18} aria-hidden="true" />
+              <span>Follow us on Instagram</span>
+              <strong>@{instagramHandle}</strong>
+              <ArrowRight size={15} aria-hidden="true" />
+            </a>
+            )}
+          </div>
+        )}
       </div>
     </section>
   );
