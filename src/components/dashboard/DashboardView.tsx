@@ -166,24 +166,30 @@ export const DashboardView: React.FC = () => {
       </div>
 
       {/* Add / Edit Product Modal */}
-      <AddProductModal
-        isOpen={isAddProductOpen}
-        onClose={() => {
-          setIsAddProductOpen(false);
-          setEditingProduct(null);
-        }}
-        editProduct={editingProduct}
-      />
+      {isAddProductOpen && (
+        <AddProductModal
+          key={editingProduct?.id ?? 'new-product'}
+          isOpen={isAddProductOpen}
+          onClose={() => {
+            setIsAddProductOpen(false);
+            setEditingProduct(null);
+          }}
+          editProduct={editingProduct}
+        />
+      )}
 
       {/* Add / Edit Offer Modal */}
-      <AddOfferModal
-        isOpen={isAddOfferOpen}
-        onClose={() => {
-          setIsAddOfferOpen(false);
-          setEditingOffer(null);
-        }}
-        editOffer={editingOffer}
-      />
+      {isAddOfferOpen && (
+        <AddOfferModal
+          key={editingOffer?.id ?? 'new-offer'}
+          isOpen={isAddOfferOpen}
+          onClose={() => {
+            setIsAddOfferOpen(false);
+            setEditingOffer(null);
+          }}
+          editOffer={editingOffer}
+        />
+      )}
     </div>
   );
 };

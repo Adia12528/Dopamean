@@ -30,21 +30,82 @@ const OFFER_BANNER_PRESETS = [
   }
 ];
 
+const buildInitialOfferFormState = (editOffer?: Offer | null) => {
+  if (!editOffer) {
+    return {
+      title: '',
+      description: 'Get 25% off all floral bags & accessories.',
+      badge: 'EXCLUSIVE OFFER',
+      code: 'BLOOM25',
+      discountType: 'percentage' as const,
+      discountValue: '25',
+      minOrderValue: '40',
+      image: OFFER_BANNER_PRESETS[0].url,
+      endDate: '2026-11-30',
+      isActive: true
+    };
+  }
+
+  return {
+    title: editOffer.title ?? '',
+    description: editOffer.description ?? '',
+    badge: editOffer.badge ?? '',
+    code: editOffer.code ?? '',
+    discountType: editOffer.discountType,
+    discountValue: editOffer.discountValue != null ? editOffer.discountValue.toString() : '',
+    minOrderValue: editOffer.minOrderValue != null ? editOffer.minOrderValue.toString() : '',
+    image: editOffer.image ?? '',
+    endDate: editOffer.endDate ?? '',
+    isActive: editOffer.isActive
+  };
+};
+
+type OfferFormState = ReturnType<typeof buildInitialOfferFormState>;
+
+const buildOfferPayload = (form: OfferFormState) => ({
+  title: form.title.trim(),
+  description: form.description.trim(),
+  badge: form.badge.trim().toUpperCase(),
+  code: form.code.trim().toUpperCase(),
+  discountType: form.discountType,
+  discountValue: Number(form.discountValue),
+  minOrderValue: form.minOrderValue.trim() ? Number(form.minOrderValue) : undefined,
+  image: form.image,
+  endDate: form.endDate,
+  isActive: form.isActive
+});
+
+type OfferFormPayload = ReturnType<typeof buildOfferPayload>;
+
+const getChangedOfferFields = (
+  current: OfferFormPayload,
+  initial: OfferFormPayload
+): Partial<Offer> => {
+  const changed: Partial<Offer> = {};
+  for (const key of Object.keys(current) as (keyof OfferFormPayload)[]) {
+    if (JSON.stringify(current[key]) !== JSON.stringify(initial[key])) {
+      Object.assign(changed, { [key]: current[key] });
+    }
+  }
+  return changed;
+};
+
 export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, editOffer }) => {
   useBackNavigationLayer('add-offer-modal', isOpen, onClose);
   const { addOffer, updateOffer, settings } = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [title, setTitle] = useState(editOffer?.title || '');
-  const [description, setDescription] = useState(editOffer?.description || 'Get 25% off all floral bags & accessories.');
-  const [badge, setBadge] = useState(editOffer?.badge || 'EXCLUSIVE OFFER');
-  const [code, setCode] = useState(editOffer?.code || 'BLOOM25');
-  const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>(editOffer?.discountType || 'percentage');
-  const [discountValue, setDiscountValue] = useState(editOffer?.discountValue?.toString() || '25');
-  const [minOrderValue, setMinOrderValue] = useState(editOffer?.minOrderValue?.toString() || '40');
-  const [image, setImage] = useState(editOffer?.image || OFFER_BANNER_PRESETS[0].url);
-  const [endDate, setEndDate] = useState(editOffer?.endDate || '2026-11-30');
-  const [isActive, setIsActive] = useState(editOffer ? editOffer.isActive : true);
+  const initialForm = buildInitialOfferFormState(editOffer);
+  const [title, setTitle] = useState(initialForm.title);
+  const [description, setDescription] = useState(initialForm.description);
+  const [badge, setBadge] = useState(initialForm.badge);
+  const [code, setCode] = useState(initialForm.code);
+  const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>(initialForm.discountType);
+  const [discountValue, setDiscountValue] = useState(initialForm.discountValue);
+  const [minOrderValue, setMinOrderValue] = useState(initialForm.minOrderValue);
+  const [image, setImage] = useState(initialForm.image);
+  const [endDate, setEndDate] = useState(initialForm.endDate);
+  const [isActive, setIsActive] = useState(initialForm.isActive);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
 
   if (!isOpen) return null;
@@ -72,38 +133,44 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
     const parsedDiscountValue = Number(discountValue);
     const parsedMinOrderValue = minOrderValue.trim() ? Number(minOrderValue) : undefined;
     const errors: Record<string, string> = {};
-    if (!title.trim()) errors.title = 'Enter an offer title.';
-    if (!code.trim()) errors.code = 'Enter a promo code.';
-    if (!image.trim()) errors.image = 'Choose a banner image or enter an image URL.';
-    if (!discountValue.trim() || !Number.isFinite(parsedDiscountValue) || parsedDiscountValue <= 0) {
+    if (!title.trim() && !(editOffer && title === initialForm.title)) errors.title = 'Enter an offer title.';
+    if (!code.trim() && !(editOffer && code === initialForm.code)) errors.code = 'Enter a promo code.';
+    if (!image.trim() && !(editOffer && image === initialForm.image)) errors.image = 'Choose a banner image or enter an image URL.';
+    const unchangedDiscountValue = Boolean(editOffer && discountValue === initialForm.discountValue);
+    if ((!discountValue.trim() || !Number.isFinite(parsedDiscountValue) || parsedDiscountValue <= 0) &&
+      !unchangedDiscountValue) {
       errors.discountValue = 'Enter a discount value greater than 0.';
-    } else if (discountType === 'percentage' && parsedDiscountValue > 100) {
+    } else if (discountType === 'percentage' && parsedDiscountValue > 100 && !unchangedDiscountValue) {
       errors.discountValue = 'Percentage discounts cannot exceed 100%.';
     }
     if (parsedMinOrderValue !== undefined && (!Number.isFinite(parsedMinOrderValue) || parsedMinOrderValue < 0)) {
-      errors.minOrderValue = 'Enter a valid minimum order value of 0 or more, or leave this blank.';
+      if (!(editOffer && minOrderValue === initialForm.minOrderValue)) {
+        errors.minOrderValue = 'Enter a valid minimum order value of 0 or more, or leave this blank.';
+      }
     }
-    if (!endDate || Number.isNaN(new Date(`${endDate}T00:00:00`).getTime())) {
+    if ((!endDate || Number.isNaN(new Date(`${endDate}T00:00:00`).getTime())) &&
+      !(editOffer && endDate === initialForm.endDate)) {
       errors.endDate = 'Choose a valid expiration date.';
     }
     setValidationErrors(errors);
     if (Object.values(errors).some(Boolean)) return;
 
-    const offerPayload = {
-      title: title.trim(),
-      description: description.trim(),
-      badge: badge.trim().toUpperCase(),
-      code: code.trim().toUpperCase(),
+    const currentForm: OfferFormState = {
+      title,
+      description,
+      badge,
+      code,
       discountType,
-      discountValue: parsedDiscountValue,
-      minOrderValue: parsedMinOrderValue,
+      discountValue,
+      minOrderValue,
       image,
       endDate,
       isActive
     };
+    const offerPayload = buildOfferPayload(currentForm);
 
     if (editOffer) {
-      updateOffer(editOffer.id, offerPayload);
+      updateOffer(editOffer.id, getChangedOfferFields(offerPayload, buildOfferPayload(initialForm)));
     } else {
       addOffer(offerPayload);
     }

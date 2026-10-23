@@ -56,22 +56,59 @@ const buildInitialFormState = (editProduct?: Product | null) => {
     tagline: editProduct.tagline || '',
     category,
     customCategory: category === 'Custom' ? editProduct.category : '',
-    price: editProduct.price !== undefined ? editProduct.price.toString() : '100',
-    originalPrice: editProduct.originalPrice ? editProduct.originalPrice.toString() : '',
-    stock: editProduct.stock !== undefined ? editProduct.stock.toString() : '15',
-    maxOrderQuantity: editProduct.maxOrderQuantity ? editProduct.maxOrderQuantity.toString() : '',
+    price: editProduct.price !== undefined ? editProduct.price.toString() : '',
+    originalPrice: editProduct.originalPrice != null ? editProduct.originalPrice.toString() : '',
+    stock: editProduct.stock !== undefined ? editProduct.stock.toString() : '',
+    maxOrderQuantity: editProduct.maxOrderQuantity != null ? editProduct.maxOrderQuantity.toString() : '',
     image: editProduct.image || '',
     secondaryImages: editProduct.secondaryImages || [],
     newSecondaryUrl: '',
-    yarnType: editProduct.yarnType || '100% Soft Cotton-Acrylic Blend',
-    craftTimeHours: editProduct.craftTimeHours !== undefined ? editProduct.craftTimeHours.toString() : '2',
-    careInstructions: editProduct.careInstructions || 'Gently hand wash in cold water with mild liquid soap. Air dry flat.',
-    description: editProduct.description || '',
-    tagsInput: editProduct.tags ? editProduct.tags.join(', ') : 'Handmade, Floral',
-    isBestSeller: !!editProduct.isBestSeller,
-    isFeatured: editProduct.isFeatured !== false,
-    codAvailability: editProduct.codAvailability || 'inherit',
+    yarnType: editProduct.yarnType ?? '',
+    craftTimeHours: editProduct.craftTimeHours !== undefined ? editProduct.craftTimeHours.toString() : '',
+    careInstructions: editProduct.careInstructions ?? '',
+    description: editProduct.description ?? '',
+    tagsInput: editProduct.tags?.join(', ') ?? '',
+    isBestSeller: editProduct.isBestSeller ?? false,
+    isFeatured: editProduct.isFeatured ?? false,
+    codAvailability: editProduct.codAvailability ?? 'inherit',
   };
+};
+
+type ProductFormState = ReturnType<typeof buildInitialFormState>;
+
+const buildProductPayload = (form: ProductFormState) => ({
+  title: form.title.trim(),
+  tagline: form.tagline.trim(),
+  category: form.category === 'Custom' ? (form.customCategory.trim() || 'Accessories') : form.category,
+  price: Number(form.price),
+  originalPrice: form.originalPrice.trim() ? Number(form.originalPrice) : undefined,
+  stock: Number(form.stock),
+  maxOrderQuantity: form.maxOrderQuantity.trim() ? Number(form.maxOrderQuantity) : undefined,
+  image: form.image.trim(),
+  secondaryImages: form.secondaryImages,
+  yarnType: form.yarnType.trim(),
+  craftTimeHours: parseFloat(form.craftTimeHours) || 2,
+  careInstructions: form.careInstructions.trim(),
+  description: form.description.trim(),
+  tags: form.tagsInput.split(',').map(tag => tag.trim()).filter(Boolean),
+  isBestSeller: form.isBestSeller,
+  isFeatured: form.isFeatured,
+  codAvailability: form.codAvailability
+});
+
+type ProductFormPayload = ReturnType<typeof buildProductPayload>;
+
+const getChangedProductFields = (
+  current: ProductFormPayload,
+  initial: ProductFormPayload
+): Partial<Product> => {
+  const changed: Partial<Product> = {};
+  for (const key of Object.keys(current) as (keyof ProductFormPayload)[]) {
+    if (JSON.stringify(current[key]) !== JSON.stringify(initial[key])) {
+      Object.assign(changed, { [key]: current[key] });
+    }
+  }
+  return changed;
 };
 
 export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, editProduct }) => {
@@ -157,58 +194,54 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     const parsedStock = Number(stock);
     const parsedMaxOrderQuantity = maxOrderQuantity.trim() ? Number(maxOrderQuantity) : undefined;
     const errors: Record<string, string> = {};
-    if (!title.trim()) errors.title = 'Enter a product title.';
-    if (!image.trim()) errors.image = 'Upload or enter a product image URL.';
-    if (!price.trim() || !Number.isInteger(parsedPrice) || parsedPrice < 0) {
+    if (!title.trim() && !(editProduct && title === initialForm.title)) errors.title = 'Enter a product title.';
+    if (!image.trim() && !(editProduct && image === initialForm.image)) errors.image = 'Upload or enter a product image URL.';
+    if ((!price.trim() || !Number.isInteger(parsedPrice) || parsedPrice < 0) &&
+      !(editProduct && price === initialForm.price)) {
       errors.price = 'Enter a whole-number selling price of 0 or more.';
     }
-    if (parsedOriginalPrice !== undefined && (!Number.isInteger(parsedOriginalPrice) || parsedOriginalPrice < 0)) {
+    if (parsedOriginalPrice !== undefined && (!Number.isInteger(parsedOriginalPrice) || parsedOriginalPrice < 0) &&
+      !(editProduct && originalPrice === initialForm.originalPrice)) {
       errors.originalPrice = 'Enter a whole-number price of 0 or more, or leave this blank.';
     }
-    if (!stock.trim() || !Number.isInteger(parsedStock) || parsedStock < 0) {
+    if ((!stock.trim() || !Number.isInteger(parsedStock) || parsedStock < 0) &&
+      !(editProduct && stock === initialForm.stock)) {
       errors.stock = 'Enter a whole number of units (0 or more).';
     }
-    if (parsedMaxOrderQuantity !== undefined && (!Number.isInteger(parsedMaxOrderQuantity) || parsedMaxOrderQuantity < 1)) {
+    const unchangedExistingMaxOrderQuantity = Boolean(editProduct && maxOrderQuantity === initialForm.maxOrderQuantity);
+    if (parsedMaxOrderQuantity !== undefined &&
+      (!Number.isInteger(parsedMaxOrderQuantity) ||
+        (parsedMaxOrderQuantity < 1 && !unchangedExistingMaxOrderQuantity))) {
       errors.maxOrderQuantity = 'Enter a whole number of at least 1, or leave this blank.';
     }
     setValidationErrors(errors);
     if (Object.values(errors).some(Boolean)) return;
 
-    const finalCategory = category === 'Custom' ? (customCategory.trim() || 'Accessories') : category;
-
-    const tags = tagsInput
-      .split(',')
-      .map(t => t.trim())
-      .filter(Boolean);
-
-    const numPrice = parsedPrice;
-    const numOriginal = parsedOriginalPrice;
-    const numStock = parsedStock;
-    const numCraftHours = parseFloat(craftTimeHours) || 2;
-    const numMaxOrderQty = parsedMaxOrderQuantity;
-
-    const productPayload = {
-      title: title.trim(),
-      tagline: tagline.trim(),
-      category: finalCategory,
-      price: numPrice,
-      originalPrice: numOriginal,
-      stock: numStock,
-      maxOrderQuantity: numMaxOrderQty,
-      image: image.trim(),
+    const currentForm: ProductFormState = {
+      title,
+      tagline,
+      category,
+      customCategory,
+      price,
+      originalPrice,
+      stock,
+      maxOrderQuantity,
+      image,
       secondaryImages,
-      yarnType: yarnType.trim(),
-      craftTimeHours: numCraftHours,
-      careInstructions: careInstructions.trim(),
-      description: description.trim(),
-      tags,
+      newSecondaryUrl,
+      yarnType,
+      craftTimeHours,
+      careInstructions,
+      description,
+      tagsInput,
       isBestSeller,
       isFeatured,
       codAvailability
     };
+    const productPayload = buildProductPayload(currentForm);
 
     if (editProduct) {
-      updateProduct(editProduct.id, productPayload);
+      updateProduct(editProduct.id, getChangedProductFields(productPayload, buildProductPayload(initialForm)));
       showToast(`Updated "${title.trim()}" successfully!`, 'success');
     } else {
       addProduct(productPayload);
