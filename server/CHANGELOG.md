@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/Adia12528/Dopamean/compare/dopamean-backend-v1.2.0...dopamean-backend-v1.2.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* preserve checkout while delivery API deploys ([1173e16](https://github.com/Adia12528/Dopamean/commit/1173e16722c2c4c46639519e4a90765236a392a0))
+
 ## [1.2.0](https://github.com/Adia12528/Dopamean/compare/dopamean-backend-v1.1.0...dopamean-backend-v1.2.0) (2026-10-23)
 
 
