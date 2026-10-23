@@ -3,12 +3,9 @@ import { defineConfig, loadEnv } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
+  const apiBase = env.VITE_API_BASE_URL?.trim() ||
+    (mode === 'production' ? 'https://dopamean-api.onrender.com' : '');
   if (mode === 'production') {
-    const apiBase = env.VITE_API_BASE_URL?.trim();
-    if (!apiBase) {
-      throw new Error('Set VITE_API_BASE_URL to the HTTPS origin of the deployed API before building for production.');
-    }
-
     let apiUrl: URL;
     try {
       apiUrl = new URL(apiBase);
@@ -21,6 +18,9 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    define: {
+      __DOPAMEAN_API_BASE_URL__: JSON.stringify(apiBase)
+    },
     plugins: [react()],
     server: {
       proxy: {

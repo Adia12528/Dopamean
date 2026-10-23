@@ -9,9 +9,11 @@ import type {
   UserProfile
 } from '../types';
 
-const BASE_URL = import.meta.env.DEV
+declare const __DOPAMEAN_API_BASE_URL__: string;
+
+const BASE_URL = import.meta.env.MODE === 'development'
   ? ''
-  : (import.meta.env.VITE_API_BASE_URL || '').replace(/\/+$/, '');
+  : __DOPAMEAN_API_BASE_URL__.replace(/\/+$/, '');
 
 export const getAssetUrl = (url?: string | null): string => {
   if (!url || !url.startsWith('/uploads/')) return url || '';
