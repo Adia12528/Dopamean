@@ -427,6 +427,7 @@ app.get('/api/health', async (_req, res) => {
       service: 'Cozy Loops E-Commerce Production Engine',
       database: process.env.SUPABASE_DB_URL ? 'Supabase PostgreSQL' : 'SQLite 3 (WAL mode)',
       customerAuth: supabaseAuth ? 'Supabase Auth' : 'Legacy app authentication',
+      distanceDeliveryQuotes: true,
       time: new Date().toISOString()
     });
   } catch (err) {

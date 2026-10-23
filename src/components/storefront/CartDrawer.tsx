@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useUser } from '../../context/UserContext';
 import { api, getAssetUrl } from '../../services/api';
@@ -109,7 +109,11 @@ export const CartDrawer: React.FC = () => {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'address' | 'payment'>('address');
   const [addressErrors, setAddressErrors] = useState<Partial<Record<'name' | 'email' | 'phone' | 'address' | 'pincode', string>>>({});
-  const [distanceQuoteState, setDistanceQuoteState] = useState<{ requestKey: string; quote: DeliveryChargeQuote } | null>(null);
+  const [distanceQuoteState, setDistanceQuoteState] = useState<{
+    requestKey: string;
+    quote: DeliveryChargeQuote;
+    usesZoneFallback: boolean;
+  } | null>(null);
   const [distanceQuoteError, setDistanceQuoteError] = useState('');
   const [distanceQuoteRetry, setDistanceQuoteRetry] = useState(0);
   const [orderComplete, setOrderComplete] = useState<Order | null>(null);
@@ -291,14 +295,22 @@ export const CartDrawer: React.FC = () => {
   const distancePricingSettingsKey = JSON.stringify([
     settings.deliveryDistancePricing ?? null,
     settings.deliveryPricing?.fallback ?? null,
-    settings.shippingFee
+    settings.deliveryPricing?.zones ?? null,
+    settings.deliveryPricing?.pincodeOverrides ?? null,
+    settings.shippingFee,
+    freeShippingThreshold
   ]);
   const distanceQuoteRequestKey = `${formData.pincode}:${subtotal}:${distancePricingSettingsKey}`;
   const currentDistanceQuote = distanceQuoteState?.requestKey === distanceQuoteRequestKey
     ? distanceQuoteState.quote
     : null;
+  const isUsingZoneFallback = distanceQuoteState?.requestKey === distanceQuoteRequestKey &&
+    distanceQuoteState.usesZoneFallback;
   const isDistanceQuoteReady = !requiresDistanceQuote || currentDistanceQuote !== null;
-  const zoneDeliveryQuote = calculateDeliveryCharge(settings, formData.pincode, subtotal);
+  const zoneDeliveryQuote = useMemo(
+    () => calculateDeliveryCharge(settings, formData.pincode, subtotal),
+    [settings, formData.pincode, subtotal]
+  );
   const deliveryQuote: DeliveryChargeQuote = requiresDistanceQuote
     ? currentDistanceQuote ?? {
       ...zoneDeliveryQuote,
@@ -320,7 +332,11 @@ export const CartDrawer: React.FC = () => {
       void api.getDeliveryQuote(formData.pincode, subtotal, controller.signal)
         .then(quote => {
           if (!controller.signal.aborted) {
-            setDistanceQuoteState({ requestKey: distanceQuoteRequestKey, quote });
+            setDistanceQuoteState({
+              requestKey: distanceQuoteRequestKey,
+              quote: quote ?? zoneDeliveryQuote,
+              usesZoneFallback: quote === null
+            });
           }
         })
         .catch(error => {
@@ -334,7 +350,7 @@ export const CartDrawer: React.FC = () => {
       clearTimeout(timeout);
       controller.abort();
     };
-  }, [distanceQuoteRequestKey, distanceQuoteRetry, formData.pincode, requiresDistanceQuote, subtotal]);
+  }, [distanceQuoteRequestKey, distanceQuoteRetry, formData.pincode, requiresDistanceQuote, subtotal, zoneDeliveryQuote]);
   const isFreeShipping = deliveryQuote.isFreeShipping;
   const shippingCost = deliveryQuote.amount;
   const total = Math.max(0, subtotal - discount + shippingCost);
@@ -1549,7 +1565,9 @@ export const CartDrawer: React.FC = () => {
                 {!addressErrors.pincode && !isFreeShipping && (
                   <div role="status" aria-live="polite" style={{ color: 'var(--text-muted)', fontSize: '0.74rem', margin: '4px 0 0' }}>
                     {requiresDistanceQuote
-                      ? distanceQuoteError
+                      ? isUsingZoneFallback
+                        ? 'Distance delivery is temporarily unavailable; the existing zone-based charge applies until the delivery API is updated.'
+                        : distanceQuoteError
                         ? <span>
                           Distance delivery quote failed: {distanceQuoteError}{' '}
                           <button type="button" onClick={() => setDistanceQuoteRetry(value => value + 1)} style={{ border: 0, padding: 0, background: 'none', color: 'var(--accent-terracotta)', textDecoration: 'underline', cursor: 'pointer' }}>Retry</button>
@@ -2365,6 +2383,8 @@ export const CartDrawer: React.FC = () => {
                     ? 'Delivery'
                     : requiresDistanceQuote && !isDistanceQuoteReady
                       ? `Distance delivery · calculating${formData.pincode ? ` · ${formData.pincode}` : ''}`
+                      : isUsingZoneFallback
+                        ? `${deliveryQuote.zoneName} Delivery · distance API unavailable`
                       : deliveryQuote.pricingMode === 'distance'
                         ? deliveryQuote.distanceKm !== undefined
                           ? `Distance delivery · approx. ${deliveryQuote.distanceKm.toFixed(1)} km straight-line`

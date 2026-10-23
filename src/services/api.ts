@@ -48,9 +48,10 @@ export const api = {
     pincode: string,
     subtotal: number,
     signal?: AbortSignal
-  ): Promise<DeliveryChargeQuote> => {
+  ): Promise<DeliveryChargeQuote | null> => {
     const params = new URLSearchParams({ pincode, subtotal: String(subtotal) });
     const res = await fetch(`${BASE_URL}/api/delivery/quote?${params.toString()}`, { signal });
+    if (res.status === 404) return null;
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to calculate the delivery charge.');
