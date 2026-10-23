@@ -8,6 +8,7 @@ import multer from 'multer';
 import Razorpay from 'razorpay';
 import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
+import { IMAGE_UPLOAD_PURPOSES, containsImageReference, getManagedImageObjectKey } from './image-storage.js';
 import {
   createPayuRequestHash,
   createPayuVerifyHash,
@@ -747,6 +748,26 @@ async function storePublicImage(file) {
   return { url: `/uploads/${filename}`, filename, size: file.size, storage: 'local' };
 }
 
+async function isImageReferenced(imageUrl) {
+  const [settings, products, offers, orders] = await Promise.all([
+    db.getSettings(),
+    db.getProducts(),
+    db.getOffers(),
+    db.getOrders()
+  ]);
+  return [settings, ...products, ...offers, ...orders].some(record => containsImageReference(record, imageUrl));
+}
+
+function imageUploadMiddleware(req, res, next) {
+  upload.single('image')(req, res, error => {
+    if (!error) return next();
+    if (error instanceof multer.MulterError && error.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'Image files must be 5 MB or smaller.' });
+    }
+    return res.status(400).json({ error: error.message || 'Could not read the image file.' });
+  });
+}
+
 async function storePrivatePaymentProof(file) {
   const extension = getImageExtension(file.buffer);
   if (!extension) throw uploadError(400, 'Unsupported or invalid image file.');
@@ -794,16 +815,61 @@ function isStoredImageUrl(value) {
   }
 }
 
-app.post('/api/upload', requireAdmin, uploadLimit, upload.single('image'), async (req, res) => {
+app.post('/api/upload', requireAdmin, uploadLimit, imageUploadMiddleware, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No image file uploaded' });
+    }
+    const purpose = String(req.body?.purpose || '');
+    const uploadRule = Object.hasOwn(IMAGE_UPLOAD_PURPOSES, purpose) ? IMAGE_UPLOAD_PURPOSES[purpose] : null;
+    if (!uploadRule) {
+      return res.status(400).json({ error: 'Choose a valid image type before uploading.' });
+    }
+    if (req.file.size > uploadRule.maxBytes) {
+      return res.status(413).json({
+        error: `${uploadRule.label} must be ${uploadRule.maxBytes === 300 * 1024 ? '300 KB' : `${uploadRule.maxBytes / (1024 * 1024)} MB`} or smaller.`
+      });
     }
     const stored = await storePublicImage(req.file);
     res.json({ success: true, ...stored });
   } catch (err) {
     console.error('Image upload error:', err);
     res.status(err.statusCode || 500).json({ error: err.message || 'Failed to upload image' });
+  }
+});
+
+app.delete('/api/images', requireAdmin, async (req, res) => {
+  try {
+    const imageUrl = String(req.body?.url || '');
+    const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'media';
+    const objectKey = getManagedImageObjectKey(imageUrl, process.env.SUPABASE_URL, bucketName);
+    const localMatch = !isProduction && /^\/uploads\/(crochet_[a-f0-9-]+\.(?:jpg|png|gif|webp))$/i.exec(imageUrl);
+    if (!objectKey && !localMatch) {
+      return res.json({ deleted: false, managed: false, referenced: false });
+    }
+    if (await isImageReferenced(imageUrl)) {
+      return res.json({ deleted: false, managed: true, referenced: true });
+    }
+    if (localMatch) {
+      try {
+        await fs.promises.unlink(path.join(UPLOADS_DIR, localMatch[1]));
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      return res.json({ deleted: true, managed: true, referenced: false });
+    }
+    if (!supabaseAdmin) {
+      return res.json({ deleted: false, managed: false, referenced: false });
+    }
+    const { error } = await supabaseAdmin.storage.from(bucketName).remove([objectKey]);
+    if (error) {
+      console.error('Could not remove an unused public image:', error.message);
+      return res.status(502).json({ error: 'The image is no longer referenced, but storage cleanup failed.' });
+    }
+    res.json({ deleted: true, managed: true, referenced: false });
+  } catch (error) {
+    console.error('Image cleanup failed:', error);
+    res.status(500).json({ error: 'Could not safely clean up the unused image.' });
   }
 });
 

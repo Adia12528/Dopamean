@@ -3,6 +3,7 @@ import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import type { Product } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { api, getAssetUrl } from '../../services/api';
+import { cleanupUnusedImages } from '../../lib/imageCleanup';
 import { X, Upload, Check, Sparkles } from 'lucide-react';
 
 interface AddProductModalProps {
@@ -112,12 +113,21 @@ const getChangedProductFields = (
 };
 
 export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClose, editProduct }) => {
-  useBackNavigationLayer('add-product-modal', isOpen, onClose);
   const { addProduct, updateProduct, showToast, settings } = useStore();
   const initialForm = buildInitialFormState(editProduct);
 
   const mainFileInputRef = useRef<HTMLInputElement>(null);
   const secondaryFileInputRef = useRef<HTMLInputElement>(null);
+  const uploadedImageUrls = useRef<string[]>([]);
+  const closeModal = () => {
+    const uncommittedUrls = uploadedImageUrls.current;
+    uploadedImageUrls.current = [];
+    void cleanupUnusedImages(uncommittedUrls).catch(error => {
+      showToast(`Could not clean up an unused image: ${error instanceof Error ? error.message : 'Try again later.'}`, 'error');
+    });
+    onClose();
+  };
+  useBackNavigationLayer('add-product-modal', isOpen, closeModal);
 
   const [title, setTitle] = useState(initialForm.title);
   const [tagline, setTagline] = useState(initialForm.tagline);
@@ -151,7 +161,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     if (!file) return;
     try {
       setIsMainUploading(true);
-      const uploadedUrl = await api.uploadImage(file);
+      const uploadedUrl = await api.uploadImage(file, 'product');
+      uploadedImageUrls.current.push(uploadedUrl);
       setImage(uploadedUrl);
       setValidationErrors(prev => ({ ...prev, image: '' }));
     } catch (error) {
@@ -167,7 +178,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     if (!file) return;
     try {
       setIsSecondaryUploading(true);
-      const uploadedUrl = await api.uploadImage(file);
+      const uploadedUrl = await api.uploadImage(file, 'product');
+      uploadedImageUrls.current.push(uploadedUrl);
       setSecondaryImages(prev => [...prev, uploadedUrl]);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Failed to upload secondary angle image');
@@ -187,7 +199,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     setSecondaryImages(prev => prev.filter((_, i) => i !== idx));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsedPrice = Number(price);
     const parsedOriginalPrice = originalPrice.trim() ? Number(originalPrice) : undefined;
@@ -195,7 +207,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     const parsedMaxOrderQuantity = maxOrderQuantity.trim() ? Number(maxOrderQuantity) : undefined;
     const errors: Record<string, string> = {};
     if (!title.trim() && !(editProduct && title === initialForm.title)) errors.title = 'Enter a product title.';
-    if (!image.trim() && !(editProduct && image === initialForm.image)) errors.image = 'Upload or enter a product image URL.';
+    if (!image.trim() && !editProduct) errors.image = 'Upload or enter a product image URL.';
     if ((!price.trim() || !Number.isInteger(parsedPrice) || parsedPrice < 0) &&
       !(editProduct && price === initialForm.price)) {
       errors.price = 'Enter a whole-number selling price of 0 or more.';
@@ -240,15 +252,32 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
     };
     const productPayload = buildProductPayload(currentForm);
 
-    if (editProduct) {
-      updateProduct(editProduct.id, getChangedProductFields(productPayload, buildProductPayload(initialForm)));
-      showToast(`Updated "${title.trim()}" successfully!`, 'success');
-    } else {
-      addProduct(productPayload);
-      showToast(`Added "${title.trim()}" to catalog!`, 'success');
+    try {
+      if (editProduct) {
+        const saved = await updateProduct(editProduct.id, getChangedProductFields(productPayload, buildProductPayload(initialForm)));
+        if (!saved) return;
+      } else {
+        await addProduct(productPayload);
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not save the product.', 'error');
+      return;
     }
 
-    onClose();
+    const currentImageUrls = new Set([productPayload.image, ...productPayload.secondaryImages].filter(Boolean));
+    const oldImages = [editProduct?.image, ...(editProduct?.secondaryImages || [])]
+      .filter((url): url is string => Boolean(url && !currentImageUrls.has(url)));
+    const unusedUploads = uploadedImageUrls.current.filter(url => !currentImageUrls.has(url));
+    uploadedImageUrls.current = [];
+    try {
+      const cleanup = await cleanupUnusedImages([...oldImages, ...unusedUploads]);
+      if (cleanup.retained > 0) {
+        showToast('Saved. An old image still used by an order, setting, or other item was kept.', 'info');
+      }
+    } catch (error) {
+      showToast(`Product saved, but image cleanup failed: ${error instanceof Error ? error.message : 'Try again later.'}`, 'error');
+    }
+    closeModal();
   };
 
   // Discount calculation
@@ -260,7 +289,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
   return (
     <div
       className="mobile-modal-overlay"
-      onClick={onClose}
+      onClick={closeModal}
       style={{
         position: 'fixed',
         inset: 0,
@@ -318,7 +347,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
           </div>
 
           <button
-            onClick={onClose}
+            onClick={closeModal}
             style={{
               padding: '8px',
               borderRadius: '50%',
@@ -362,7 +391,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   <input
                     type="file"
                     ref={mainFileInputRef}
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
                     onChange={handleMainFileUpload}
                     style={{ display: 'none' }}
                   />
@@ -378,7 +407,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                       <Upload size={14} />
                       <span>{isMainUploading ? 'Uploading...' : 'Upload from Device'}</span>
                     </button>
-                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>JPG, PNG, WebP</span>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>JPG, PNG, GIF, WebP · Max 300 KB</span>
                   </div>
 
                   <input
@@ -398,6 +427,11 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                       backgroundColor: '#FFFFFF'
                     }}
                   />
+                  {image && (
+                    <button type="button" className="btn-secondary" onClick={() => setImage('')} style={{ alignSelf: 'flex-start', padding: '6px 10px', fontSize: '0.76rem' }}>
+                      Remove main image
+                    </button>
+                  )}
                   {validationErrors.image && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: 0 }}>{validationErrors.image}</p>}
                 </div>
               </div>
@@ -482,7 +516,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                 <input
                   type="file"
                   ref={secondaryFileInputRef}
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
                   onChange={handleSecondaryFileUpload}
                   style={{ display: 'none' }}
                 />
@@ -494,7 +528,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
                   style={{ padding: '7px 14px', fontSize: '0.8rem' }}
                 >
                   <Upload size={13} />
-                  <span>{isSecondaryUploading ? 'Uploading...' : '+ Upload Extra Angle Photo'}</span>
+                  <span>{isSecondaryUploading ? 'Uploading...' : '+ Upload Extra Angle Photo (max 300 KB)'}</span>
                 </button>
 
                 <div style={{ display: 'flex', gap: '6px', flex: 1, minWidth: '220px' }}>
@@ -928,7 +962,7 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
           }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={closeModal}
               className="btn-secondary"
               style={{ padding: '9px 20px', fontSize: '0.86rem' }}
             >

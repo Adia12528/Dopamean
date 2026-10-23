@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { api, getAssetUrl } from '../../services/api';
+import { cleanupUnusedImages } from '../../lib/imageCleanup';
 import { 
   Sliders, 
   Save, 
@@ -51,12 +52,24 @@ const COLOR_PRESETS = [
 ];
 
 export const StudioSettings: React.FC = () => {
-  const { settings, products, updateSettings, resetDatabase, loadSampleTemplate, setViewMode } = useStore();
+  const { settings, products, updateSettings, resetDatabase, loadSampleTemplate, setViewMode, showToast } = useStore();
   const minimumServerPasscodeLength = import.meta.env.PROD ? 12 : 6;
   
   const heroFileInputRef = useRef<HTMLInputElement>(null);
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
   const upiQrFileInputRef = useRef<HTMLInputElement>(null);
+  const pendingUploadedImages = useRef<Record<'heroImage' | 'aboutImage' | 'upiQrImage', string[]>>({
+    heroImage: [],
+    aboutImage: [],
+    upiQrImage: []
+  });
+  useEffect(() => () => {
+    const uncommittedUrls = Object.values(pendingUploadedImages.current).flat();
+    if (uncommittedUrls.length === 0) return;
+    void cleanupUnusedImages(uncommittedUrls).catch(error => {
+      console.error('Could not clean up uncommitted Studio image uploads:', error);
+    });
+  }, []);
 
   const [form, setForm] = useState(() => ({
     ...settings,
@@ -334,7 +347,7 @@ export const StudioSettings: React.FC = () => {
         }));
         return;
       }
-      if (!form.upiQrImage) {
+      if (!form.upiQrImage && form.paymentUpiEnabled !== false) {
         setScopedSaveStates(prev => ({
           ...prev,
           upi: { isSaving: false, error: 'Upload your UPI QR image before saving.' }
@@ -368,6 +381,17 @@ export const StudioSettings: React.FC = () => {
     }));
     try {
       await updateSettings(payload);
+      let cleanupWarning = '';
+      if (section === 'upi' && settings.upiQrImage !== payload.upiQrImage) {
+        const unusedUploads = pendingUploadedImages.current.upiQrImage.filter(url => url !== payload.upiQrImage);
+        try {
+          const cleanup = await cleanupUnusedImages([settings.upiQrImage, ...unusedUploads]);
+          if (cleanup.retained > 0) cleanupWarning = 'An old image is still used by an order, setting, or other item and was kept.';
+        } catch (error) {
+          cleanupWarning = `Settings saved, but image cleanup failed: ${error instanceof Error ? error.message : 'Try again later.'}`;
+        }
+        pendingUploadedImages.current.upiQrImage = [];
+      }
       if (section === 'policies') {
         setForm(previous => ({ ...previous, storePolicyVersion: nextPolicyVersion }));
       }
@@ -379,7 +403,7 @@ export const StudioSettings: React.FC = () => {
       }
       setScopedSaveStates(prev => ({
         ...prev,
-        [section]: { isSaving: false, error: '' }
+        [section]: { isSaving: false, error: cleanupWarning }
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : `Could not save ${sectionLabel}.`;
@@ -402,7 +426,8 @@ export const StudioSettings: React.FC = () => {
     try {
       setUpiQrUploadError('');
       setIsUpiQrUploading(true);
-      const url = await api.uploadImage(file);
+      const url = await api.uploadImage(file, 'payment-qr');
+      pendingUploadedImages.current.upiQrImage.push(url);
       handleChange('upiQrImage', url);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Could not upload the UPI QR image.';
@@ -541,10 +566,11 @@ export const StudioSettings: React.FC = () => {
     if (!file) return;
     try {
       setIsHeroUploading(true);
-      const url = await api.uploadImage(file);
+      const url = await api.uploadImage(file, 'storefront');
+      pendingUploadedImages.current.heroImage.push(url);
       handleChange('heroImage', url);
-    } catch {
-      alert('Failed to upload hero image');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to upload hero image');
     } finally {
       setIsHeroUploading(false);
     }
@@ -555,10 +581,11 @@ export const StudioSettings: React.FC = () => {
     if (!file) return;
     try {
       setIsAboutUploading(true);
-      const url = await api.uploadImage(file);
+      const url = await api.uploadImage(file, 'storefront');
+      pendingUploadedImages.current.aboutImage.push(url);
       handleChange('aboutImage', url);
-    } catch {
-      alert('Failed to upload artisan story photo');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to upload artisan story photo');
     } finally {
       setIsAboutUploading(false);
     }
@@ -722,6 +749,24 @@ export const StudioSettings: React.FC = () => {
 
     try {
       await updateSettings(payload);
+      const unusedUploads = [
+        ...pendingUploadedImages.current.heroImage.filter(url => url !== payload.heroImage),
+        ...pendingUploadedImages.current.aboutImage.filter(url => url !== payload.aboutImage)
+      ];
+      try {
+        const cleanup = await cleanupUnusedImages([
+          settings.heroImage !== payload.heroImage ? settings.heroImage : undefined,
+          settings.aboutImage !== payload.aboutImage ? settings.aboutImage : undefined,
+          ...unusedUploads
+        ]);
+        if (cleanup.retained > 0) {
+          showToast('Settings saved. An old image still used by an order, setting, or other item was kept.', 'info');
+        }
+      } catch (error) {
+        showToast(`Settings saved, but image cleanup failed: ${error instanceof Error ? error.message : 'Try again later.'}`, 'error');
+      }
+      pendingUploadedImages.current.heroImage = [];
+      pendingUploadedImages.current.aboutImage = [];
       setForm(prev => ({
         ...prev,
         razorpayKeySecret: '',
@@ -1403,7 +1448,7 @@ export const StudioSettings: React.FC = () => {
                     <input
                       type="file"
                       ref={heroFileInputRef}
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
                       onChange={handleHeroUpload}
                       style={{ display: 'none' }}
                     />
@@ -1415,7 +1460,7 @@ export const StudioSettings: React.FC = () => {
                       style={{ padding: '8px 16px', fontSize: '0.82rem' }}
                     >
                       <Upload size={14} />
-                      <span>{isHeroUploading ? 'Uploading...' : 'Upload Image from Device'}</span>
+                      <span>{isHeroUploading ? 'Uploading...' : 'Upload Image (max 5 MB)'}</span>
                     </button>
 
                     <input
@@ -1435,6 +1480,7 @@ export const StudioSettings: React.FC = () => {
                     />
 
                     {form.heroImage && (
+                      <>
                       <div style={{
                         width: '54px',
                         height: '54px',
@@ -1449,6 +1495,10 @@ export const StudioSettings: React.FC = () => {
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       </div>
+                      <button type="button" className="btn-secondary" onClick={() => handleChange('heroImage', '')} style={{ padding: '6px 10px', fontSize: '0.76rem' }}>
+                        Remove image
+                      </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -1687,7 +1737,7 @@ export const StudioSettings: React.FC = () => {
                     <input
                       type="file"
                       ref={aboutFileInputRef}
-                      accept="image/*"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
                       onChange={handleAboutUpload}
                       style={{ display: 'none' }}
                     />
@@ -1699,7 +1749,7 @@ export const StudioSettings: React.FC = () => {
                       style={{ padding: '8px 16px', fontSize: '0.82rem' }}
                     >
                       <Upload size={14} />
-                      <span>{isAboutUploading ? 'Uploading...' : 'Upload Photo'}</span>
+                      <span>{isAboutUploading ? 'Uploading...' : 'Upload Photo (max 5 MB)'}</span>
                     </button>
 
                     <input
@@ -1719,6 +1769,7 @@ export const StudioSettings: React.FC = () => {
                     />
 
                     {form.aboutImage && (
+                      <>
                       <div style={{
                         width: '54px',
                         height: '54px',
@@ -1733,6 +1784,10 @@ export const StudioSettings: React.FC = () => {
                           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         />
                       </div>
+                      <button type="button" className="btn-secondary" onClick={() => handleChange('aboutImage', '')} style={{ padding: '6px 10px', fontSize: '0.76rem' }}>
+                        Remove image
+                      </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -2843,7 +2898,7 @@ export const StudioSettings: React.FC = () => {
                     <span>{isUpiQrUploading ? 'Uploading QR image…' : form.upiQrImage ? 'Replace QR image' : 'Upload QR image'}</span>
                   </button>
                   <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '7px 0 0' }}>
-                    PNG, JPG, GIF, or WebP. Your QR image is uploaded using the same secure image storage as product photos.
+                    PNG, JPG, GIF, or WebP. Max 5 MB. Your QR image is uploaded using the same secure image storage as product photos.
                   </p>
                   {upiQrUploadError && (
                     <p role="alert" style={{ margin: '8px 0 0', fontSize: '0.8rem', color: '#B91C1C' }}>
@@ -2868,6 +2923,9 @@ export const StudioSettings: React.FC = () => {
                     <p style={{ margin: '8px 0 0', textAlign: 'center', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
                       QR image preview
                     </p>
+                    <button type="button" className="btn-secondary" onClick={() => handleChange('upiQrImage', '')} style={{ display: 'block', margin: '8px auto 0', padding: '6px 10px', fontSize: '0.76rem' }}>
+                      Remove QR image
+                    </button>
                   </div>
                 )}
               </div>

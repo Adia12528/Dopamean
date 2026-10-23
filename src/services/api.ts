@@ -506,8 +506,21 @@ export const api = {
   },
 
   // IMAGE UPLOAD
-  uploadImage: async (file: File): Promise<string> => {
+  uploadImage: async (
+    file: File,
+    purpose: 'product' | 'offer' | 'storefront' | 'payment-qr'
+  ): Promise<string> => {
+    const maxBytes = purpose === 'product'
+      ? 300 * 1024
+      : purpose === 'offer'
+        ? 1024 * 1024
+        : 5 * 1024 * 1024;
+    const limitLabel = purpose === 'product' ? '300 KB' : purpose === 'offer' ? '1 MB' : '5 MB';
+    if (file.size > maxBytes) {
+      throw new Error(`Image must be ${limitLabel} or smaller.`);
+    }
     const formData = new FormData();
+    formData.append('purpose', purpose);
     formData.append('image', file);
     const res = await adminFetch(`${BASE_URL}/api/upload`, {
       method: 'POST',
@@ -538,5 +551,18 @@ export const api = {
       }
     }
     return uploadedUrl;
+  },
+
+  deleteImage: async (url: string): Promise<{ deleted: boolean; managed: boolean; referenced: boolean }> => {
+    const res = await adminFetch(`${BASE_URL}/api/images`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url })
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null) as { error?: unknown } | null;
+      throw new Error(typeof errorData?.error === 'string' ? errorData.error : 'Could not clean up the unused image.');
+    }
+    return res.json();
   }
 };

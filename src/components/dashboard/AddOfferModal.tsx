@@ -3,6 +3,7 @@ import { useBackNavigationLayer } from '../../context/BackNavigationContext';
 import type { Offer } from '../../types';
 import { useStore } from '../../context/StoreContext';
 import { api, getAssetUrl } from '../../services/api';
+import { cleanupUnusedImages } from '../../lib/imageCleanup';
 import { X, Upload, Check } from 'lucide-react';
 
 interface AddOfferModalProps {
@@ -91,9 +92,18 @@ const getChangedOfferFields = (
 };
 
 export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, editOffer }) => {
-  useBackNavigationLayer('add-offer-modal', isOpen, onClose);
   const { addOffer, updateOffer, showToast, settings } = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadedImageUrls = useRef<string[]>([]);
+  const closeModal = () => {
+    const uncommittedUrls = uploadedImageUrls.current;
+    uploadedImageUrls.current = [];
+    void cleanupUnusedImages(uncommittedUrls).catch(error => {
+      showToast(`Could not clean up an unused image: ${error instanceof Error ? error.message : 'Try again later.'}`, 'error');
+    });
+    onClose();
+  };
+  useBackNavigationLayer('add-offer-modal', isOpen, closeModal);
 
   const initialForm = buildInitialOfferFormState(editOffer);
   const [title, setTitle] = useState(initialForm.title);
@@ -114,7 +124,8 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
     const file = e.target.files?.[0];
     if (file) {
       try {
-        const uploadedUrl = await api.uploadImage(file);
+        const uploadedUrl = await api.uploadImage(file, 'offer');
+        uploadedImageUrls.current.push(uploadedUrl);
         setImage(uploadedUrl);
       } catch (error) {
         showToast(error instanceof Error ? error.message : 'Failed to upload offer image.', 'error');
@@ -122,14 +133,14 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const parsedDiscountValue = Number(discountValue);
     const parsedMinOrderValue = minOrderValue.trim() ? Number(minOrderValue) : undefined;
     const errors: Record<string, string> = {};
     if (!title.trim() && !(editOffer && title === initialForm.title)) errors.title = 'Enter an offer title.';
     if (!code.trim() && !(editOffer && code === initialForm.code)) errors.code = 'Enter a promo code.';
-    if (!image.trim() && !(editOffer && image === initialForm.image)) errors.image = 'Choose a banner image or enter an image URL.';
+    if (!image.trim() && !editOffer) errors.image = 'Choose a banner image or enter an image URL.';
     const unchangedDiscountValue = Boolean(editOffer && discountValue === initialForm.discountValue);
     if ((!discountValue.trim() || !Number.isFinite(parsedDiscountValue) || parsedDiscountValue <= 0) &&
       !unchangedDiscountValue) {
@@ -163,19 +174,40 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
     };
     const offerPayload = buildOfferPayload(currentForm);
 
-    if (editOffer) {
-      updateOffer(editOffer.id, getChangedOfferFields(offerPayload, buildOfferPayload(initialForm)));
-    } else {
-      addOffer(offerPayload);
+    try {
+      if (editOffer) {
+        const saved = await updateOffer(editOffer.id, getChangedOfferFields(offerPayload, buildOfferPayload(initialForm)));
+        if (!saved) return;
+      } else {
+        await addOffer(offerPayload);
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not save the offer.', 'error');
+      return;
     }
 
-    onClose();
+    const hasCurrentImage = Boolean(offerPayload.image);
+    const unusedUploads = uploadedImageUrls.current.filter(url => url !== offerPayload.image);
+    uploadedImageUrls.current = [];
+    try {
+      const cleanup = await cleanupUnusedImages([
+        editOffer && editOffer.image !== offerPayload.image ? editOffer.image : undefined,
+        ...unusedUploads
+      ]);
+      if (cleanup.retained > 0) {
+        showToast('Saved. The old image is still used by an order, setting, or other item and was kept.', 'info');
+      }
+    } catch (error) {
+      showToast(`Offer saved, but image cleanup failed: ${error instanceof Error ? error.message : 'Try again later.'}`, 'error');
+    }
+    if (!hasCurrentImage) showToast('Offer image removed.', 'success');
+    closeModal();
   };
 
   return (
     <div
       className="mobile-modal-overlay"
-      onClick={onClose}
+      onClick={closeModal}
       style={{
         position: 'fixed',
         inset: 0,
@@ -232,7 +264,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
           </div>
 
           <button
-            onClick={onClose}
+            onClick={closeModal}
             style={{
               padding: '8px',
               borderRadius: '50%',
@@ -266,14 +298,20 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
               marginBottom: '14px',
               boxShadow: 'var(--shadow-sm)'
             }}>
-              <img
-                src={getAssetUrl(image)}
-                alt="Banner preview"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = OFFER_BANNER_PRESETS[0].url;
-                }}
-              />
+              {image ? (
+                <img
+                  src={getAssetUrl(image)}
+                  alt="Banner preview"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = OFFER_BANNER_PRESETS[0].url;
+                  }}
+                />
+              ) : (
+                <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', color: 'var(--text-muted)', backgroundColor: 'var(--bg-surface-soft)' }}>
+                  No banner image selected
+                </div>
+              )}
               <div style={{
                 position: 'absolute',
                 inset: 0,
@@ -307,7 +345,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
               <input
                 type="file"
                 ref={fileInputRef}
-                accept="image/*"
+                accept="image/jpeg,image/png,image/gif,image/webp"
                 onChange={handleFileUpload}
                 style={{ display: 'none' }}
               />
@@ -327,8 +365,13 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
                 }}
               >
                 <Upload size={15} />
-                <span>Upload Banner File</span>
+                <span>Upload Banner File (max 1 MB)</span>
               </button>
+              {image && (
+                <button type="button" className="btn-secondary" onClick={() => setImage('')} style={{ padding: '8px 12px', fontSize: '0.78rem' }}>
+                  Remove image
+                </button>
+              )}
 
               <input
                 type="text"
@@ -585,7 +628,7 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
           <div className="dashboard-modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
             <button
               type="button"
-              onClick={onClose}
+              onClick={closeModal}
               className="btn-secondary"
             >
               Cancel

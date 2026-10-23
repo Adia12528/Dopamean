@@ -337,7 +337,7 @@ export const HeroBanner: React.FC = () => {
             <div className="liquid-static-fallback" aria-hidden="true" />
             <StorefrontImage
               className="hero-parallax-image"
-              src={getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp')}
+              src={getAssetUrl(settings.heroImage ?? '/uploads/hero_landing.webp')}
               alt={settings.storeName || 'Handcrafted Crochet Accessories'}
               width={1400}
               height={1050}

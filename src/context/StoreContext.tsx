@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import type { Product, Offer, Order, OrderPolicyConsentRequest, OrderCreatePayload, CartItem, ViewMode, DashboardTab, StoreSettings, Review, AdminRole } from '../types';
 import { api } from '../services/api';
 import { calculateDeliveryCharge } from '../lib/deliveryPricing';
+import { cleanupUnusedImages } from '../lib/imageCleanup';
 
 const GUEST_CART_KEY = 'dopamean_cart';
 
@@ -143,11 +144,11 @@ interface StoreContextType {
 
   updateSettings: (newSettings: Partial<StoreSettings>) => Promise<void>;
   addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'rating' | 'reviewsCount'>) => Promise<Product>;
-  updateProduct: (id: string, updates: Partial<Product>) => Promise<void>;
+  updateProduct: (id: string, updates: Partial<Product>) => Promise<boolean>;
   deleteProduct: (id: string) => Promise<void>;
 
   addOffer: (offer: Omit<Offer, 'id'>) => Promise<Offer>;
-  updateOffer: (id: string, updates: Partial<Offer>) => Promise<void>;
+  updateOffer: (id: string, updates: Partial<Offer>) => Promise<boolean>;
   deleteOffer: (id: string) => Promise<void>;
   toggleOfferStatus: (id: string) => Promise<void>;
 
@@ -453,17 +454,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setSelectedProductForModal(updated);
       }
       showToast(`Updated "${updated.title}"`);
+      return true;
     } catch {
       showToast('Failed to update product', 'error');
+      return false;
     }
   };
 
   const deleteProduct = async (id: string) => {
+    const product = products.find(item => item.id === id);
     try {
       await api.deleteProduct(id);
       setProducts(prev => prev.filter(p => p.id !== id));
       if (selectedProductForModal?.id === id) {
         setSelectedProductForModal(null);
+      }
+      try {
+        const cleanup = await cleanupUnusedImages([product?.image, ...(product?.secondaryImages || [])]);
+        if (cleanup.retained > 0) {
+          showToast('Product removed. Images still used by an order, setting, or other item were kept.', 'info');
+          return;
+        }
+      } catch (error) {
+        showToast(`Product removed, but image cleanup failed: ${error instanceof Error ? error.message : 'Try again later.'}`, 'error');
+        return;
       }
       showToast('Product removed from catalog', 'info');
     } catch {
@@ -484,17 +498,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const updated = await api.updateOffer(id, updates);
       setOffers(prev => prev.map(o => (o.id === id ? updated : o)));
       showToast(`Promo "${updated.code}" updated`);
+      return true;
     } catch {
       showToast('Failed to update offer', 'error');
+      return false;
     }
   };
 
   const deleteOffer = async (id: string) => {
+    const offer = offers.find(item => item.id === id);
     try {
       await api.deleteOffer(id);
       setOffers(prev => prev.filter(o => o.id !== id));
       if (activePromo?.id === id) {
         setActivePromo(null);
+      }
+      try {
+        const cleanup = await cleanupUnusedImages([offer?.image]);
+        if (cleanup.retained > 0) {
+          showToast('Offer removed. Its image is still used by an order, setting, or other item and was kept.', 'info');
+          return;
+        }
+      } catch (error) {
+        showToast(`Offer removed, but image cleanup failed: ${error instanceof Error ? error.message : 'Try again later.'}`, 'error');
+        return;
       }
       showToast('Offer campaign removed', 'info');
     } catch {

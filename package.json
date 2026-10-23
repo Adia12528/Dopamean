@@ -1,7 +1,7 @@
 {
   "name": "dopamean",
   "private": true,
-  "version": "1.1.2",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n \"BACKEND,FRONTEND\" -c \"magenta.bold,cyan.bold\" \"npm run server\" \"npm run client\"",
@@ -10,6 +10,7 @@
     "client": "vite",
     "build": "tsc -b && vite build",
     "test:delivery": "node --test server/delivery-pricing.test.js",
+    "test:images": "node --test server/image-storage.test.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

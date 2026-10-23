@@ -20,6 +20,7 @@ export const StorefrontImage: React.FC<StorefrontImageProps> = ({
   quality = 76,
   loading = 'lazy',
   decoding = 'async',
+  alt = '',
   className = '',
   style,
   onLoad,
@@ -52,9 +53,28 @@ export const StorefrontImage: React.FC<StorefrontImageProps> = ({
     .filter(Boolean)
     .join(' ');
 
+  if (!src) {
+    return (
+      <div
+        role="img"
+        aria-label={alt || undefined}
+        aria-hidden={alt ? undefined : true}
+        className={['storefront-image', 'is-empty', className].filter(Boolean).join(' ')}
+        style={{
+          display: 'block',
+          width: '100%',
+          height: '100%',
+          backgroundColor: 'var(--bg-surface-soft)',
+          ...style
+        }}
+      />
+    );
+  }
+
   return (
     <img
       {...imageProps}
+      alt={alt}
       className={imageClassName}
       src={currentSrc}
       width={width}

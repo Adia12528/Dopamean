@@ -54,12 +54,12 @@ const MainApp: React.FC = () => {
   const backSection = viewMode === 'store' ? 'store' : isDeliveryDashboard ? 'delivery' : 'studio';
   const splashStartedAt = useRef<number | null>(null);
   const splashImageUrl = getStorefrontImageUrl(
-    getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp'),
+    getAssetUrl(settings.heroImage ?? '/uploads/hero_landing.webp'),
     { width: 1400, quality: 80 }
   );
-  const isSplashImageReady = loadedSplashImageUrl === splashImageUrl || failedSplashImageUrl === splashImageUrl;
+  const isSplashImageReady = !splashImageUrl || loadedSplashImageUrl === splashImageUrl || failedSplashImageUrl === splashImageUrl;
 
-  if (viewMode === 'store' || shouldShowSplash) {
+  if (splashImageUrl && (viewMode === 'store' || shouldShowSplash)) {
     preload(splashImageUrl, { as: 'image', fetchPriority: 'high' });
   }
 
@@ -103,7 +103,7 @@ const MainApp: React.FC = () => {
           )}
           <StorefrontImage
             className="app-splash-image"
-            src={getAssetUrl(settings.heroImage || '/uploads/hero_landing.webp')}
+            src={getAssetUrl(settings.heroImage ?? '/uploads/hero_landing.webp')}
             alt=""
             width={1400}
             height={1050}

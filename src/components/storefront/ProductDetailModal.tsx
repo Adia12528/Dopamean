@@ -109,7 +109,7 @@ export const ProductDetailModal: React.FC = () => {
   if (!selectedProductForModal) return null;
 
   const product = selectedProductForModal;
-  const allImages = [product.image, ...(product.secondaryImages || [])];
+  const allImages = [product.image, ...(product.secondaryImages || [])].filter(Boolean);
   const discountPercent = product.originalPrice 
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0;
@@ -205,7 +205,7 @@ export const ProductDetailModal: React.FC = () => {
             border: '1px solid var(--border-light)'
           }}>
             <StorefrontImage
-              src={getAssetUrl(allImages[activeImageIndex] || product.image)}
+              src={getAssetUrl(allImages[activeImageIndex])}
               alt={product.title}
               width={1200}
               height={1200}
