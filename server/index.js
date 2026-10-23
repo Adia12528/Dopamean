@@ -10,6 +10,10 @@ import { createClient } from '@supabase/supabase-js';
 import cors from 'cors';
 import { IMAGE_UPLOAD_PURPOSES, containsImageReference, getManagedImageObjectKey } from './image-storage.js';
 import {
+  calculateDeliveryQuote,
+  validateDeliveryDistancePricing
+} from './delivery-pricing.js';
+import {
   createPayuRequestHash,
   createPayuVerifyHash,
   decryptPayuSecret,
@@ -140,6 +144,7 @@ const uploadLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, keyPrefix: 'u
 const orderLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, keyPrefix: 'order-create' });
 const reviewLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'review-create' });
 const paymentLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'payment' });
+const deliveryQuoteLimit = rateLimit({ windowMs: 60 * 1000, max: 120, keyPrefix: 'delivery-quote' });
 
 function updateEnvFile(updates) {
   try {
@@ -918,6 +923,21 @@ app.get('/api/settings', async (req, res) => {
   }
 });
 
+app.get('/api/delivery/quote', deliveryQuoteLimit, async (req, res) => {
+  const pincode = String(req.query.pincode || '');
+  const subtotal = Number(req.query.subtotal);
+  if (!/^[1-9]\d{5}$/.test(pincode) || !Number.isFinite(subtotal) || subtotal < 0) {
+    return res.status(400).json({ error: 'A valid Indian pincode and non-negative subtotal are required.' });
+  }
+  try {
+    const settings = await db.getSettings();
+    res.json(calculateDeliveryQuote(settings, pincode, subtotal));
+  } catch (err) {
+    console.error('Delivery quote error:', err);
+    res.status(500).json({ error: 'Could not calculate the delivery charge.' });
+  }
+});
+
 app.put('/api/settings', requireAdmin, async (req, res) => {
   try {
     const changes = { ...req.body };
@@ -946,6 +966,10 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
       changes.payuMerchantKey = '';
       changes.payuMerchantSalt = '';
       changes.payuCredentialsCleared = true;
+    }
+    if (changes.deliveryDistancePricing !== undefined) {
+      const distancePricingError = validateDeliveryDistancePricing(changes.deliveryDistancePricing);
+      if (distancePricingError) return res.status(400).json({ error: distancePricingError });
     }
 
     // 1. Studio Admin Passcode Update

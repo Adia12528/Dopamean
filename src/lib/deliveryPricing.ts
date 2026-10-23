@@ -1,4 +1,10 @@
-import type { DeliveryPincodePrefixRange, DeliveryPricing, StoreSettings } from '../types';
+import type {
+  DeliveryChargeQuote,
+  DeliveryDistancePricing,
+  DeliveryPincodePrefixRange,
+  DeliveryPricing,
+  StoreSettings
+} from '../types';
 
 const PINCODE_PATTERN = /^[1-9]\d{5}$/;
 
@@ -18,6 +24,55 @@ export const getDeliveryPricing = (
   fallback: pricing?.fallback ?? { name: 'Rest of India', charge: shippingFee },
   pincodeOverrides: pricing?.pincodeOverrides ?? []
 });
+
+const DELIVERY_DISTANCE_BANDS = [
+  { label: '0–100 km', minKm: 0, maxKm: 100 },
+  { label: '100–300 km', minKm: 100, maxKm: 300 },
+  { label: '300–700 km', minKm: 300, maxKm: 700 },
+  { label: '700+ km', minKm: 700, maxKm: null }
+] as const;
+
+export const getDeliveryDistancePricing = (
+  pricing: DeliveryDistancePricing | undefined,
+  fallbackCharge: number
+): DeliveryDistancePricing => ({
+  enabled: pricing?.enabled === true,
+  originPincode: pricing?.originPincode ?? '831015',
+  tiers: DELIVERY_DISTANCE_BANDS.map(band => {
+    const savedTier = pricing?.tiers?.find(tier => tier.minKm === band.minKm && tier.maxKm === band.maxKm);
+    return {
+      ...band,
+      charge: savedTier && Number.isFinite(savedTier.charge) && savedTier.charge >= 0
+        ? savedTier.charge
+        : fallbackCharge
+    };
+  })
+});
+
+export const validateDeliveryDistancePricing = (pricing: DeliveryDistancePricing): string | null => {
+  if (pricing.enabled !== true && pricing.enabled !== false) {
+    return 'Choose whether distance-based delivery pricing is enabled.';
+  }
+  if (!PINCODE_PATTERN.test(pricing.originPincode)) {
+    return 'Enter a valid six-digit Indian store-origin pincode.';
+  }
+  if (pricing.tiers.length !== DELIVERY_DISTANCE_BANDS.length) {
+    return 'All four distance bands need a delivery charge.';
+  }
+  for (let index = 0; index < DELIVERY_DISTANCE_BANDS.length; index += 1) {
+    const expected = DELIVERY_DISTANCE_BANDS[index];
+    const tier = pricing.tiers[index];
+    if (
+      tier.minKm !== expected.minKm ||
+      tier.maxKm !== expected.maxKm ||
+      !Number.isFinite(tier.charge) ||
+      tier.charge < 0
+    ) {
+      return `Enter a non-negative charge for the ${expected.label} distance band.`;
+    }
+  }
+  return null;
+};
 
 export const formatDeliveryPrefixRanges = (ranges: DeliveryPincodePrefixRange[]) =>
   ranges.map(({ startPrefix, endPrefix }) =>
@@ -93,15 +148,17 @@ export const calculateDeliveryCharge = (
   settings: Pick<StoreSettings, 'deliveryPricing' | 'shippingFee' | 'freeShippingThreshold'>,
   pincode: string,
   subtotal: number
-) => {
+): DeliveryChargeQuote => {
   const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299));
   if (subtotal <= 0 || subtotal >= freeShippingThreshold) {
-    return { amount: 0, isFreeShipping: true, zoneName: '' };
+    return { amount: 0, isFreeShipping: true, zoneName: '', pricingMode: 'zones' };
   }
 
   const pricing = getDeliveryPricing(settings.deliveryPricing, Number(settings.shippingFee ?? 40));
   const override = pricing.pincodeOverrides.find(item => item.pincode === pincode);
-  if (override) return { amount: override.charge, isFreeShipping: false, zoneName: 'Pincode override' };
+  if (override) {
+    return { amount: override.charge, isFreeShipping: false, zoneName: 'Pincode override', pricingMode: 'zones' };
+  }
 
   const zone = pricing.zones
     .flatMap(item => item.prefixRanges.map(range => ({ zone: item, range })))
@@ -112,6 +169,6 @@ export const calculateDeliveryCharge = (
     .sort((left, right) => right.range.startPrefix.length - left.range.startPrefix.length)[0]?.zone;
 
   return zone
-    ? { amount: zone.charge, isFreeShipping: false, zoneName: zone.name }
-    : { amount: pricing.fallback.charge, isFreeShipping: false, zoneName: pricing.fallback.name };
+    ? { amount: zone.charge, isFreeShipping: false, zoneName: zone.name, pricingMode: 'zones' }
+    : { amount: pricing.fallback.charge, isFreeShipping: false, zoneName: pricing.fallback.name, pricingMode: 'zones' };
 };

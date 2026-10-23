@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { useUser } from '../../context/UserContext';
 import { api, getAssetUrl } from '../../services/api';
-import type { Order } from '../../types';
+import type { DeliveryChargeQuote, Order } from '../../types';
 import { getShortOrderId } from '../../lib/shortOrderId';
 import { calculateDeliveryCharge, extractIndianPincode, removeTrailingIndianPincode } from '../../lib/deliveryPricing';
 import { 
@@ -109,6 +109,9 @@ export const CartDrawer: React.FC = () => {
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'address' | 'payment'>('address');
   const [addressErrors, setAddressErrors] = useState<Partial<Record<'name' | 'email' | 'phone' | 'address' | 'pincode', string>>>({});
+  const [distanceQuoteState, setDistanceQuoteState] = useState<{ requestKey: string; quote: DeliveryChargeQuote } | null>(null);
+  const [distanceQuoteError, setDistanceQuoteError] = useState('');
+  const [distanceQuoteRetry, setDistanceQuoteRetry] = useState(0);
   const [orderComplete, setOrderComplete] = useState<Order | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
@@ -276,7 +279,62 @@ export const CartDrawer: React.FC = () => {
   }
 
   const freeShippingThreshold = settings.freeShippingThreshold ?? 299;
-  const deliveryQuote = calculateDeliveryCharge(settings, formData.pincode, subtotal);
+  const isDistancePricingEnabled = settings.deliveryDistancePricing?.enabled === true;
+  const hasPincodeOverride = settings.deliveryPricing?.pincodeOverrides?.some(
+    override => override.pincode === formData.pincode
+  ) === true;
+  const requiresDistanceQuote = isDistancePricingEnabled &&
+    subtotal > 0 &&
+    subtotal < freeShippingThreshold &&
+    /^[1-9]\d{5}$/.test(formData.pincode) &&
+    !hasPincodeOverride;
+  const distancePricingSettingsKey = JSON.stringify([
+    settings.deliveryDistancePricing ?? null,
+    settings.deliveryPricing?.fallback ?? null,
+    settings.shippingFee
+  ]);
+  const distanceQuoteRequestKey = `${formData.pincode}:${subtotal}:${distancePricingSettingsKey}`;
+  const currentDistanceQuote = distanceQuoteState?.requestKey === distanceQuoteRequestKey
+    ? distanceQuoteState.quote
+    : null;
+  const isDistanceQuoteReady = !requiresDistanceQuote || currentDistanceQuote !== null;
+  const zoneDeliveryQuote = calculateDeliveryCharge(settings, formData.pincode, subtotal);
+  const deliveryQuote: DeliveryChargeQuote = requiresDistanceQuote
+    ? currentDistanceQuote ?? {
+      ...zoneDeliveryQuote,
+      zoneName: 'Distance-based delivery',
+      pricingMode: 'distance' as const
+    }
+    : zoneDeliveryQuote;
+  useEffect(() => {
+    if (!requiresDistanceQuote) {
+      setDistanceQuoteState(null);
+      setDistanceQuoteError('');
+      return;
+    }
+
+    const controller = new AbortController();
+    setDistanceQuoteState(null);
+    setDistanceQuoteError('');
+    const timeout = setTimeout(() => {
+      void api.getDeliveryQuote(formData.pincode, subtotal, controller.signal)
+        .then(quote => {
+          if (!controller.signal.aborted) {
+            setDistanceQuoteState({ requestKey: distanceQuoteRequestKey, quote });
+          }
+        })
+        .catch(error => {
+          if (!controller.signal.aborted) {
+            setDistanceQuoteError(error instanceof Error ? error.message : 'Could not calculate the delivery charge.');
+          }
+        });
+    }, 250);
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [distanceQuoteRequestKey, distanceQuoteRetry, formData.pincode, requiresDistanceQuote, subtotal]);
   const isFreeShipping = deliveryQuote.isFreeShipping;
   const shippingCost = deliveryQuote.amount;
   const total = Math.max(0, subtotal - discount + shippingCost);
@@ -563,6 +621,15 @@ export const CartDrawer: React.FC = () => {
       if (!/^[1-9]\d{5}$/.test(formData.pincode)) errors.pincode = 'Enter a valid six-digit Indian pincode.';
       setAddressErrors(errors);
       if (Object.keys(errors).length > 0) return;
+      if (requiresDistanceQuote && !isDistanceQuoteReady) {
+        showToast(
+          distanceQuoteError
+            ? `Delivery charge unavailable: ${distanceQuoteError}`
+            : 'Calculating the distance-based delivery charge. Please wait and try again.',
+          'error'
+        );
+        return;
+      }
       if (currentUser && (
         formData.address.trim() !== profileAddress ||
         formData.pincode !== savedProfilePincode
@@ -593,6 +660,15 @@ export const CartDrawer: React.FC = () => {
       return;
     }
     if (!formData.name || !formData.email || !formData.phone || !formData.address || !/^[1-9]\d{5}$/.test(formData.pincode)) return;
+    if (requiresDistanceQuote && !isDistanceQuoteReady) {
+      showToast(
+        distanceQuoteError
+          ? `Delivery charge unavailable: ${distanceQuoteError}`
+          : 'Calculating the distance-based delivery charge. Please wait and try again.',
+        'error'
+      );
+      return;
+    }
     if (availablePaymentMethods.length === 0) {
       showToast('Online payment is not configured yet. Please contact the store or try again later.', 'error');
       return;
@@ -1471,11 +1547,22 @@ export const CartDrawer: React.FC = () => {
                 />
                 {addressErrors.pincode && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{addressErrors.pincode}</p>}
                 {!addressErrors.pincode && !isFreeShipping && (
-                  <p role="status" aria-live="polite" style={{ color: 'var(--text-muted)', fontSize: '0.74rem', margin: '4px 0 0' }}>
-                    {formData.pincode
-                      ? `Delivery charge updates instantly for ${deliveryQuote.zoneName}.`
-                      : 'Enter your pincode to calculate its delivery charge.'}
-                  </p>
+                  <div role="status" aria-live="polite" style={{ color: 'var(--text-muted)', fontSize: '0.74rem', margin: '4px 0 0' }}>
+                    {requiresDistanceQuote
+                      ? distanceQuoteError
+                        ? <span>
+                          Distance delivery quote failed: {distanceQuoteError}{' '}
+                          <button type="button" onClick={() => setDistanceQuoteRetry(value => value + 1)} style={{ border: 0, padding: 0, background: 'none', color: 'var(--accent-terracotta)', textDecoration: 'underline', cursor: 'pointer' }}>Retry</button>
+                        </span>
+                        : !isDistanceQuoteReady
+                          ? 'Calculating the straight-line distance-based delivery charge…'
+                          : currentDistanceQuote?.distanceKm !== undefined
+                            ? `Approx. ${currentDistanceQuote.distanceKm.toFixed(1)} km straight-line from the store; ${currentDistanceQuote.zoneName} rate. Not a courier-route distance.`
+                            : 'Pincode coordinates unavailable; the flat fallback charge applies.'
+                      : formData.pincode
+                        ? `Delivery charge applies for ${deliveryQuote.zoneName}.`
+                        : 'Enter your pincode to calculate its delivery charge.'}
+                  </div>
                 )}
               </div>
 
@@ -2276,9 +2363,21 @@ export const CartDrawer: React.FC = () => {
                 <span>
                   {isFreeShipping
                     ? 'Delivery'
-                    : `${deliveryQuote.zoneName} Delivery${formData.pincode ? ` · ${formData.pincode}` : ''}`}
+                    : requiresDistanceQuote && !isDistanceQuoteReady
+                      ? `Distance delivery · calculating${formData.pincode ? ` · ${formData.pincode}` : ''}`
+                      : deliveryQuote.pricingMode === 'distance'
+                        ? deliveryQuote.distanceKm !== undefined
+                          ? `Distance delivery · approx. ${deliveryQuote.distanceKm.toFixed(1)} km straight-line`
+                          : `Distance fallback · ${formData.pincode}`
+                        : `${deliveryQuote.zoneName} Delivery${formData.pincode ? ` · ${formData.pincode}` : ''}`}
                 </span>
-                <span>{isFreeShipping ? 'Free Shipping' : `${settings.currency}${shippingCost.toFixed(2)}`}</span>
+                <span>
+                  {isFreeShipping
+                    ? 'Free Shipping'
+                    : requiresDistanceQuote && !isDistanceQuoteReady
+                      ? 'Calculating…'
+                      : `${settings.currency}${shippingCost.toFixed(2)}`}
+                </span>
               </div>
               <div style={{
                 display: 'flex',

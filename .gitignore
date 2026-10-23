@@ -14,7 +14,9 @@ dist-ssr
 .env
 .env.*
 !.env.example
-server/data/
+server/data/*
+!server/data/README.md
+!server/data/indian-pincode-coordinates.json
 
 # Editor directories and files
 .vscode/*

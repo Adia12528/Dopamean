@@ -48,6 +48,27 @@ export interface DeliveryPricing {
   pincodeOverrides: DeliveryPincodeOverride[];
 }
 
+export interface DeliveryDistanceTier {
+  label: string;
+  minKm: number;
+  maxKm: number | null;
+  charge: number;
+}
+
+export interface DeliveryDistancePricing {
+  enabled: boolean;
+  originPincode: string;
+  tiers: DeliveryDistanceTier[];
+}
+
+export interface DeliveryChargeQuote {
+  amount: number;
+  isFreeShipping: boolean;
+  zoneName: string;
+  pricingMode: 'zones' | 'distance';
+  distanceKm?: number;
+}
+
 export interface StoreSettings {
   storeName: string;
   storeTagline: string;
@@ -108,6 +129,7 @@ export interface StoreSettings {
   freeShippingThreshold: number;
   shippingFee: number;
   deliveryPricing?: DeliveryPricing;
+  deliveryDistancePricing?: DeliveryDistancePricing;
   lowStockThreshold: number;
   productCardBadgePriority?: ProductCardBadge[];
   shippingNotice?: string;

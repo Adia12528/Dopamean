@@ -1,4 +1,13 @@
-import type { Product, Offer, Order, OrderCreatePayload, StoreSettings, Review, UserProfile } from '../types';
+import type {
+  DeliveryChargeQuote,
+  Product,
+  Offer,
+  Order,
+  OrderCreatePayload,
+  StoreSettings,
+  Review,
+  UserProfile
+} from '../types';
 
 const BASE_URL = import.meta.env.DEV
   ? ''
@@ -30,6 +39,20 @@ export const api = {
   getSettings: async (): Promise<StoreSettings> => {
     const res = await fetch(`${BASE_URL}/api/settings`);
     if (!res.ok) throw new Error('Failed to fetch settings');
+    return res.json();
+  },
+
+  getDeliveryQuote: async (
+    pincode: string,
+    subtotal: number,
+    signal?: AbortSignal
+  ): Promise<DeliveryChargeQuote> => {
+    const params = new URLSearchParams({ pincode, subtotal: String(subtotal) });
+    const res = await fetch(`${BASE_URL}/api/delivery/quote?${params.toString()}`, { signal });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to calculate the delivery charge.');
+    }
     return res.json();
   },
 

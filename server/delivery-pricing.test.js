@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateDeliveryCharge } from './delivery-pricing.js';
+import {
+  calculateDeliveryCharge,
+  calculateDeliveryQuote,
+  calculateHaversineDistanceKm,
+  getDeliveryDistanceTier,
+  getPincodeCoordinates
+} from './delivery-pricing.js';
 
 const settings = {
   shippingFee: 40,
@@ -75,4 +81,92 @@ test('unmapped or invalid pincodes use fallback and legacy settings remain compa
   assert.equal(calculateDeliveryCharge(settings, '000000', 200), 65);
   assert.equal(calculateDeliveryCharge({ shippingFee: 40, freeShippingThreshold: 299 }, '400001', 200), 40);
   assert.equal(calculateDeliveryCharge({ shippingFee: 75, freeShippingThreshold: 299 }, '400001', 200), 75);
+});
+
+test('GeoNames coordinates cover the store and sample PINs with reasonable straight-line distances', () => {
+  const origin = getPincodeCoordinates('831015');
+  assert.deepEqual(origin, [22.5826, 86.4527]);
+  assert.ok(Math.abs(calculateHaversineDistanceKm(origin, getPincodeCoordinates('700001')) - 195) < 2);
+  assert.ok(Math.abs(calculateHaversineDistanceKm(origin, getPincodeCoordinates('781001')) - 657) < 2);
+  assert.ok(Math.abs(calculateHaversineDistanceKm(origin, getPincodeCoordinates('110001')) - 1144) < 2);
+  assert.ok(Math.abs(calculateHaversineDistanceKm(origin, getPincodeCoordinates('560001')) - 1401) < 2);
+  assert.ok(Math.abs(calculateHaversineDistanceKm(origin, getPincodeCoordinates('400001')) - 1474) < 2);
+});
+
+test('distance tiers include exact boundaries in the next contiguous band', () => {
+  const tiers = [
+    { label: '0–100 km', minKm: 0, maxKm: 100, charge: 10 },
+    { label: '100–300 km', minKm: 100, maxKm: 300, charge: 20 },
+    { label: '300–700 km', minKm: 300, maxKm: 700, charge: 30 },
+    { label: '700+ km', minKm: 700, maxKm: null, charge: 40 }
+  ];
+  assert.equal(getDeliveryDistanceTier({ tiers }, 99.99).charge, 10);
+  assert.equal(getDeliveryDistanceTier({ tiers }, 100).charge, 20);
+  assert.equal(getDeliveryDistanceTier({ tiers }, 300).charge, 30);
+  assert.equal(getDeliveryDistanceTier({ tiers }, 700).charge, 40);
+});
+
+test('distance pricing is opt-in and uses the configured amount for the destination tier', () => {
+  const distanceSettings = {
+    ...settings,
+    deliveryDistancePricing: {
+      enabled: true,
+      originPincode: '831015',
+      tiers: [
+        { label: '0–100 km', minKm: 0, maxKm: 100, charge: 10 },
+        { label: '100–300 km', minKm: 100, maxKm: 300, charge: 20 },
+        { label: '300–700 km', minKm: 300, maxKm: 700, charge: 30 },
+        { label: '700+ km', minKm: 700, maxKm: null, charge: 40 }
+      ]
+    }
+  };
+
+  assert.deepEqual(calculateDeliveryQuote(distanceSettings, '831015', 200), {
+    amount: 10,
+    isFreeShipping: false,
+    zoneName: '0–100 km',
+    pricingMode: 'distance',
+    distanceKm: 0
+  });
+  const kolkataQuote = calculateDeliveryQuote(distanceSettings, '700001', 200);
+  assert.equal(kolkataQuote.amount, 20);
+  assert.ok(Math.abs(kolkataQuote.distanceKm - 195) < 2);
+  assert.equal(calculateDeliveryCharge(distanceSettings, '781001', 200), 30);
+  assert.equal(calculateDeliveryCharge(distanceSettings, '110001', 200), 40);
+});
+
+test('distance pricing keeps free shipping and exact pincode overrides ahead of tiers', () => {
+  const distanceSettings = {
+    ...settings,
+    deliveryDistancePricing: {
+      enabled: true,
+      originPincode: '831015',
+      tiers: [
+        { label: '0–100 km', minKm: 0, maxKm: 100, charge: 10 },
+        { label: '100–300 km', minKm: 100, maxKm: 300, charge: 20 },
+        { label: '300–700 km', minKm: 300, maxKm: 700, charge: 30 },
+        { label: '700+ km', minKm: 700, maxKm: null, charge: 40 }
+      ]
+    }
+  };
+  assert.equal(calculateDeliveryCharge(distanceSettings, '302001', 200), 35);
+  assert.equal(calculateDeliveryCharge(distanceSettings, '400001', 299), 0);
+});
+
+test('unknown destination or origin coordinates use the configured flat fallback', () => {
+  const distanceSettings = {
+    ...settings,
+    deliveryDistancePricing: {
+      enabled: true,
+      originPincode: '999999',
+      tiers: [
+        { label: '0–100 km', minKm: 0, maxKm: 100, charge: 10 },
+        { label: '100–300 km', minKm: 100, maxKm: 300, charge: 20 },
+        { label: '300–700 km', minKm: 300, maxKm: 700, charge: 30 },
+        { label: '700+ km', minKm: 700, maxKm: null, charge: 40 }
+      ]
+    }
+  };
+  assert.equal(getPincodeCoordinates('999999'), null);
+  assert.equal(calculateDeliveryCharge(distanceSettings, '700001', 200), 65);
 });

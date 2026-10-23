@@ -26,14 +26,21 @@ import {
   ShieldAlert,
   FileText
 } from 'lucide-react';
-import type { CodRule, DeliveryPricing, ProductCardBadge, StoreSettings } from '../../types';
+import type { CodRule, DeliveryDistancePricing, DeliveryPricing, ProductCardBadge, StoreSettings } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
-import { formatDeliveryPrefixRanges, getDeliveryPricing, parseDeliveryPrefixRanges, validateDeliveryPricing } from '../../lib/deliveryPricing';
+import {
+  formatDeliveryPrefixRanges,
+  getDeliveryDistancePricing,
+  getDeliveryPricing,
+  parseDeliveryPrefixRanges,
+  validateDeliveryDistancePricing,
+  validateDeliveryPricing
+} from '../../lib/deliveryPricing';
 
 type HeroDisplaySettingSection = 'heroSocialProof' | 'heroOfferHighlight' | 'heroPersonalGreeting' | 'heroInstagramStrip' | 'heroParallax';
-type ScopedSettingSection = 'introSplash' | 'categorySections' | 'launchRail' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'deliveryPricing' | 'upi' | 'policies' | 'heroDisplay' | HeroDisplaySettingSection;
+type ScopedSettingSection = 'introSplash' | 'categorySections' | 'launchRail' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'deliveryPricing' | 'deliveryDistancePricing' | 'upi' | 'policies' | 'heroDisplay' | HeroDisplaySettingSection;
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
-const SCOPED_SETTING_SECTIONS: ScopedSettingSection[] = ['introSplash', 'categorySections', 'launchRail', 'productCards', 'lowStock', 'trustCards', 'testimonials', 'deliveryTimeline', 'deliveryPricing', 'upi', 'policies', 'heroDisplay', 'heroSocialProof', 'heroOfferHighlight', 'heroPersonalGreeting', 'heroInstagramStrip', 'heroParallax'];
+const SCOPED_SETTING_SECTIONS: ScopedSettingSection[] = ['introSplash', 'categorySections', 'launchRail', 'productCards', 'lowStock', 'trustCards', 'testimonials', 'deliveryTimeline', 'deliveryPricing', 'deliveryDistancePricing', 'upi', 'policies', 'heroDisplay', 'heroSocialProof', 'heroOfferHighlight', 'heroPersonalGreeting', 'heroInstagramStrip', 'heroParallax'];
 const isScopedSettingSection = (section: string): section is ScopedSettingSection =>
   SCOPED_SETTING_SECTIONS.includes(section as ScopedSettingSection);
 
@@ -73,12 +80,16 @@ export const StudioSettings: React.FC = () => {
 
   const [form, setForm] = useState(() => ({
     ...settings,
-    deliveryPricing: getDeliveryPricing(settings.deliveryPricing, settings.shippingFee ?? 40)
+    deliveryPricing: getDeliveryPricing(settings.deliveryPricing, settings.shippingFee ?? 40),
+    deliveryDistancePricing: getDeliveryDistancePricing(
+      settings.deliveryDistancePricing,
+      settings.deliveryPricing?.fallback?.charge ?? settings.shippingFee ?? 40
+    )
   }));
   const [deliveryPrefixRangeDrafts, setDeliveryPrefixRangeDrafts] = useState<Record<string, string>>(() =>
     Object.fromEntries((form.deliveryPricing?.zones ?? []).map(zone => [zone.id, formatDeliveryPrefixRanges(zone.prefixRanges)]))
   );
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'heroDisplay' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'deliveryPricing' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'heroDisplay' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'deliveryPricing' | 'deliveryDistancePricing' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
@@ -94,6 +105,7 @@ export const StudioSettings: React.FC = () => {
     testimonials: { isSaving: false, error: '' },
     deliveryTimeline: { isSaving: false, error: '' },
     deliveryPricing: { isSaving: false, error: '' },
+    deliveryDistancePricing: { isSaving: false, error: '' },
     upi: { isSaving: false, error: '' },
     policies: { isSaving: false, error: '' },
     heroDisplay: { isSaving: false, error: '' },
@@ -189,6 +201,17 @@ export const StudioSettings: React.FC = () => {
     deliveryPricingFormValues.zones.some(zone =>
       (deliveryPrefixRangeDrafts[zone.id] ?? '') !== formatDeliveryPrefixRanges(zone.prefixRanges)
     );
+  const deliveryDistancePricingFormValues = getDeliveryDistancePricing(
+    form.deliveryDistancePricing,
+    deliveryPricingFormValues.fallback.charge
+  );
+  const deliveryDistancePricingPayload: DeliveryDistancePricing = deliveryDistancePricingFormValues;
+  const savedDeliveryDistancePricing = getDeliveryDistancePricing(
+    settings.deliveryDistancePricing,
+    savedDeliveryPricing.fallback.charge
+  );
+  const isDeliveryDistancePricingDirty =
+    JSON.stringify(deliveryDistancePricingFormValues) !== JSON.stringify(savedDeliveryDistancePricing);
   const isUpiDetailsDirty = (
     String(form.upiId || '').trim() !== String(settings.upiId || '').trim() ||
     String(form.upiPayeeName || '').trim() !== String(settings.upiPayeeName || '').trim() ||
@@ -224,6 +247,7 @@ export const StudioSettings: React.FC = () => {
     ...(isHeroParallaxDirty ? [{ id: 'heroParallax' as const, label: 'Hero parallax' }] : []),
     ...(isDeliveryTimelineDirty ? [{ id: 'deliveryTimeline' as const, label: 'Delivery Timeline' }] : []),
     ...(isDeliveryPricingDirty ? [{ id: 'deliveryPricing' as const, label: 'Delivery Pricing' }] : []),
+    ...(isDeliveryDistancePricingDirty ? [{ id: 'deliveryDistancePricing' as const, label: 'Delivery Distance Pricing' }] : []),
     ...(isUpiDetailsDirty ? [{ id: 'upi' as const, label: 'Direct UPI' }] : []),
     ...(isStorePoliciesDirty ? [{ id: 'policies' as const, label: 'Policies & Consent' }] : [])
   ];
@@ -263,6 +287,8 @@ export const StudioSettings: React.FC = () => {
               ? 'Delivery Timeline'
               : section === 'deliveryPricing'
                 ? 'Delivery Pricing'
+              : section === 'deliveryDistancePricing'
+                ? 'Delivery Distance Pricing'
               : section === 'upi'
                 ? 'Direct UPI'
                 : section === 'policies'
@@ -330,6 +356,8 @@ export const StudioSettings: React.FC = () => {
                   deliveryPricing: deliveryPricingPayload,
                   shippingFee: deliveryPricingPayload.fallback.charge
                 }
+              : section === 'deliveryDistancePricing'
+                ? { deliveryDistancePricing: deliveryDistancePricingPayload }
               : section === 'upi'
                   ? {
                 paymentUpiEnabled: form.paymentUpiEnabled !== false,
@@ -374,6 +402,16 @@ export const StudioSettings: React.FC = () => {
         return;
       }
     }
+    if (section === 'deliveryDistancePricing') {
+      const error = validateDeliveryDistancePricing(deliveryDistancePricingPayload);
+      if (error) {
+        setScopedSaveStates(prev => ({
+          ...prev,
+          deliveryDistancePricing: { isSaving: false, error }
+        }));
+        return;
+      }
+    }
 
     setScopedSaveStates(prev => ({
       ...prev,
@@ -400,6 +438,9 @@ export const StudioSettings: React.FC = () => {
         setDeliveryPrefixRangeDrafts(Object.fromEntries(
           deliveryPricingPayload.zones.map(zone => [zone.id, formatDeliveryPrefixRanges(zone.prefixRanges)])
         ));
+      }
+      if (section === 'deliveryDistancePricing') {
+        setForm(previous => ({ ...previous, deliveryDistancePricing: deliveryDistancePricingPayload }));
       }
       setScopedSaveStates(prev => ({
         ...prev,
@@ -446,6 +487,8 @@ export const StudioSettings: React.FC = () => {
         ? 'Save policies'
         : section === 'deliveryPricing'
           ? 'Save delivery pricing'
+        : section === 'deliveryDistancePricing'
+          ? 'Save distance pricing'
         : section === 'heroSocialProof'
           ? 'Save rating display'
           : section === 'heroOfferHighlight'
@@ -627,6 +670,7 @@ export const StudioSettings: React.FC = () => {
     delete payload.deliveryStageOutForDeliveryLabel;
     delete payload.deliveryStageDeliveredLabel;
     delete payload.deliveryPricing;
+    delete payload.deliveryDistancePricing;
     delete payload.paymentUpiEnabled;
     delete payload.upiId;
     delete payload.upiQrImage;
@@ -810,6 +854,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'deliveryTimeline' as const, label: 'Delivery Timeline', icon: <Truck size={16} /> },
     { id: 'shipping' as const, label: 'Shipping & Inventory', icon: <Truck size={16} /> },
     { id: 'deliveryPricing' as const, label: 'Delivery Pricing by Pincode', icon: <Truck size={16} /> },
+    { id: 'deliveryDistancePricing' as const, label: 'Delivery Pricing by Distance', icon: <Truck size={16} /> },
     { id: 'productCards' as const, label: 'Product Cards', icon: <Sliders size={16} /> },
     { id: 'lowStock' as const, label: 'Low Stock Threshold', icon: <Info size={16} /> },
     { id: 'cod' as const, label: 'COD Eligibility Rules', icon: <Truck size={16} /> },
@@ -2334,6 +2379,79 @@ export const StudioSettings: React.FC = () => {
                 )}
               </div>
               {renderScopedSaveControls('deliveryPricing', isDeliveryPricingDirty)}
+            </div>
+          )}
+
+          {activeSection === 'deliveryDistancePricing' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Truck size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Distance-Based Delivery Pricing</h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: '#92400E', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '12px 14px', margin: '0 0 18px', lineHeight: 1.55 }}>
+                Important: distance is a straight-line Haversine estimate between representative pincode points, not road or courier-route distance. GeoNames warns that Indian postal-code coordinates may be inaccurate; check the displayed rates against actual courier costs before enabling this for customers.
+              </p>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '0.86rem', fontWeight: 700, marginBottom: '20px' }}>
+                <input
+                  type="checkbox"
+                  checked={deliveryDistancePricingFormValues.enabled}
+                  onChange={event => handleChange('deliveryDistancePricing', {
+                    ...deliveryDistancePricingFormValues,
+                    enabled: event.target.checked
+                  })}
+                />
+                Enable distance-based pricing at checkout
+              </label>
+              <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '22px' }}>
+                <label style={{ display: 'grid', gap: '6px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Store origin pincode
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={deliveryDistancePricingFormValues.originPincode}
+                    onChange={event => handleChange('deliveryDistancePricing', {
+                      ...deliveryDistancePricingFormValues,
+                      originPincode: event.target.value.replace(/\D/g, '').slice(0, 6)
+                    })}
+                    style={{ width: '100%', minHeight: '42px', padding: '9px 12px', borderRadius: '9px', border: '1px solid var(--border-medium)', fontSize: '0.9rem' }}
+                  />
+                </label>
+              </div>
+              <h4 style={{ margin: '0 0 10px', fontSize: '1rem', color: 'var(--text-main)' }}>Distance bands and charges</h4>
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {deliveryDistancePricingFormValues.tiers.map((tier, index) => (
+                  <label key={tier.minKm} className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 1fr) minmax(180px, 1fr)', gap: '12px', alignItems: 'center', padding: '12px 14px', border: '1px solid var(--border-medium)', borderRadius: '10px' }}>
+                    <span style={{ fontSize: '0.84rem', fontWeight: 700 }}>{tier.label}</span>
+                    <span style={{ display: 'grid', gridTemplateColumns: 'auto minmax(100px, 1fr)', gap: '8px', alignItems: 'center', fontSize: '0.78rem', fontWeight: 700 }}>
+                      Charge ({form.currency})
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={tier.charge}
+                        onChange={event => handleChange('deliveryDistancePricing', {
+                          ...deliveryDistancePricingFormValues,
+                          tiers: deliveryDistancePricingFormValues.tiers.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, charge: Number(event.target.value) } : item
+                          )
+                        })}
+                        style={{ width: '100%', minHeight: '40px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-medium)', fontSize: '0.88rem' }}
+                      />
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.76rem', lineHeight: 1.5, margin: '14px 0 0' }}>
+                GeoNames India postal-code data, CC BY 3.0. If a pincode has no usable coordinate, checkout uses the configured flat fallback charge. Distance pricing is opt-in; exact pincode overrides and free-shipping rules continue to take priority.
+              </p>
+              {renderScopedSaveControls('deliveryDistancePricing', isDeliveryDistancePricingDirty)}
             </div>
           )}
 
