@@ -154,8 +154,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       const uploadedUrl = await api.uploadImage(file);
       setImage(uploadedUrl);
       setValidationErrors(prev => ({ ...prev, image: '' }));
-    } catch {
-      alert('Failed to upload image file');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to upload image file');
     } finally {
       setIsMainUploading(false);
     }
@@ -169,8 +169,8 @@ export const AddProductModal: React.FC<AddProductModalProps> = ({ isOpen, onClos
       setIsSecondaryUploading(true);
       const uploadedUrl = await api.uploadImage(file);
       setSecondaryImages(prev => [...prev, uploadedUrl]);
-    } catch {
-      alert('Failed to upload secondary angle image');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Failed to upload secondary angle image');
     } finally {
       setIsSecondaryUploading(false);
     }

@@ -513,8 +513,30 @@ export const api = {
       method: 'POST',
       body: formData
     });
-    if (!res.ok) throw new Error('Failed to upload image');
-    const data = await res.json();
-    return data.url;
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null) as { error?: unknown } | null;
+      throw new Error(typeof errorData?.error === 'string' ? errorData.error : 'Failed to upload image');
+    }
+
+    const data = await res.json() as { url?: unknown; storage?: unknown };
+    const uploadedUrl = data.url;
+    if (typeof uploadedUrl !== 'string' || !uploadedUrl) {
+      throw new Error('Image upload did not return an image URL.');
+    }
+    if (import.meta.env.PROD) {
+      const isPublicStorageUrl = (() => {
+        try {
+          const imageUrl = new URL(uploadedUrl);
+          return imageUrl.protocol === 'https:' &&
+            imageUrl.pathname.includes('/storage/v1/object/public/');
+        } catch {
+          return false;
+        }
+      })();
+      if (data.storage !== 'supabase' || !isPublicStorageUrl) {
+        throw new Error('Image upload did not return a public Supabase Storage URL.');
+      }
+    }
+    return uploadedUrl;
   }
 };

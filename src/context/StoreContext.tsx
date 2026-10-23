@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { Product, Offer, Order, OrderPolicyConsentRequest, OrderCreatePayload, CartItem, ViewMode, DashboardTab, StoreSettings, Review, AdminRole } from '../types';
 import { api } from '../services/api';
+import { calculateDeliveryCharge } from '../lib/deliveryPricing';
 
 const GUEST_CART_KEY = 'dopamean_cart';
 
@@ -47,6 +48,11 @@ const DEFAULT_SETTINGS: StoreSettings = {
   currency: '₹',
   freeShippingThreshold: 299,
   shippingFee: 40,
+  deliveryPricing: {
+    zones: [],
+    fallback: { name: 'Rest of India', charge: 40 },
+    pincodeOverrides: []
+  },
   storePolicies: DEFAULT_STORE_POLICIES,
   storePolicyVersion: 1,
   lowStockThreshold: 5,
@@ -153,7 +159,7 @@ interface StoreContextType {
   removePromoCode: () => void;
 
   createOrder: (
-    customer: { name: string; email: string; phone?: string; address: string },
+    customer: { name: string; email: string; phone?: string; address: string; pincode?: string },
     userToken: string,
     paymentInfo?: {
       method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
@@ -589,7 +595,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // ORDERS & CHECKOUT
   const createOrder = async (
-    customer: { name: string; email: string; phone?: string; address: string },
+    customer: { name: string; email: string; phone?: string; address: string; pincode?: string },
     userToken: string,
     paymentInfo?: {
       method?: 'cod' | 'upi' | 'razorpay' | 'payu' | 'whatsapp';
@@ -613,8 +619,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         discount = Math.min(activePromo.discountValue, subtotal);
       }
     }
-    const freeShippingThreshold = settings.freeShippingThreshold ?? 299;
-    const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : (settings.shippingFee ?? 40);
+    const shippingAmount = calculateDeliveryCharge(settings, customer.pincode ?? '', subtotal).amount;
 
     const orderPayload: OrderCreatePayload = {
       customer: {
@@ -622,6 +627,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         email: customer.email,
         phone: customer.phone,
         address: customer.address,
+        pincode: customer.pincode,
       },
       items: cart.map(item => ({
         productId: item.product.id,

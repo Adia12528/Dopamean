@@ -92,7 +92,7 @@ const getChangedOfferFields = (
 
 export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, editOffer }) => {
   useBackNavigationLayer('add-offer-modal', isOpen, onClose);
-  const { addOffer, updateOffer, settings } = useStore();
+  const { addOffer, updateOffer, showToast, settings } = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const initialForm = buildInitialOfferFormState(editOffer);
@@ -116,14 +116,8 @@ export const AddOfferModal: React.FC<AddOfferModalProps> = ({ isOpen, onClose, e
       try {
         const uploadedUrl = await api.uploadImage(file);
         setImage(uploadedUrl);
-      } catch {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (typeof reader.result === 'string') {
-            setImage(reader.result);
-          }
-        };
-        reader.readAsDataURL(file);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Failed to upload offer image.', 'error');
       }
     }
   };

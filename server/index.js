@@ -694,19 +694,43 @@ async function storePublicImage(file) {
   if (supabaseAdmin) {
     try {
       const bucketName = process.env.SUPABASE_STORAGE_BUCKET || 'media';
-      const { error: uploadErrorResult } = await supabaseAdmin.storage
-        .from(bucketName)
-        .upload(filename, file.buffer, { contentType, upsert: true });
-      if (!uploadErrorResult) {
-        const { data: urlData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filename);
-        if (urlData?.publicUrl) {
-          return { url: urlData.publicUrl, filename, size: file.size, storage: 'supabase' };
+      const { data: bucket, error: bucketError } = await supabaseAdmin.storage.getBucket(bucketName);
+      if (bucketError || !bucket?.public) {
+        const message = bucketError
+          ? `Unable to verify Supabase image bucket "${bucketName}": ${bucketError.message}`
+          : `Supabase image bucket "${bucketName}" must be public.`;
+        if (isProduction) {
+          console.error(message);
+          throw uploadError(503, bucketError
+            ? 'Persistent image storage is not configured.'
+            : 'Image storage is not publicly readable. Please contact the store administrator.');
         }
-      } else if (isProduction) {
-        console.error('Supabase storage upload failed:', uploadErrorResult.message);
-        throw uploadError(502, 'Image storage is temporarily unavailable.');
+        console.warn(message);
       } else {
-        console.warn('Supabase storage upload failed, falling back to local disk:', uploadErrorResult.message);
+        const { error: uploadErrorResult } = await supabaseAdmin.storage
+          .from(bucketName)
+          .upload(filename, file.buffer, { contentType, upsert: true });
+        if (!uploadErrorResult) {
+          const { data: urlData } = supabaseAdmin.storage.from(bucketName).getPublicUrl(filename);
+          try {
+            const publicUrl = new URL(urlData?.publicUrl);
+            const expectedPath = `/storage/v1/object/public/${bucketName}/`;
+            if (publicUrl.protocol === 'https:' && publicUrl.pathname.startsWith(expectedPath)) {
+              return { url: publicUrl.toString(), filename, size: file.size, storage: 'supabase' };
+            }
+          } catch {
+            // Invalid URLs fall through to the existing development-only disk fallback.
+          }
+          if (isProduction) {
+            throw uploadError(502, 'Image storage did not return a public URL.');
+          }
+          console.warn('Supabase storage returned an invalid public image URL.');
+        } else if (isProduction) {
+          console.error('Supabase storage upload failed:', uploadErrorResult.message);
+          throw uploadError(502, 'Image storage is temporarily unavailable.');
+        } else {
+          console.warn('Supabase storage upload failed, falling back to local disk:', uploadErrorResult.message);
+        }
       }
     } catch (error) {
       if (error.statusCode) throw error;

@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 import { DEFAULT_SETTINGS } from './default-settings.js';
 import { isProductCodEligible } from './cod-policy.js';
 import { createOrderReference } from './order-reference.js';
+import { calculateDeliveryCharge } from './delivery-pricing.js';
 
 const pool = new Pool({
   connectionString: process.env.SUPABASE_DB_URL,
@@ -185,7 +186,7 @@ export const postgresDb = {
         if (!offer || (start && now < start) || (end && now > end) || subtotal < Number(offer.minOrderValue || 0)) throw new Error('INVALID_PROMO');
         discountAmount = Number((offer.discountType === 'percentage' ? subtotal * Number(offer.discountValue) / 100 : Math.min(subtotal, Number(offer.discountValue))).toFixed(2)); promoCodeApplied = offer.code;
       }
-      const threshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299)); const shippingAmount = subtotal === 0 || subtotal >= threshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40)); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
+      const shippingAmount = calculateDeliveryCharge(settings, customer.pincode, subtotal); const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
       const createdAt = new Date().toISOString();
       const referenceDate = createdAt.slice(0, 10).replace(/-/g, '');
       const { rows: referenceRows } = await client.query(`

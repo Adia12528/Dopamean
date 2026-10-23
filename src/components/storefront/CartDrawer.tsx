@@ -4,6 +4,7 @@ import { useUser } from '../../context/UserContext';
 import { api, getAssetUrl } from '../../services/api';
 import type { Order } from '../../types';
 import { getShortOrderId } from '../../lib/shortOrderId';
+import { calculateDeliveryCharge, extractIndianPincode, removeTrailingIndianPincode } from '../../lib/deliveryPricing';
 import { 
   X, 
   Trash2, 
@@ -107,7 +108,7 @@ export const CartDrawer: React.FC = () => {
   const [promoError, setPromoError] = useState('');
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'address' | 'payment'>('address');
-  const [addressErrors, setAddressErrors] = useState<Partial<Record<'name' | 'email' | 'phone' | 'address', string>>>({});
+  const [addressErrors, setAddressErrors] = useState<Partial<Record<'name' | 'email' | 'phone' | 'address' | 'pincode', string>>>({});
   const [orderComplete, setOrderComplete] = useState<Order | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
@@ -163,16 +164,22 @@ export const CartDrawer: React.FC = () => {
     name?: string;
     phone?: string;
     address?: string;
+    pincode?: string;
   }>({});
   const draftStorageWarningShown = useRef(false);
-  const profileAddress = [currentUser?.address, currentUser?.city, currentUser?.pincode]
+  const savedProfileAddress = [currentUser?.address, currentUser?.city]
     .filter(value => value?.trim())
     .join(', ');
+  const savedProfilePincode = currentUser?.pincode?.trim() && /^[1-9]\d{5}$/.test(currentUser.pincode.trim())
+    ? currentUser.pincode.trim()
+    : extractIndianPincode([savedProfileAddress, currentUser?.pincode].filter(Boolean).join(', '));
+  const profileAddress = removeTrailingIndianPincode(savedProfileAddress, savedProfilePincode);
   const formData = {
     name: formOverrides.name ?? currentUser?.name ?? '',
     email: currentUser?.email ?? '',
     phone: formOverrides.phone ?? currentUser?.phone ?? '',
-    address: formOverrides.address ?? profileAddress
+    address: formOverrides.address ?? profileAddress,
+    pincode: formOverrides.pincode ?? savedProfilePincode
   };
   const clearCheckoutDraft = useCallback(() => {
     try {
@@ -215,13 +222,15 @@ export const CartDrawer: React.FC = () => {
     try {
       const stored = sessionStorage.getItem('dopamean_checkout_draft');
       if (!stored) return;
-      const draft: { email?: string; name?: string; phone?: string; address?: string } = JSON.parse(stored);
+      const draft: { email?: string; name?: string; phone?: string; address?: string; pincode?: string } = JSON.parse(stored);
       if (draft.email?.toLowerCase() === currentUser.email.toLowerCase()) {
-        setFormOverrides({
+        setFormOverrides(previous => ({
+          ...previous,
           name: draft.name,
           phone: draft.phone,
-          address: draft.address
-        });
+          address: draft.address,
+          pincode: draft.pincode || extractIndianPincode(draft.address || '') || savedProfilePincode
+        }));
       } else {
         sessionStorage.removeItem('dopamean_checkout_draft');
       }
@@ -232,7 +241,7 @@ export const CartDrawer: React.FC = () => {
         draftStorageWarningShown.current = true;
       }
     }
-  }, [currentUser?.email, showToast]);
+  }, [currentUser?.email, savedProfilePincode, showToast]);
 
   useEffect(() => {
     if (!currentUser?.email || !Object.values(formOverrides).some(value => value?.trim())) return;
@@ -241,7 +250,8 @@ export const CartDrawer: React.FC = () => {
         email: currentUser.email,
         name: formData.name,
         phone: formData.phone,
-        address: formData.address
+        address: formData.address,
+        pincode: formData.pincode
       }));
       draftStorageWarningShown.current = false;
     } catch (error) {
@@ -251,7 +261,7 @@ export const CartDrawer: React.FC = () => {
         draftStorageWarningShown.current = true;
       }
     }
-  }, [currentUser?.email, formData.address, formData.name, formData.phone, formOverrides, showToast]);
+  }, [currentUser?.email, formData.address, formData.name, formData.phone, formData.pincode, formOverrides, showToast]);
   const isOrderPaymentConfirmed = orderComplete?.paymentStatus === 'paid';
 
   const subtotal = cart.reduce((acc, item) => acc + item.product.price * item.quantity, 0);
@@ -266,8 +276,9 @@ export const CartDrawer: React.FC = () => {
   }
 
   const freeShippingThreshold = settings.freeShippingThreshold ?? 299;
-  const isFreeShipping = subtotal >= freeShippingThreshold;
-  const shippingCost = isFreeShipping || subtotal === 0 ? 0 : (settings.shippingFee ?? 40);
+  const deliveryQuote = calculateDeliveryCharge(settings, formData.pincode, subtotal);
+  const isFreeShipping = deliveryQuote.isFreeShipping;
+  const shippingCost = deliveryQuote.amount;
   const total = Math.max(0, subtotal - discount + shippingCost);
   const upiId = settings.upiId?.trim() || '';
   const isAndroidDevice = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
@@ -549,14 +560,18 @@ export const CartDrawer: React.FC = () => {
       if (!formData.email.trim()) errors.email = 'Your signed-in account email is required.';
       if (!formData.phone.trim()) errors.phone = 'Enter a mobile phone number.';
       if (!formData.address.trim()) errors.address = 'Enter your complete delivery address.';
+      if (!/^[1-9]\d{5}$/.test(formData.pincode)) errors.pincode = 'Enter a valid six-digit Indian pincode.';
       setAddressErrors(errors);
       if (Object.keys(errors).length > 0) return;
-      if (currentUser && formData.address.trim() !== profileAddress) {
+      if (currentUser && (
+        formData.address.trim() !== profileAddress ||
+        formData.pincode !== savedProfilePincode
+      )) {
         try {
           await updateUserProfile({
             address: formData.address.trim(),
             city: '',
-            pincode: ''
+            pincode: formData.pincode
           });
         } catch (error) {
           console.error('Could not save the delivery address to the customer profile:', error);
@@ -577,7 +592,7 @@ export const CartDrawer: React.FC = () => {
       openUserAuthModal('signin');
       return;
     }
-    if (!formData.name || !formData.email || !formData.phone || !formData.address) return;
+    if (!formData.name || !formData.email || !formData.phone || !formData.address || !/^[1-9]\d{5}$/.test(formData.pincode)) return;
     if (availablePaymentMethods.length === 0) {
       showToast('Online payment is not configured yet. Please contact the store or try again later.', 'error');
       return;
@@ -1427,6 +1442,44 @@ export const CartDrawer: React.FC = () => {
               </div>
 
               <div>
+                <label htmlFor="checkout-pincode" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '5px' }}>
+                  Delivery Pincode *
+                </label>
+                <input
+                  id="checkout-pincode"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="postal-code"
+                  required
+                  maxLength={6}
+                  placeholder="e.g. 400001"
+                  value={formData.pincode}
+                  aria-invalid={Boolean(addressErrors.pincode)}
+                  onChange={event => {
+                    setFormOverrides(previous => ({ ...previous, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) }));
+                    setAddressErrors(previous => ({ ...previous, pincode: '' }));
+                  }}
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    border: `1px solid ${addressErrors.pincode ? '#DC2626' : 'var(--border-medium)'}`,
+                    fontSize: '16px',
+                    boxSizing: 'border-box'
+                  }}
+                />
+                {addressErrors.pincode && <p role="alert" style={{ color: '#DC2626', fontSize: '0.76rem', margin: '4px 0 0' }}>{addressErrors.pincode}</p>}
+                {!addressErrors.pincode && !isFreeShipping && (
+                  <p role="status" aria-live="polite" style={{ color: 'var(--text-muted)', fontSize: '0.74rem', margin: '4px 0 0' }}>
+                    {formData.pincode
+                      ? `Delivery charge updates instantly for ${deliveryQuote.zoneName}.`
+                      : 'Enter your pincode to calculate its delivery charge.'}
+                  </p>
+                )}
+              </div>
+
+              <div>
                 <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '5px' }}>
                   Complete Delivery Address *
                 </label>
@@ -2220,8 +2273,12 @@ export const CartDrawer: React.FC = () => {
                 </div>
               )}
               <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
-                <span>Pan-India Shipping</span>
-                <span>{shippingCost === 0 ? 'FREE' : `${settings.currency}${shippingCost.toFixed(2)}`}</span>
+                <span>
+                  {isFreeShipping
+                    ? 'Delivery'
+                    : `${deliveryQuote.zoneName} Delivery${formData.pincode ? ` · ${formData.pincode}` : ''}`}
+                </span>
+                <span>{isFreeShipping ? 'Free Shipping' : `${settings.currency}${shippingCost.toFixed(2)}`}</span>
               </div>
               <div style={{
                 display: 'flex',

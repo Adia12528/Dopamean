@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { DEFAULT_SETTINGS } from './default-settings.js';
 import { isProductCodEligible } from './cod-policy.js';
 import { createOrderReference } from './order-reference.js';
+import { calculateDeliveryCharge } from './delivery-pricing.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -585,8 +586,7 @@ const sqliteDb = {
         promoCodeApplied = offer.code;
       }
 
-      const freeShippingThreshold = Math.max(0, Number(settings.freeShippingThreshold ?? 299));
-      const shippingAmount = subtotal === 0 || subtotal >= freeShippingThreshold ? 0 : Math.max(0, Number(settings.shippingFee ?? 40));
+      const shippingAmount = calculateDeliveryCharge(settings, customer.pincode, subtotal);
       const total = Number(Math.max(0, subtotal - discountAmount + shippingAmount).toFixed(2));
       const createdAt = new Date().toISOString();
       const referenceDate = createdAt.slice(0, 10).replace(/-/g, '');

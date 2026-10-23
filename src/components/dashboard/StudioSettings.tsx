@@ -25,13 +25,14 @@ import {
   ShieldAlert,
   FileText
 } from 'lucide-react';
-import type { CodRule, ProductCardBadge, StoreSettings } from '../../types';
+import type { CodRule, DeliveryPricing, ProductCardBadge, StoreSettings } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
+import { formatDeliveryPrefixRanges, getDeliveryPricing, parseDeliveryPrefixRanges, validateDeliveryPricing } from '../../lib/deliveryPricing';
 
 type HeroDisplaySettingSection = 'heroSocialProof' | 'heroOfferHighlight' | 'heroPersonalGreeting' | 'heroInstagramStrip' | 'heroParallax';
-type ScopedSettingSection = 'introSplash' | 'categorySections' | 'launchRail' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'upi' | 'policies' | 'heroDisplay' | HeroDisplaySettingSection;
+type ScopedSettingSection = 'introSplash' | 'categorySections' | 'launchRail' | 'productCards' | 'lowStock' | 'trustCards' | 'testimonials' | 'deliveryTimeline' | 'deliveryPricing' | 'upi' | 'policies' | 'heroDisplay' | HeroDisplaySettingSection;
 type ScopedSettingSaveState = { isSaving: boolean; error: string };
-const SCOPED_SETTING_SECTIONS: ScopedSettingSection[] = ['introSplash', 'categorySections', 'launchRail', 'productCards', 'lowStock', 'trustCards', 'testimonials', 'deliveryTimeline', 'upi', 'policies', 'heroDisplay', 'heroSocialProof', 'heroOfferHighlight', 'heroPersonalGreeting', 'heroInstagramStrip', 'heroParallax'];
+const SCOPED_SETTING_SECTIONS: ScopedSettingSection[] = ['introSplash', 'categorySections', 'launchRail', 'productCards', 'lowStock', 'trustCards', 'testimonials', 'deliveryTimeline', 'deliveryPricing', 'upi', 'policies', 'heroDisplay', 'heroSocialProof', 'heroOfferHighlight', 'heroPersonalGreeting', 'heroInstagramStrip', 'heroParallax'];
 const isScopedSettingSection = (section: string): section is ScopedSettingSection =>
   SCOPED_SETTING_SECTIONS.includes(section as ScopedSettingSection);
 
@@ -57,8 +58,14 @@ export const StudioSettings: React.FC = () => {
   const aboutFileInputRef = useRef<HTMLInputElement>(null);
   const upiQrFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [form, setForm] = useState(() => settings);
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'heroDisplay' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [form, setForm] = useState(() => ({
+    ...settings,
+    deliveryPricing: getDeliveryPricing(settings.deliveryPricing, settings.shippingFee ?? 40)
+  }));
+  const [deliveryPrefixRangeDrafts, setDeliveryPrefixRangeDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries((form.deliveryPricing?.zones ?? []).map(zone => [zone.id, formatDeliveryPrefixRanges(zone.prefixRanges)]))
+  );
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'heroDisplay' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'deliveryPricing' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
@@ -73,6 +80,7 @@ export const StudioSettings: React.FC = () => {
     trustCards: { isSaving: false, error: '' },
     testimonials: { isSaving: false, error: '' },
     deliveryTimeline: { isSaving: false, error: '' },
+    deliveryPricing: { isSaving: false, error: '' },
     upi: { isSaving: false, error: '' },
     policies: { isSaving: false, error: '' },
     heroDisplay: { isSaving: false, error: '' },
@@ -151,6 +159,23 @@ export const StudioSettings: React.FC = () => {
     deliveryStageDeliveredLabel: settings.deliveryStageDeliveredLabel || 'Delivered'
   };
   const isDeliveryTimelineDirty = JSON.stringify(deliveryTimelineFormValues) !== JSON.stringify(deliveryTimelineSavedValues);
+  const deliveryPricingFormValues = getDeliveryPricing(form.deliveryPricing, form.shippingFee ?? 40);
+  const deliveryPricingDraftHasInvalidRange = deliveryPricingFormValues.zones.some(zone =>
+    parseDeliveryPrefixRanges(deliveryPrefixRangeDrafts[zone.id] ?? '') === null
+  );
+  const deliveryPricingPayload: DeliveryPricing = {
+    ...deliveryPricingFormValues,
+    zones: deliveryPricingFormValues.zones.map(zone => ({
+      ...zone,
+      prefixRanges: parseDeliveryPrefixRanges(deliveryPrefixRangeDrafts[zone.id] ?? '') ?? []
+    }))
+  };
+  const savedDeliveryPricing = getDeliveryPricing(settings.deliveryPricing, settings.shippingFee ?? 40);
+  const isDeliveryPricingDirty =
+    JSON.stringify(deliveryPricingFormValues) !== JSON.stringify(savedDeliveryPricing) ||
+    deliveryPricingFormValues.zones.some(zone =>
+      (deliveryPrefixRangeDrafts[zone.id] ?? '') !== formatDeliveryPrefixRanges(zone.prefixRanges)
+    );
   const isUpiDetailsDirty = (
     String(form.upiId || '').trim() !== String(settings.upiId || '').trim() ||
     String(form.upiPayeeName || '').trim() !== String(settings.upiPayeeName || '').trim() ||
@@ -185,6 +210,7 @@ export const StudioSettings: React.FC = () => {
     ...(isHeroInstagramStripDirty ? [{ id: 'heroInstagramStrip' as const, label: 'Hero Instagram strip' }] : []),
     ...(isHeroParallaxDirty ? [{ id: 'heroParallax' as const, label: 'Hero parallax' }] : []),
     ...(isDeliveryTimelineDirty ? [{ id: 'deliveryTimeline' as const, label: 'Delivery Timeline' }] : []),
+    ...(isDeliveryPricingDirty ? [{ id: 'deliveryPricing' as const, label: 'Delivery Pricing' }] : []),
     ...(isUpiDetailsDirty ? [{ id: 'upi' as const, label: 'Direct UPI' }] : []),
     ...(isStorePoliciesDirty ? [{ id: 'policies' as const, label: 'Policies & Consent' }] : [])
   ];
@@ -222,6 +248,8 @@ export const StudioSettings: React.FC = () => {
             ? 'Testimonials'
             : section === 'deliveryTimeline'
               ? 'Delivery Timeline'
+              : section === 'deliveryPricing'
+                ? 'Delivery Pricing'
               : section === 'upi'
                 ? 'Direct UPI'
                 : section === 'policies'
@@ -284,7 +312,12 @@ export const StudioSettings: React.FC = () => {
             ? { showTestimonialsSection: form.showTestimonialsSection === true }
             : section === 'deliveryTimeline'
               ? deliveryTimelineFormValues
-                : section === 'upi'
+              : section === 'deliveryPricing'
+                ? {
+                  deliveryPricing: deliveryPricingPayload,
+                  shippingFee: deliveryPricingPayload.fallback.charge
+                }
+              : section === 'upi'
                   ? {
                 paymentUpiEnabled: form.paymentUpiEnabled !== false,
                 upiId: String(form.upiId || '').trim(),
@@ -316,6 +349,18 @@ export const StudioSettings: React.FC = () => {
       }));
       return;
     }
+    if (section === 'deliveryPricing') {
+      const error = deliveryPricingDraftHasInvalidRange
+        ? 'Use comma-separated prefixes or ranges, such as 4000-4001, with same-length numeric endpoints.'
+        : validateDeliveryPricing(deliveryPricingPayload);
+      if (error) {
+        setScopedSaveStates(prev => ({
+          ...prev,
+          deliveryPricing: { isSaving: false, error }
+        }));
+        return;
+      }
+    }
 
     setScopedSaveStates(prev => ({
       ...prev,
@@ -325,6 +370,12 @@ export const StudioSettings: React.FC = () => {
       await updateSettings(payload);
       if (section === 'policies') {
         setForm(previous => ({ ...previous, storePolicyVersion: nextPolicyVersion }));
+      }
+      if (section === 'deliveryPricing') {
+        setForm(previous => ({ ...previous, deliveryPricing: deliveryPricingPayload, shippingFee: deliveryPricingPayload.fallback.charge }));
+        setDeliveryPrefixRangeDrafts(Object.fromEntries(
+          deliveryPricingPayload.zones.map(zone => [zone.id, formatDeliveryPrefixRanges(zone.prefixRanges)])
+        ));
       }
       setScopedSaveStates(prev => ({
         ...prev,
@@ -368,6 +419,8 @@ export const StudioSettings: React.FC = () => {
       ? 'Save Direct UPI'
       : section === 'policies'
         ? 'Save policies'
+        : section === 'deliveryPricing'
+          ? 'Save delivery pricing'
         : section === 'heroSocialProof'
           ? 'Save rating display'
           : section === 'heroOfferHighlight'
@@ -546,6 +599,7 @@ export const StudioSettings: React.FC = () => {
     delete payload.deliveryStageShippedLabel;
     delete payload.deliveryStageOutForDeliveryLabel;
     delete payload.deliveryStageDeliveredLabel;
+    delete payload.deliveryPricing;
     delete payload.paymentUpiEnabled;
     delete payload.upiId;
     delete payload.upiQrImage;
@@ -710,6 +764,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'testimonials' as const, label: 'Testimonials', icon: <Sparkles size={16} /> },
     { id: 'deliveryTimeline' as const, label: 'Delivery Timeline', icon: <Truck size={16} /> },
     { id: 'shipping' as const, label: 'Shipping & Inventory', icon: <Truck size={16} /> },
+    { id: 'deliveryPricing' as const, label: 'Delivery Pricing by Pincode', icon: <Truck size={16} /> },
     { id: 'productCards' as const, label: 'Product Cards', icon: <Sliders size={16} /> },
     { id: 'lowStock' as const, label: 'Low Stock Threshold', icon: <Info size={16} /> },
     { id: 'cod' as const, label: 'COD Eligibility Rules', icon: <Truck size={16} /> },
@@ -1992,16 +2047,14 @@ export const StudioSettings: React.FC = () => {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px' }}>
-                    Standard Shipping Fee ({form.currency})
+                    Fallback Delivery Charge ({form.currency})
                   </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.shippingFee ?? 40}
-                    onChange={(e) => handleChange('shippingFee', Math.max(0, parseFloat(e.target.value) || 0))}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-medium)', fontSize: '0.9rem' }}
-                  />
+                  <p style={{ margin: 0, padding: '10px 14px', borderRadius: '10px', border: '1px solid var(--border-light)', background: 'var(--bg-surface-soft)', fontSize: '0.9rem' }}>
+                    {form.currency}{deliveryPricingFormValues.fallback.charge.toFixed(2)} · {deliveryPricingFormValues.fallback.name}
+                  </p>
+                  <button type="button" onClick={() => navigateToSection('deliveryPricing')} style={{ marginTop: '5px', padding: 0, border: 0, background: 'none', color: 'var(--accent-terracotta)', fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer' }}>
+                    Edit delivery pricing
+                  </button>
                 </div>
 
                 <div style={{ gridColumn: '1 / -1' }}>
@@ -2023,6 +2076,209 @@ export const StudioSettings: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeSection === 'deliveryPricing' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Truck size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)' }}>Pincode Delivery Zones</h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '22px', lineHeight: 1.5 }}>
+                Match six-digit Indian pincodes by prefix. Enter comma-separated prefixes or inclusive ranges such as <code>4000-4001, 402</code>. Longer matching prefixes take priority; exact pincode overrides take priority over zones. The fallback applies when no zone matches.
+              </p>
+
+              <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginBottom: '22px' }}>
+                <label style={{ display: 'grid', gap: '6px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Fallback zone name
+                  <input
+                    type="text"
+                    value={deliveryPricingFormValues.fallback.name}
+                    onChange={event => handleChange('deliveryPricing', {
+                      ...deliveryPricingFormValues,
+                      fallback: { ...deliveryPricingFormValues.fallback, name: event.target.value }
+                    })}
+                    style={{ width: '100%', minHeight: '42px', padding: '9px 12px', borderRadius: '9px', border: '1px solid var(--border-medium)', fontSize: '0.9rem' }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: '6px', fontSize: '0.82rem', fontWeight: 700 }}>
+                  Fallback delivery charge ({form.currency})
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={deliveryPricingFormValues.fallback.charge}
+                    onChange={event => handleChange('deliveryPricing', {
+                      ...deliveryPricingFormValues,
+                      fallback: { ...deliveryPricingFormValues.fallback, charge: Number(event.target.value) }
+                    })}
+                    style={{ width: '100%', minHeight: '42px', padding: '9px 12px', borderRadius: '9px', border: '1px solid var(--border-medium)', fontSize: '0.9rem' }}
+                  />
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)' }}>Zones</h4>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    const id = `delivery-zone-${crypto.randomUUID()}`;
+                    handleChange('deliveryPricing', {
+                      ...deliveryPricingFormValues,
+                      zones: [...deliveryPricingFormValues.zones, { id, name: 'New zone', charge: 0, prefixRanges: [] }]
+                    });
+                    setDeliveryPrefixRangeDrafts(previous => ({ ...previous, [id]: '' }));
+                  }}
+                  style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+                >
+                  Add zone
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gap: '12px' }}>
+                {deliveryPricingFormValues.zones.map(zone => (
+                  <div key={zone.id} style={{ padding: '16px', border: '1px solid var(--border-medium)', borderRadius: '12px', background: '#FFFEFC' }}>
+                    <div className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '12px' }}>
+                      <label style={{ display: 'grid', gap: '5px', fontSize: '0.78rem', fontWeight: 700 }}>
+                        Zone name
+                        <input
+                          type="text"
+                          value={zone.name}
+                          onChange={event => handleChange('deliveryPricing', {
+                            ...deliveryPricingFormValues,
+                            zones: deliveryPricingFormValues.zones.map(item => item.id === zone.id ? { ...item, name: event.target.value } : item)
+                          })}
+                          style={{ width: '100%', minHeight: '40px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-medium)', fontSize: '0.88rem' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: '5px', fontSize: '0.78rem', fontWeight: 700 }}>
+                        Delivery charge ({form.currency})
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={zone.charge}
+                          onChange={event => handleChange('deliveryPricing', {
+                            ...deliveryPricingFormValues,
+                            zones: deliveryPricingFormValues.zones.map(item => item.id === zone.id ? { ...item, charge: Number(event.target.value) } : item)
+                          })}
+                          style={{ width: '100%', minHeight: '40px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-medium)', fontSize: '0.88rem' }}
+                        />
+                      </label>
+                      <label style={{ display: 'grid', gap: '5px', fontSize: '0.78rem', fontWeight: 700, gridColumn: '1 / -1' }}>
+                        Pincode prefixes / ranges
+                        <input
+                          type="text"
+                          value={deliveryPrefixRangeDrafts[zone.id] ?? formatDeliveryPrefixRanges(zone.prefixRanges)}
+                          onChange={event => {
+                            const value = event.target.value;
+                            setDeliveryPrefixRangeDrafts(previous => ({ ...previous, [zone.id]: value }));
+                            const ranges = parseDeliveryPrefixRanges(value);
+                            if (ranges) {
+                              handleChange('deliveryPricing', {
+                                ...deliveryPricingFormValues,
+                                zones: deliveryPricingFormValues.zones.map(item => item.id === zone.id ? { ...item, prefixRanges: ranges } : item)
+                              });
+                            }
+                          }}
+                          placeholder="e.g. 4000-4001, 402"
+                          style={{ width: '100%', minHeight: '40px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-medium)', fontSize: '0.88rem' }}
+                        />
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleChange('deliveryPricing', {
+                          ...deliveryPricingFormValues,
+                          zones: deliveryPricingFormValues.zones.filter(item => item.id !== zone.id)
+                        });
+                        setDeliveryPrefixRangeDrafts(previous => {
+                          const next = { ...previous };
+                          delete next[zone.id];
+                          return next;
+                        });
+                      }}
+                      style={{ marginTop: '10px', border: 0, padding: 0, background: 'none', color: '#B91C1C', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      Remove zone
+                    </button>
+                  </div>
+                ))}
+                {deliveryPricingFormValues.zones.length === 0 && (
+                  <p style={{ margin: 0, padding: '14px', border: '1px dashed var(--border-medium)', borderRadius: '10px', color: 'var(--text-muted)', fontSize: '0.84rem' }}>
+                    No zones configured. All non-free-shipping orders use the fallback charge.
+                  </p>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', margin: '24px 0 12px' }}>
+                <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--text-main)' }}>Exact pincode overrides</h4>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => handleChange('deliveryPricing', {
+                    ...deliveryPricingFormValues,
+                    pincodeOverrides: [...deliveryPricingFormValues.pincodeOverrides, { pincode: '', charge: 0 }]
+                  })}
+                  style={{ padding: '8px 12px', fontSize: '0.8rem' }}
+                >
+                  Add override
+                </button>
+              </div>
+              <div style={{ display: 'grid', gap: '10px' }}>
+                {deliveryPricingFormValues.pincodeOverrides.map((override, index) => (
+                  <div key={`${override.pincode}-${index}`} className="dashboard-form-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr)) auto', gap: '10px', alignItems: 'end' }}>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '0.78rem', fontWeight: 700 }}>
+                      Six-digit pincode
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={override.pincode}
+                        onChange={event => handleChange('deliveryPricing', {
+                          ...deliveryPricingFormValues,
+                          pincodeOverrides: deliveryPricingFormValues.pincodeOverrides.map((item, itemIndex) => itemIndex === index ? { ...item, pincode: event.target.value.replace(/\D/g, '').slice(0, 6) } : item)
+                        })}
+                        placeholder="e.g. 400001"
+                        style={{ width: '100%', minHeight: '40px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-medium)', fontSize: '0.88rem' }}
+                      />
+                    </label>
+                    <label style={{ display: 'grid', gap: '5px', fontSize: '0.78rem', fontWeight: 700 }}>
+                      Charge ({form.currency})
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={override.charge}
+                        onChange={event => handleChange('deliveryPricing', {
+                          ...deliveryPricingFormValues,
+                          pincodeOverrides: deliveryPricingFormValues.pincodeOverrides.map((item, itemIndex) => itemIndex === index ? { ...item, charge: Number(event.target.value) } : item)
+                        })}
+                        style={{ width: '100%', minHeight: '40px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-medium)', fontSize: '0.88rem' }}
+                      />
+                    </label>
+                    <button type="button" onClick={() => handleChange('deliveryPricing', {
+                      ...deliveryPricingFormValues,
+                      pincodeOverrides: deliveryPricingFormValues.pincodeOverrides.filter((_, itemIndex) => itemIndex !== index)
+                    })} style={{ minHeight: '40px', border: 0, padding: '0 8px', background: 'none', color: '#B91C1C', fontWeight: 700, cursor: 'pointer' }}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                {deliveryPricingFormValues.pincodeOverrides.length === 0 && (
+                  <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem' }}>No exact pincode overrides configured.</p>
+                )}
+              </div>
+              {renderScopedSaveControls('deliveryPricing', isDeliveryPricingDirty)}
             </div>
           )}
 

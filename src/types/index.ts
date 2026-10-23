@@ -22,6 +22,32 @@ export type OrderCreatePayload = Omit<Partial<Order>, 'policyConsent'> & {
   upiPaymentAttested?: boolean;
 };
 
+export interface DeliveryPincodePrefixRange {
+  startPrefix: string;
+  endPrefix: string;
+}
+
+export interface DeliveryZone {
+  id: string;
+  name: string;
+  charge: number;
+  prefixRanges: DeliveryPincodePrefixRange[];
+}
+
+export interface DeliveryPincodeOverride {
+  pincode: string;
+  charge: number;
+}
+
+export interface DeliveryPricing {
+  zones: DeliveryZone[];
+  fallback: {
+    name: string;
+    charge: number;
+  };
+  pincodeOverrides: DeliveryPincodeOverride[];
+}
+
 export interface StoreSettings {
   storeName: string;
   storeTagline: string;
@@ -81,6 +107,7 @@ export interface StoreSettings {
   currency: string;
   freeShippingThreshold: number;
   shippingFee: number;
+  deliveryPricing?: DeliveryPricing;
   lowStockThreshold: number;
   productCardBadgePriority?: ProductCardBadge[];
   shippingNotice?: string;

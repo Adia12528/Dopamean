@@ -9,6 +9,7 @@
     "server": "npm --prefix server run dev",
     "client": "vite",
     "build": "tsc -b && vite build",
+    "test:delivery": "node --test server/delivery-pricing.test.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
