@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.3.1...dopamean-v1.4.0) (2026-10-24)
+
+
+### Features
+
+* confirm checkout totals and email new orders ([d391f02](https://github.com/Adia12528/Dopamean/commit/d391f02c90be48779b6253f400a3340d56dea0e3))
+
 ## [1.3.1](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.3.0...dopamean-v1.3.1) (2026-10-23)
 
 
