@@ -24,7 +24,8 @@ import {
   User,
   KeyRound,
   ShieldAlert,
-  FileText
+  FileText,
+  Mail
 } from 'lucide-react';
 import type { CodRule, DeliveryDistancePricing, DeliveryPricing, ProductCardBadge, StoreSettings } from '../../types';
 import { PRODUCT_CARD_BADGES, normalizeProductCardBadgePriority } from '../../lib/productCardBadgePriority';
@@ -89,7 +90,7 @@ export const StudioSettings: React.FC = () => {
   const [deliveryPrefixRangeDrafts, setDeliveryPrefixRangeDrafts] = useState<Record<string, string>>(() =>
     Object.fromEntries((form.deliveryPricing?.zones ?? []).map(zone => [zone.id, formatDeliveryPrefixRanges(zone.prefixRanges)]))
   );
-  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'heroDisplay' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'deliveryPricing' | 'deliveryDistancePricing' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
+  const [activeSection, setActiveSection] = useState<'theme' | 'header' | 'hero' | 'heroDisplay' | 'introSplash' | 'categorySections' | 'launchRail' | 'story' | 'testimonials' | 'trustCards' | 'shipping' | 'deliveryPricing' | 'deliveryDistancePricing' | 'productCards' | 'lowStock' | 'deliveryTimeline' | 'cod' | 'whatsapp' | 'notifications' | 'payments' | 'upi' | 'policies' | 'contact' | 'footer' | 'security' | 'db'>('theme');
   const [isHeroUploading, setIsHeroUploading] = useState(false);
   const [isAboutUploading, setIsAboutUploading] = useState(false);
   const [isUpiQrUploading, setIsUpiQrUploading] = useState(false);
@@ -859,6 +860,7 @@ export const StudioSettings: React.FC = () => {
     { id: 'lowStock' as const, label: 'Low Stock Threshold', icon: <Info size={16} /> },
     { id: 'cod' as const, label: 'COD Eligibility Rules', icon: <Truck size={16} /> },
     { id: 'whatsapp' as const, label: 'WhatsApp Messages', icon: <MessageCircle size={16} /> },
+    { id: 'notifications' as const, label: 'Email Notifications', icon: <Mail size={16} /> },
     { id: 'payments' as const, label: 'Payment Gateways', icon: <CreditCard size={16} /> },
     { id: 'upi' as const, label: 'Direct UPI', icon: <QrCode size={16} /> },
     { id: 'policies' as const, label: 'Policies & Consent', icon: <FileText size={16} /> },
@@ -2745,6 +2747,59 @@ export const StudioSettings: React.FC = () => {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeSection === 'notifications' && (
+            <div style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              padding: '28px',
+              border: '1px solid var(--border-medium)',
+              boxShadow: 'var(--shadow-sm)'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                <Mail size={20} color="var(--accent-terracotta)" />
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-main)', margin: 0 }}>
+                  Email alerts
+                </h3>
+              </div>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginBottom: '20px' }}>
+                Control which customer activity emails are sent to the notification inbox configured for the API. These switches do not change your SMTP setup.
+              </p>
+              <div style={{ display: 'grid', gap: '16px' }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '0.88rem', fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.emailOrderNotificationsEnabled !== false}
+                    onChange={event => handleChange('emailOrderNotificationsEnabled', event.target.checked)}
+                    style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: 'var(--accent-terracotta)' }}
+                  />
+                  <span>
+                    New order email alerts
+                    <span style={{ display: 'block', marginTop: '4px', fontSize: '0.76rem', fontWeight: 400, color: 'var(--text-muted)' }}>
+                      Email the store inbox when a new order is placed, including orders started through PayU checkout.
+                    </span>
+                  </span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '0.88rem', fontWeight: 700 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.emailCustomerAuthNotificationsEnabled !== false}
+                    onChange={event => handleChange('emailCustomerAuthNotificationsEnabled', event.target.checked)}
+                    style={{ width: '16px', height: '16px', marginTop: '2px', accentColor: 'var(--accent-terracotta)' }}
+                  />
+                  <span>
+                    Account created and sign-in email alerts
+                    <span style={{ display: 'block', marginTop: '4px', fontSize: '0.76rem', fontWeight: 400, color: 'var(--text-muted)' }}>
+                      Email only the customer name and phone number after successful account creation or sign-in.
+                    </span>
+                  </span>
+                </label>
+              </div>
+              <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', margin: '20px 0 0' }}>
+                Use the Studio’s Save Settings button to apply changes.
+              </p>
             </div>
           )}
 

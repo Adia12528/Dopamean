@@ -81,18 +81,29 @@ export const buildOrderNotificationEmail = (order, currency = 'INR') => {
   };
 };
 
-export const sendNewOrderNotification = async (order, currency) => {
+export const buildCustomerAuthNotificationEmail = (event, user) => {
+  const isRegistration = event === 'account_created';
+  const name = String(user.name || 'Customer');
+  const phone = String(user.phone || 'Not provided');
+  const subject = isRegistration ? 'New customer account created' : 'Customer signed in';
+  const text = `${subject}\n\nName: ${name}\nPhone: ${phone}`;
+  const html = `<h2>${escapeHtml(subject)}</h2><p>Name: ${escapeHtml(name)}<br>Phone: ${escapeHtml(phone)}</p>`;
+
+  return { subject, text, html };
+};
+
+const sendNotificationEmail = async (message, label) => {
   const config = getSmtpConfiguration();
   if (config.missing) {
-    console.error(`Order notification email not sent; configure these Render variables: ${config.missing.join(', ')}.`);
+    console.error(`Notification email not sent; configure these Render variables: ${config.missing.join(', ')}.`);
     return false;
   }
   if (config.error) {
-    console.error(`Order notification email not sent: ${config.error}`);
+    console.error(`Notification email not sent: ${config.error}`);
     return false;
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.to) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(config.from)) {
-    console.error('Order notification email not sent; SMTP_FROM and ORDER_NOTIFICATION_EMAIL must be valid email addresses.');
+    console.error('Notification email not sent; SMTP_FROM and ORDER_NOTIFICATION_EMAIL must be valid email addresses.');
     return false;
   }
 
@@ -106,12 +117,17 @@ export const sendNewOrderNotification = async (order, currency) => {
       greetingTimeout: 10000,
       socketTimeout: 20000
     });
-    const message = buildOrderNotificationEmail(order, currency);
     await transporter.sendMail({ from: config.from, to: config.to, ...message });
-    console.info(`New order notification sent for order ${order.id}.`);
+    console.info(`${label} notification email sent.`);
     return true;
   } catch (error) {
-    console.error(`Could not send order notification for order ${order.id}:`, error);
+    console.error(`Could not send ${label} notification email:`, error);
     return false;
   }
 };
+
+export const sendNewOrderNotification = (order, currency) =>
+  sendNotificationEmail(buildOrderNotificationEmail(order, currency), `new order ${order.id}`);
+
+export const sendCustomerAuthNotification = (event, user) =>
+  sendNotificationEmail(buildCustomerAuthNotificationEmail(event, user), event);

@@ -21,7 +21,11 @@ import {
   formatPayuAmount,
   verifyPayuResponseHash
 } from './payu.js';
-import { isOrderNotificationConfigured, sendNewOrderNotification } from './order-notifications.js';
+import {
+  isOrderNotificationConfigured,
+  sendCustomerAuthNotification,
+  sendNewOrderNotification
+} from './order-notifications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -123,11 +127,11 @@ app.get('/uploads/hero_landing.png', (_req, res) => res.redirect(301, '/uploads/
 app.use('/uploads', express.static(UPLOADS_DIR));
 
 const requestWindows = new Map();
-function rateLimit({ windowMs, max, keyPrefix }) {
+function rateLimit({ windowMs, max, keyPrefix, keyGenerator = req => req.ip }) {
   return (req, res, next) => {
     // In local development, bypass rate limits to prevent locking out developer
     if (process.env.NODE_ENV !== 'production') return next();
-    const key = `${keyPrefix}:${req.ip}`;
+    const key = `${keyPrefix}:${keyGenerator(req)}`;
     const now = Date.now();
     const bucket = requestWindows.get(key);
     if (!bucket || now - bucket.startedAt >= windowMs) {
@@ -140,12 +144,29 @@ function rateLimit({ windowMs, max, keyPrefix }) {
   };
 }
 const loginLimit = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, keyPrefix: 'login' });
+const authNotificationLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 2,
+  keyPrefix: 'auth-notification',
+  keyGenerator: req => req.user?.id || req.ip
+});
 const lookupLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'order-lookup' });
 const uploadLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 30, keyPrefix: 'upload' });
 const orderLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 20, keyPrefix: 'order-create' });
 const reviewLimit = rateLimit({ windowMs: 60 * 60 * 1000, max: 10, keyPrefix: 'review-create' });
 const paymentLimit = rateLimit({ windowMs: 60 * 1000, max: 20, keyPrefix: 'payment' });
 const deliveryQuoteLimit = rateLimit({ windowMs: 60 * 1000, max: 120, keyPrefix: 'delivery-quote' });
+
+async function notifyCustomerAuthIfEnabled(event, user) {
+  try {
+    const settings = await db.getSettings();
+    if (settings.emailCustomerAuthNotificationsEnabled !== false) {
+      await sendCustomerAuthNotification(event, user);
+    }
+  } catch (error) {
+    console.error(`Could not check settings for ${event} notification:`, error);
+  }
+}
 
 function updateEnvFile(updates) {
   try {
@@ -591,6 +612,7 @@ app.post('/api/users/register', loginLimit, async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const user = await db.createUser({ name: name.trim(), email: cleanEmail, password, phone, address, city, pincode });
     const token = generateUserToken(user.id);
+    void notifyCustomerAuthIfEnabled('account_created', user);
     res.status(201).json({ success: true, token, user });
   } catch (err) {
     if (err.message === 'EMAIL_EXISTS') {
@@ -646,6 +668,7 @@ app.post('/api/users/login', loginLimit, async (req, res) => {
     const token = generateUserToken(user.id);
     // Return user without passwordHash
     const { passwordHash: _, ...safeUser } = user;
+    void notifyCustomerAuthIfEnabled('sign_in', safeUser);
     res.json({ success: true, token, user: safeUser });
   } catch (err) {
     console.error('Login error:', err);
@@ -655,6 +678,15 @@ app.post('/api/users/login', loginLimit, async (req, res) => {
 
 app.get('/api/users/me', requireUser, (req, res) => {
   res.json(req.user);
+});
+
+app.post('/api/users/auth-notification', requireUser, authNotificationLimit, async (req, res) => {
+  const event = req.body?.event;
+  if (event !== 'account_created' && event !== 'sign_in') {
+    return res.status(400).json({ error: 'Invalid account notification event.' });
+  }
+  void notifyCustomerAuthIfEnabled(event, req.user);
+  res.status(202).json({ success: true });
 });
 
 app.put('/api/users/me', requireUser, async (req, res) => {
@@ -949,6 +981,11 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
     delete changes.adminPasscodeConfigured;
     delete changes.superAdminConfigured;
     delete changes.payuConfigured;
+    for (const key of ['emailOrderNotificationsEnabled', 'emailCustomerAuthNotificationsEnabled']) {
+      if (changes[key] !== undefined && typeof changes[key] !== 'boolean') {
+        return res.status(400).json({ error: 'Email notification settings must be true or false.' });
+      }
+    }
 
     const envUpdates = {};
     const clearPayuCredentials = changes.clearPayuCredentials === true;
@@ -1336,7 +1373,9 @@ app.post('/api/orders', orderLimit, requireUser, async (req, res) => {
         phone: String(customer.phone || req.user.phone || '').trim()
       }
     });
-    void sendNewOrderNotification(newOrder, settings.currency);
+    if (settings.emailOrderNotificationsEnabled !== false) {
+      void sendNewOrderNotification(newOrder, settings.currency);
+    }
     res.status(201).json(newOrder);
   } catch (err) {
     const clientErrors = ['INVALID_CUSTOMER', 'EMPTY_ORDER', 'INVALID_QUANTITY', 'PRODUCT_NOT_FOUND', 'INSUFFICIENT_STOCK', 'INVALID_PROMO', 'INVALID_PAYMENT_METHOD', 'COD_NOT_AVAILABLE_FOR_ITEMS'];
@@ -1555,7 +1594,9 @@ app.post('/api/payments/payu/create-order', paymentLimit, requireUser, async (re
     });
     const transactionId = `D${crypto.randomBytes(12).toString('hex')}`;
     await db.linkPayuTransaction(storeOrder.id, transactionId);
-    void sendNewOrderNotification(storeOrder, settings.currency);
+    if (settings.emailOrderNotificationsEnabled !== false) {
+      void sendNewOrderNotification(storeOrder, settings.currency);
+    }
     const amount = formatPayuAmount(storeOrder.total);
     const productinfo = `Store order ${storeOrder.id}`.slice(0, 100);
     const firstname = String(storeOrder.customer.name).trim().slice(0, 60);

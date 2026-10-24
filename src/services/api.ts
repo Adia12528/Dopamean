@@ -499,6 +499,18 @@ export const api = {
     return res.json();
   },
 
+  notifyCustomerAuthEvent: async (token: string, event: 'account_created' | 'sign_in'): Promise<void> => {
+    const res = await fetch(`${BASE_URL}/api/users/auth-notification`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ event })
+    });
+    if (!res.ok) throw new Error('Could not send the account notification.');
+  },
+
   getMe: async (token: string): Promise<UserProfile> => {
     const res = await fetch(`${BASE_URL}/api/users/me`, {
       headers: { Authorization: `Bearer ${token}` }

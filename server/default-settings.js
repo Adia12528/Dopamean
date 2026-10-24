@@ -51,6 +51,8 @@
   contactEmail: 'dsoni7018@gmail.com',
   contactPhone: '+91 98765 43210',
   whatsappEnabled: true,
+  emailOrderNotificationsEnabled: true,
+  emailCustomerAuthNotificationsEnabled: true,
   whatsappBusinessPhone: '',
   whatsappCountryCode: '91',
   bulkOrderInquiryEnabled: true,

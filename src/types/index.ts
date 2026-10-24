@@ -170,6 +170,8 @@ export interface StoreSettings {
   deliveryStageDeliveredLabel?: string;
   autoMarkCodPaidOnDelivered?: boolean;
   whatsappEnabled?: boolean;
+  emailOrderNotificationsEnabled?: boolean;
+  emailCustomerAuthNotificationsEnabled?: boolean;
   whatsappBusinessPhone?: string;
   whatsappCountryCode?: string;
   bulkOrderInquiryEnabled?: boolean;

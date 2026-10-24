@@ -153,6 +153,8 @@ Before enabling the workflow, create a repository-scoped fine-grained personal a
 
 Set `ORDER_NOTIFICATION_EMAIL` to the merchant inbox and configure `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` in the Render API environment. For Gmail, use `smtp.gmail.com`, port `465` with secure TLS (or port `587` with STARTTLS), and a Google App Password; never use the account's normal password. The sender address must be accepted by the SMTP provider. `/api/health` reports whether the required notification settings are present. Email failures are logged and do not block checkout.
 
+The same SMTP settings also send alerts when a customer account is created or a customer successfully signs in. These alerts contain only the customer's name and phone number. Use **Studio → Email Notifications** to enable or disable new-order alerts and customer account/sign-in alerts independently. Supabase-authenticated sign-ins require the deployed API to be updated along with the frontend.
+
 Before launch, back up the database and confirm it contains no development/demo customer or order data. Move older uploads and inline image data URLs into Supabase Storage; relative `/uploads/...` paths must resolve against the API origin until migrated. Review backup and retention settings for both the database and Storage.
 
 Keep payment card entry in the payment provider's hosted checkout; do not collect or store card numbers in this application. If a credential has been shared or committed, rotate it before production. Removing a secret from the latest files does not remove it from Git history.

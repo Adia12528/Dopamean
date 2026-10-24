@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildOrderNotificationEmail, isOrderNotificationConfigured } from './order-notifications.js';
+import {
+  buildCustomerAuthNotificationEmail,
+  buildOrderNotificationEmail,
+  isOrderNotificationConfigured
+} from './order-notifications.js';
 
 test('reports whether SMTP order notifications have complete valid settings', () => {
   assert.equal(isOrderNotificationConfigured({}), false);
@@ -57,4 +61,18 @@ test('escapes customer and product content in HTML email', () => {
   assert.match(email.html, /&lt;script&gt;/);
   assert.match(email.html, /&lt;img/);
   assert.match(email.html, /A &amp; B/);
+});
+
+test('builds account and sign-in alerts with only the customer name and phone', () => {
+  const user = { name: 'A & B', phone: '<1234567890>', email: 'private@example.com' };
+  const accountEmail = buildCustomerAuthNotificationEmail('account_created', user);
+  const signInEmail = buildCustomerAuthNotificationEmail('sign_in', user);
+
+  assert.equal(accountEmail.subject, 'New customer account created');
+  assert.match(accountEmail.text, /Name: A & B\nPhone: <1234567890>/);
+  assert.doesNotMatch(accountEmail.text, /private@example\.com/);
+  assert.match(accountEmail.html, /A &amp; B/);
+  assert.match(accountEmail.html, /&lt;1234567890&gt;/);
+  assert.equal(signInEmail.subject, 'Customer signed in');
+  assert.match(signInEmail.text, /Name: A & B\nPhone: <1234567890>/);
 });

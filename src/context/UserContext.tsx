@@ -5,6 +5,8 @@ import { useStore } from './StoreContext';
 import { getEmailConfirmationRedirectUrl, getOAuthRedirectUrl, getSupabaseClient, supabaseAuthEnabled } from '../lib/supabase';
 
 const USER_TOKEN_KEY = 'dopamean_user_token';
+const PENDING_ACCOUNT_NOTIFICATION_KEY = 'dopamean_pending_account_notification';
+const ACCOUNT_NOTIFICATION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const getOAuthRedirectError = () => {
   try {
@@ -184,6 +186,21 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   persistToken(supaToken);
                   completeSignIn(user);
                   setIsLoadingUser(false);
+                  if (event === 'SIGNED_IN') {
+                    let notificationEvent: 'account_created' | 'sign_in' = 'sign_in';
+                    try {
+                      const createdAt = Number(sessionStorage.getItem(PENDING_ACCOUNT_NOTIFICATION_KEY));
+                      const age = Date.now() - createdAt;
+                      if (Number.isFinite(createdAt) && age >= 0 && age <= ACCOUNT_NOTIFICATION_MAX_AGE_MS) {
+                        notificationEvent = 'account_created';
+                      }
+                      sessionStorage.removeItem(PENDING_ACCOUNT_NOTIFICATION_KEY);
+                    } catch (error) {
+                      console.warn('Could not check the pending account notification:', error);
+                    }
+                    void api.notifyCustomerAuthEvent(supaToken, notificationEvent)
+                      .catch(error => console.error('Could not send the customer account notification:', error));
+                  }
 
                   // Clean OAuth code or hash from address bar if present
                   try {
@@ -309,19 +326,35 @@ export const UserProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (supabaseAuthEnabled) {
       const supabase = await getSupabaseClient();
       if (!supabase) throw new Error('Supabase Auth is enabled but its client is unavailable.');
-      const { data: result, error } = await supabase.auth.signUp({
-        email: data.email,
-        password: data.password,
-        options: {
-          data: { name: data.name, phone: data.phone || '' },
-          emailRedirectTo: getEmailConfirmationRedirectUrl()
+      try {
+        sessionStorage.setItem(PENDING_ACCOUNT_NOTIFICATION_KEY, String(Date.now()));
+      } catch (error) {
+        console.warn('Could not save the pending account notification:', error);
+      }
+      let signupSession: { access_token: string } | null;
+      try {
+        const signup = await supabase.auth.signUp({
+          email: data.email,
+          password: data.password,
+          options: {
+            data: { name: data.name, phone: data.phone || '' },
+            emailRedirectTo: getEmailConfirmationRedirectUrl()
+          }
+        });
+        if (signup.error) throw signup.error;
+        signupSession = signup.data.session;
+      } catch (error) {
+        try {
+          sessionStorage.removeItem(PENDING_ACCOUNT_NOTIFICATION_KEY);
+        } catch {
+          console.warn('Could not clear the pending account notification.');
         }
-      });
-      if (error) throw error;
-      if (!result.session?.access_token) return 'confirmation-required';
+        throw error;
+      }
+      if (!signupSession?.access_token) return 'confirmation-required';
 
-      const user = await syncSupabaseProfile(result.session.access_token);
-      persistToken(result.session.access_token);
+      const user = await syncSupabaseProfile(signupSession.access_token);
+      persistToken(signupSession.access_token);
       completeSignIn(user);
       return 'signed-in';
     } else {

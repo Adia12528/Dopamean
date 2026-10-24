@@ -77,6 +77,8 @@ const DEFAULT_SETTINGS: StoreSettings = {
   deliveryStageDeliveredLabel: 'Delivered',
   autoMarkCodPaidOnDelivered: true,
   whatsappEnabled: true,
+  emailOrderNotificationsEnabled: true,
+  emailCustomerAuthNotificationsEnabled: true,
   whatsappBusinessPhone: '',
   whatsappCountryCode: '91',
   whatsappOrderButtonEnabled: true,

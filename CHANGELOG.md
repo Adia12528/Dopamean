@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.2](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.4.1...dopamean-v1.4.2) (2026-10-24)
+
+### Features
+
+* add Studio controls for order and customer account email alerts
+
 ## [1.4.1](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.4.0...dopamean-v1.4.1) (2026-10-24)
 
 ### Bug Fixes
