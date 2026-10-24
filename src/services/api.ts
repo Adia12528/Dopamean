@@ -78,7 +78,7 @@ export const api = {
 
   // PRODUCTS
   getProducts: async (): Promise<Product[]> => {
-    const res = await fetch(`${BASE_URL}/api/products`);
+    const res = await fetch(`${BASE_URL}/api/products`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch products');
     return res.json();
   },
@@ -162,7 +162,7 @@ export const api = {
 
   // ORDERS & TRACKING
   getOrders: async (): Promise<Order[]> => {
-    const res = await adminFetch(`${BASE_URL}/api/orders`);
+    const res = await adminFetch(`${BASE_URL}/api/orders`, { cache: 'no-store' });
     if (!res.ok) throw new Error('Failed to fetch orders');
     return res.json();
   },

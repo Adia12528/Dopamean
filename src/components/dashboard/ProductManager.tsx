@@ -25,7 +25,8 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
   const [stockDrafts, setStockDrafts] = useState<Record<string, string>>({});
 
   const filtered = products.filter(p => {
-    const matchesCat = categoryFilter === 'All' || p.category === categoryFilter;
+    const matchesCat = categoryFilter === 'All' ||
+      p.category.trim().toLocaleLowerCase() === categoryFilter.trim().toLocaleLowerCase();
     const matchesSearch = 
       p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.yarnType.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -38,6 +39,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
     sortOrder: settings.categoryProductSortOrder
   });
   const isCategoryOverview = categoryFilter === 'All' && !searchTerm.trim();
+  const isCompactView = !isCategoryOverview;
 
   const handleStockDelta = (product: Product, delta: number) => {
     const newStock = Math.max(0, product.stock + delta);
@@ -115,7 +117,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
             }}
           >
             <option value="All">All Categories ({products.length})</option>
-            {Array.from(new Set(['Accessories', 'Hair Accessories', 'Rubber Bands', 'Hair Clips', 'Combos & Gift Sets', 'Bags & Totes', 'Headwear', 'Amigurumi & Charms', 'Coasters & Home', 'Wearables', ...products.map(p => p.category)])).map(cat => (
+            {Array.from(new Set(['Accessories', 'Hair Accessories', 'Rubber Bands', 'Hair Clips', 'Combos & Gift Sets', 'Bags & Totes', 'Headwear', 'Amigurumi & Charms', 'Coasters & Home', 'Wearables', ...products.map(p => p.category.trim()).filter(Boolean)])).map(cat => (
               <option key={cat} value={cat}>{cat}</option>
             ))}
           </select>
@@ -200,10 +202,11 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                   </button>
                 )}
               </div>
-              <div className="dashboard-product-category-grid">
+              <div className={`dashboard-product-category-grid${isCompactView ? ' dashboard-product-category-grid-compact' : ''}`}>
           {(isCategoryOverview ? section.previewProducts : section.products).map(p => (
             <div
               key={p.id}
+              className={isCompactView ? 'dashboard-product-card-compact' : undefined}
               style={{
                 backgroundColor: '#FFFFFF',
                 borderRadius: '18px',
@@ -215,7 +218,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
               }}
             >
               {/* Product Image */}
-              <div style={{ position: 'relative', height: '190px', backgroundColor: '#F8F5F0' }}>
+              <div className={isCompactView ? 'dashboard-product-card-image-compact' : undefined} style={{ position: 'relative', height: isCompactView ? '140px' : '190px', backgroundColor: '#F8F5F0' }}>
                 <img
                   src={getAssetUrl(p.image)}
                   alt={p.title}
@@ -254,9 +257,9 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
               </div>
 
               {/* Card Body */}
-              <div style={{ padding: '18px', display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between' }}>
+              <div className={isCompactView ? 'dashboard-product-card-body-compact' : undefined} style={{ padding: isCompactView ? '12px' : '18px', display: 'flex', flexDirection: 'column', flex: 1, justifyContent: 'space-between' }}>
                 <div>
-                  <h4 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>
+                  <h4 style={{ fontSize: isCompactView ? '0.9rem' : '1rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '4px' }}>
                     {p.title}
                   </h4>
                   <p style={{ fontSize: '0.76rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
@@ -266,19 +269,20 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
 
                 <div>
                   {/* Stock adjuster row */}
-                  <div style={{
+                  <div className={isCompactView ? 'dashboard-product-stock-row-compact' : undefined} style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
-                    padding: '8px 12px',
+                    padding: isCompactView ? '7px 8px' : '8px 12px',
                     borderRadius: '10px',
                     backgroundColor: 'var(--bg-surface-soft)',
-                    marginBottom: '12px'
+                    marginBottom: isCompactView ? '8px' : '12px',
+                    gap: '6px'
                   }}>
-                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                    <span style={{ fontSize: isCompactView ? '0.72rem' : '0.8rem', fontWeight: 600, color: 'var(--text-main)' }}>
                       In Studio Stock:
                     </span>
-                    <div className="dashboard-stock-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div className="dashboard-stock-actions" style={{ display: 'flex', alignItems: 'center', gap: isCompactView ? '4px' : '8px' }}>
                       <button
                         onClick={() => handleStockDelta(p, -1)}
                         style={{
@@ -302,7 +306,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                         onChange={(e) => setStockDrafts(current => ({ ...current, [p.id]: e.target.value }))}
                         onBlur={() => saveStockDraft(p)}
                         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                        style={{ width: '58px', padding: '3px 4px', border: '1px solid var(--border-medium)', borderRadius: '6px', textAlign: 'center', fontWeight: 800 }}
+                        style={{ width: isCompactView ? '46px' : '58px', padding: '3px 4px', border: '1px solid var(--border-medium)', borderRadius: '6px', textAlign: 'center', fontWeight: 800 }}
                       />
                       <button
                         onClick={() => handleStockDelta(p, 1)}
@@ -321,13 +325,13 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                     </div>
                   </div>
 
-                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '12px', fontSize: '0.78rem', fontWeight: 600 }}>
+                  <label style={{ display: 'flex', flexDirection: isCompactView ? 'column' : 'row', alignItems: isCompactView ? 'stretch' : 'center', justifyContent: 'space-between', gap: '6px', marginBottom: isCompactView ? '8px' : '12px', fontSize: isCompactView ? '0.72rem' : '0.78rem', fontWeight: 600 }}>
                     <span>Cash on Delivery</span>
                     <select
                       aria-label={`Cash on Delivery setting for ${p.title}`}
                       value={p.codAvailability || 'inherit'}
                       onChange={e => updateProduct(p.id, { codAvailability: e.target.value as Product['codAvailability'] })}
-                      style={{ minHeight: '36px', maxWidth: '190px', padding: '6px 9px', borderRadius: '8px', border: '1px solid var(--border-medium)', background: '#FFFFFF', fontSize: '0.76rem' }}
+                      style={{ minHeight: isCompactView ? '32px' : '36px', width: isCompactView ? '100%' : undefined, maxWidth: isCompactView ? 'none' : '190px', padding: '6px 9px', borderRadius: '8px', border: '1px solid var(--border-medium)', background: '#FFFFFF', fontSize: '0.76rem' }}
                     >
                       <option value="inherit">Use COD rules</option>
                       <option value="enabled">Allow COD</option>
@@ -336,7 +340,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                   </label>
 
                   {/* Price & actions */}
-                  <div style={{
+                  <div className={isCompactView ? 'dashboard-product-price-actions-compact' : undefined} style={{
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
@@ -345,7 +349,7 @@ export const ProductManager: React.FC<ProductManagerProps> = ({ onOpenAddModal, 
                   }}>
                     <span style={{
                       fontFamily: 'var(--font-display)',
-                      fontSize: '1.2rem',
+                      fontSize: isCompactView ? '1.05rem' : '1.2rem',
                       fontWeight: 800,
                       color: 'var(--accent-terracotta)'
                     }}>

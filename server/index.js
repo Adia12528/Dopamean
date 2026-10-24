@@ -1154,6 +1154,7 @@ app.put('/api/settings', requireAdmin, async (req, res) => {
 // ==========================================
 app.get('/api/products', async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const products = await db.getProducts();
     res.json(products);
   } catch (err) {
@@ -1253,6 +1254,7 @@ app.patch('/api/offers/:id/toggle', requireAdmin, async (req, res) => {
 // ==========================================
 app.get('/api/orders', requireAdmin, async (req, res) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     res.json(await db.getOrders());
   } catch (err) {
     res.status(500).json({ error: 'Failed to retrieve orders' });

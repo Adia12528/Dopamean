@@ -332,7 +332,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (latestProducts) setProducts(latestProducts);
     };
     const intervalId = window.setInterval(() => { void refreshManagerData(); }, 10000);
-    return () => { active = false; window.clearInterval(intervalId); };
+    window.addEventListener('focus', refreshManagerData);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshManagerData);
+    };
   }, [isAdmin]);
 
   // Delivery agent auto-refresh

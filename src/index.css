@@ -1434,6 +1434,36 @@ input, textarea, select {
   gap: 20px;
 }
 
+.dashboard-product-category-grid-compact {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .dashboard-product-category-grid-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .dashboard-product-card-compact { min-width: 0; }
+  .dashboard-product-card-image-compact { height: 112px !important; }
+  .dashboard-product-card-body-compact { padding: 9px !important; }
+  .dashboard-product-card-compact h4 { overflow-wrap: anywhere; }
+  .dashboard-product-card-compact .dashboard-product-stock-row-compact {
+    align-items: stretch !important;
+    flex-direction: column;
+  }
+  .dashboard-product-card-compact .dashboard-stock-actions {
+    justify-content: center;
+  }
+  .dashboard-product-card-compact .dashboard-product-price-actions-compact {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .dashboard-product-card-compact .dashboard-product-actions { gap: 6px !important; }
+}
+
 .offers-showcase-section {
   padding: var(--store-section-space-tight) 0 var(--store-section-space);
 }

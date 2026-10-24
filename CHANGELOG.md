@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.1](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.4.0...dopamean-v1.4.1) (2026-10-24)
+
+### Bug Fixes
+
+* improve Studio product filtering, compact cards, and cross-device refresh
+
 ## [1.4.0](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.3.1...dopamean-v1.4.0) (2026-10-24)
 
 
