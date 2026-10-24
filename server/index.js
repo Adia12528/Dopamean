@@ -21,6 +21,7 @@ import {
   formatPayuAmount,
   verifyPayuResponseHash
 } from './payu.js';
+import { isOrderNotificationConfigured, sendNewOrderNotification } from './order-notifications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -428,6 +429,7 @@ app.get('/api/health', async (_req, res) => {
       database: process.env.SUPABASE_DB_URL ? 'Supabase PostgreSQL' : 'SQLite 3 (WAL mode)',
       customerAuth: supabaseAuth ? 'Supabase Auth' : 'Legacy app authentication',
       distanceDeliveryQuotes: true,
+      orderEmailNotifications: isOrderNotificationConfigured(),
       time: new Date().toISOString()
     });
   } catch (err) {
@@ -1332,6 +1334,7 @@ app.post('/api/orders', orderLimit, requireUser, async (req, res) => {
         phone: String(customer.phone || req.user.phone || '').trim()
       }
     });
+    void sendNewOrderNotification(newOrder, settings.currency);
     res.status(201).json(newOrder);
   } catch (err) {
     const clientErrors = ['INVALID_CUSTOMER', 'EMPTY_ORDER', 'INVALID_QUANTITY', 'PRODUCT_NOT_FOUND', 'INSUFFICIENT_STOCK', 'INVALID_PROMO', 'INVALID_PAYMENT_METHOD', 'COD_NOT_AVAILABLE_FOR_ITEMS'];
@@ -1550,6 +1553,7 @@ app.post('/api/payments/payu/create-order', paymentLimit, requireUser, async (re
     });
     const transactionId = `D${crypto.randomBytes(12).toString('hex')}`;
     await db.linkPayuTransaction(storeOrder.id, transactionId);
+    void sendNewOrderNotification(storeOrder, settings.currency);
     const amount = formatPayuAmount(storeOrder.total);
     const productinfo = `Store order ${storeOrder.id}`.slice(0, 100);
     const firstname = String(storeOrder.customer.name).trim().slice(0, 60);

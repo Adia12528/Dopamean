@@ -11,6 +11,7 @@
     "build": "tsc -b && vite build",
     "test:delivery": "node --test server/delivery-pricing.test.js",
     "test:images": "node --test server/image-storage.test.js",
+    "test:notifications": "node --test server/order-notifications.test.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },

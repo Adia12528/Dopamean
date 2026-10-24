@@ -146,6 +146,7 @@ export const CartDrawer: React.FC = () => {
   const [upiCheckoutReference, setUpiCheckoutReference] = useState('');
   const [hasAcceptedStorePolicies, setHasAcceptedStorePolicies] = useState(false);
   const [hasConfirmedUpiDetails, setHasConfirmedUpiDetails] = useState(false);
+  const [confirmedPriceReviewKey, setConfirmedPriceReviewKey] = useState('');
   const [activeStorePolicy, setActiveStorePolicy] = useState<StorePolicyKey | null>(null);
   const [hasCopiedUpiId, setHasCopiedUpiId] = useState(false);
   const isPaymentNavigationProtected = isGatewayCheckoutOpen ||
@@ -354,6 +355,16 @@ export const CartDrawer: React.FC = () => {
   const isFreeShipping = deliveryQuote.isFreeShipping;
   const shippingCost = deliveryQuote.amount;
   const total = Math.max(0, subtotal - discount + shippingCost);
+  const priceReviewKey = JSON.stringify({
+    items: cart.map(item => [item.product.id, item.quantity, item.product.price]),
+    subtotal,
+    discount,
+    shippingCost,
+    total,
+    pincode: formData.pincode,
+    currency: settings.currency
+  });
+  const hasConfirmedPriceReview = confirmedPriceReviewKey === priceReviewKey;
   const upiId = settings.upiId?.trim() || '';
   const isAndroidDevice = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const isIosDevice = typeof navigator !== 'undefined' && (
@@ -673,6 +684,10 @@ export const CartDrawer: React.FC = () => {
       showToast('Sign in to your account before placing an order.', 'error');
       setIsCheckingOut(false);
       openUserAuthModal('signin');
+      return;
+    }
+    if (!hasConfirmedPriceReview) {
+      showToast('Review and confirm the order price before proceeding.', 'error');
       return;
     }
     if (!formData.name || !formData.email || !formData.phone || !formData.address || !/^[1-9]\d{5}$/.test(formData.pincode)) return;
@@ -1041,6 +1056,7 @@ export const CartDrawer: React.FC = () => {
       openUserAuthModal('signin', () => {
         setHasAcceptedStorePolicies(false);
         setHasConfirmedUpiDetails(false);
+        setConfirmedPriceReviewKey('');
         setCheckoutStep('address');
         setIsCheckingOut(true);
       });
@@ -1048,6 +1064,7 @@ export const CartDrawer: React.FC = () => {
     }
     setHasAcceptedStorePolicies(false);
     setHasConfirmedUpiDetails(false);
+    setConfirmedPriceReviewKey('');
     setCheckoutStep('address');
     setIsCheckingOut(true);
   };
@@ -1614,6 +1631,47 @@ export const CartDrawer: React.FC = () => {
                 </>
               ) : (
                 <>
+              <section className="glass-card" aria-labelledby="checkout-price-review-heading" style={{ padding: '16px' }}>
+                <h5 id="checkout-price-review-heading" style={{ margin: '0 0 12px', fontSize: '0.96rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                  Review your order total
+                </h5>
+                <div style={{ display: 'grid', gap: '8px', fontSize: '0.82rem' }}>
+                  {cart.map(item => (
+                    <div key={item.product.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', color: 'var(--text-muted)' }}>
+                      <span>{item.product.title} × {item.quantity}</span>
+                      <span>{settings.currency}{(item.product.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                    <span>Subtotal</span>
+                    <span>{settings.currency}{subtotal.toFixed(2)}</span>
+                  </div>
+                  {discount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent-rose)' }}>
+                      <span>Discount</span>
+                      <span>−{settings.currency}{discount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                    <span>Delivery{isUsingZoneFallback ? ' (zone fallback)' : ''}</span>
+                    <span>{isFreeShipping ? 'Free' : `${settings.currency}${shippingCost.toFixed(2)}`}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '9px', borderTop: '1px solid var(--border-medium)', fontSize: '1rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                    <span>Total to confirm</span>
+                    <span>{settings.currency}{total.toFixed(2)}</span>
+                  </div>
+                </div>
+                <label htmlFor="checkout-price-review" style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', marginTop: '14px', color: 'var(--text-main)', fontSize: '0.8rem', lineHeight: 1.45, cursor: 'pointer' }}>
+                  <input
+                    id="checkout-price-review"
+                    type="checkbox"
+                    checked={hasConfirmedPriceReview}
+                    onChange={event => setConfirmedPriceReviewKey(event.target.checked ? priceReviewKey : '')}
+                    style={{ width: 17, height: 17, marginTop: 1, flexShrink: 0, accentColor: 'var(--accent-terracotta)' }}
+                  />
+                  <span>I have reviewed and confirm this order total before continuing to payment.</span>
+                </label>
+              </section>
               <section className="glass-card" style={{ padding: '12px 14px', marginBottom: '14px' }}>
                 <label htmlFor="checkout-policy-consent" style={{ display: 'flex', alignItems: 'flex-start', gap: '9px', color: 'var(--text-main)', fontSize: '0.8rem', lineHeight: 1.45, cursor: 'pointer' }}>
                   <input
@@ -1983,8 +2041,8 @@ export const CartDrawer: React.FC = () => {
                               window.location.assign(createUpiPaymentLink(reference));
                             }}
                             className={isIosDevice ? 'btn-outline' : 'btn-primary'}
-                            disabled={!hasAcceptedStorePolicies}
-                            title={!hasAcceptedStorePolicies ? 'Agree to the store policies first' : undefined}
+                            disabled={!hasAcceptedStorePolicies || !hasConfirmedPriceReview}
+                            title={!hasConfirmedPriceReview ? 'Review and confirm the order total first' : !hasAcceptedStorePolicies ? 'Agree to the store policies first' : undefined}
                             style={{ width: '100%', minHeight: '44px', padding: '10px 12px', fontSize: '0.82rem' }}
                           >
                             <Smartphone size={17} />
@@ -2132,7 +2190,7 @@ export const CartDrawer: React.FC = () => {
               ) : paymentMethod !== 'upi' || isUpiConfirmationOpen ? (
                 <button
                   type="submit"
-                  disabled={isSubmitting || availablePaymentMethods.length === 0 || !hasAcceptedStorePolicies || (paymentMethod === 'upi' && isUpiConfirmationOpen && !hasConfirmedUpiDetails)}
+                  disabled={isSubmitting || availablePaymentMethods.length === 0 || !hasAcceptedStorePolicies || !hasConfirmedPriceReview || (paymentMethod === 'upi' && isUpiConfirmationOpen && !hasConfirmedUpiDetails)}
                   aria-busy={isSubmitting}
                   className="btn-primary"
                   style={{ width: '100%', padding: '14px', fontSize: '0.96rem' }}
