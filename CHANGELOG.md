@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.5.0](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.4.0...dopamean-v1.5.0) (2026-10-24)
+
+
+### Features
+
+* configure customer email alerts ([01abac5](https://github.com/Adia12528/Dopamean/commit/01abac521b1e7c9dc5eb70be53f5b79719de7d6d))
+
+
+### Bug Fixes
+
+* compact studio products and use Gmail TLS ([14ed9da](https://github.com/Adia12528/Dopamean/commit/14ed9da9855b17723ecdbf9e326e39878b199d7b))
+
 ## [1.4.2](https://github.com/Adia12528/Dopamean/compare/dopamean-v1.4.1...dopamean-v1.4.2) (2026-10-24)
 
 ### Features
